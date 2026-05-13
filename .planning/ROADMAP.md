@@ -62,12 +62,11 @@ Plans:
   2. Activity feed updates in real time with agent-colored entries as agents work
   3. User can kill a running agent process from the UI and see it terminate
   4. Agent runs are recorded in SQLite with start time, duration, status, and outcome, and task status auto-updates on dispatch start and completion
-**Plans**: TBD
+**Plans**: 1 plan (Wave 1: 01)
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Backend dispatch engine + frontend dispatch UI, activity feed, kill switch (DISP-01 through DISP-06)
 
 ### Phase 4: Notifications & Viewers
 **Goal**: Users receive actionable notifications from agent work and can view briefs, audits, portfolio data, cron schedules, and memory search results
@@ -110,6 +109,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-05-13 |
 | 2. Board & Agents | 0/2 | Not started | - |
-| 3. Dispatch & Real-Time | 0/2 | Not started | - |
+| 3. Dispatch & Real-Time | 0/1 | Not started | - |
 | 4. Notifications & Viewers | 0/2 | Not started | - |
 | 5. Intelligence | 0/2 | Not started | - |
