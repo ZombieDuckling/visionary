@@ -416,6 +416,30 @@ textarea {
   flex-wrap: wrap;
 }
 
+/* --- Drag-and-Drop States --- */
+.board-card[draggable="true"] {
+  cursor: grab;
+}
+
+.board-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.board-card.dragging {
+  opacity: 0.4;
+  border: 1px dashed var(--accent-green);
+}
+
+.board-column.drag-over {
+  background: rgba(0, 255, 136, 0.05);
+  border: 1px dashed var(--accent-green);
+  border-radius: var(--radius-md);
+}
+
+.board-column.drag-over .board-column-header {
+  color: var(--accent-green);
+}
+
 /* --- Agent Grid --- */
 .agent-grid {
   display: grid;
@@ -531,6 +555,26 @@ textarea {
   color: var(--accent-red);
   font-size: var(--font-size-xs);
   margin-top: var(--space-sm);
+}
+
+/* --- Task Detail Overlay --- */
+.task-detail-status {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.task-detail-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-lg);
+}
+
+.task-detail-meta {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-md);
 }
 
 /* --- Utility Classes --- */
