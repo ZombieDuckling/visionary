@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
 const { db, stmts } = require('./db');
+const { bus, handleSSE } = require('./sse');
 
 // Read HTML file once at startup
 const indexHTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
@@ -78,41 +79,115 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/')) {
       // GET /api/tasks
       if (method === 'GET' && pathname === '/api/tasks') {
-        res.json({ tasks: [] });
+        const tasks = stmts.getAllTasks.all();
+        res.json({ tasks });
         return;
       }
 
       // POST /api/tasks
       if (method === 'POST' && pathname === '/api/tasks') {
-        res.json({ ok: true }, 201);
+        const body = await readBody(req);
+        if (!body || !body.title || typeof body.title !== 'string' || !body.title.trim()) {
+          res.json({ error: 'title is required' }, 400);
+          return;
+        }
+        const result = stmts.insertTask.run({
+          title: body.title.trim(),
+          description: body.description || null,
+          status: body.status || 'todo',
+          priority: body.priority || 'medium',
+          agent_id: body.agent_id || null,
+          project_id: body.project_id || null,
+          sort_order: body.sort_order || 0
+        });
+        const task = stmts.getTaskById.get(result.lastInsertRowid);
+        stmts.insertActivity.run({
+          event_type: 'task.created',
+          agent_id: null,
+          task_id: task.id,
+          project_id: task.project_id,
+          summary: 'Task created: ' + task.title,
+          detail_json: JSON.stringify(task)
+        });
+        bus.emit('task:created', task);
+        bus.emit('activity:new', { event_type: 'task.created', summary: 'Task created: ' + task.title, task_id: task.id });
+        res.json({ task }, 201);
         return;
       }
 
       // PATCH /api/tasks/:id
       if (method === 'PATCH' && pathname.startsWith('/api/tasks/')) {
-        res.json({ ok: true });
+        const id = parseInt(pathname.split('/')[3], 10);
+        if (isNaN(id)) { res.json({ error: 'Invalid task id' }, 400); return; }
+        const existing = stmts.getTaskById.get(id);
+        if (!existing) { res.json({ error: 'Task not found' }, 404); return; }
+        const body = await readBody(req);
+        if (!body) { res.json({ error: 'Request body required' }, 400); return; }
+        const statusChanged = body.status && body.status !== existing.status;
+        stmts.updateTask.run({
+          id,
+          title: body.title !== undefined ? body.title : existing.title,
+          description: body.description !== undefined ? body.description : existing.description,
+          status: body.status !== undefined ? body.status : existing.status,
+          priority: body.priority !== undefined ? body.priority : existing.priority,
+          agent_id: body.agent_id !== undefined ? body.agent_id : existing.agent_id,
+          sort_order: body.sort_order !== undefined ? body.sort_order : existing.sort_order
+        });
+        const updatedTask = stmts.getTaskById.get(id);
+        const eventType = statusChanged ? 'task.moved' : 'task.updated';
+        stmts.insertActivity.run({
+          event_type: eventType,
+          agent_id: null,
+          task_id: updatedTask.id,
+          project_id: updatedTask.project_id,
+          summary: statusChanged
+            ? `Task moved: ${updatedTask.title} -> ${updatedTask.status}`
+            : `Task updated: ${updatedTask.title}`,
+          detail_json: JSON.stringify(updatedTask)
+        });
+        bus.emit('task:updated', updatedTask);
+        bus.emit('activity:new', { event_type: eventType, summary: `Task ${statusChanged ? 'moved' : 'updated'}: ${updatedTask.title}`, task_id: updatedTask.id });
+        res.json({ task: updatedTask });
         return;
       }
 
       // DELETE /api/tasks/:id
       if (method === 'DELETE' && pathname.startsWith('/api/tasks/')) {
+        const id = parseInt(pathname.split('/')[3], 10);
+        if (isNaN(id)) { res.json({ error: 'Invalid task id' }, 400); return; }
+        const existing = stmts.getTaskById.get(id);
+        if (!existing) { res.json({ error: 'Task not found' }, 404); return; }
+        stmts.deleteTask.run(id);
+        stmts.insertActivity.run({
+          event_type: 'task.deleted',
+          agent_id: null,
+          task_id: existing.id,
+          project_id: existing.project_id,
+          summary: 'Task deleted: ' + existing.title,
+          detail_json: JSON.stringify(existing)
+        });
+        bus.emit('task:deleted', { id });
+        bus.emit('activity:new', { event_type: 'task.deleted', summary: 'Task deleted: ' + existing.title, task_id: existing.id });
         res.json({ ok: true });
         return;
       }
 
-      // GET /api/events -> SSE endpoint (Plan 02 will implement)
+      // GET /api/events -> SSE endpoint
       if (method === 'GET' && pathname === '/api/events') {
-        res.json({ message: 'SSE endpoint placeholder' });
+        handleSSE(req, res);
         return;
       }
 
       // GET /api/activity
       if (method === 'GET' && pathname === '/api/activity') {
-        res.json({ activity: [] });
+        const limitParam = parseInt(url.searchParams.get('limit'), 10);
+        const limit = (!isNaN(limitParam) && limitParam > 0) ? Math.min(limitParam, 200) : 50;
+        const activity = stmts.getRecentActivity.all(limit);
+        res.json({ activity });
         return;
       }
 
-      // GET /api/notifications
+      // GET /api/notifications (placeholder -- consumed in Phase 4)
       if (method === 'GET' && pathname === '/api/notifications') {
         res.json({ notifications: [] });
         return;
