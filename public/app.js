@@ -44,6 +44,95 @@
     return m + 'm ' + (s % 60) + 's';
   }
 
+  // --- Markdown Renderer ---
+  function inlineFormat(text) {
+    var s = esc(text);
+    s = s.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="md-link">$1</a>');
+    return s;
+  }
+
+  function renderMarkdown(raw) {
+    if (!raw) return '<div class="empty-state">No content</div>';
+    var lines = raw.split('\n');
+    var html = '';
+    var inCodeBlock = false;
+    var inList = false;
+    var listType = '';
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+
+      if (line.trim().startsWith('```')) {
+        if (inCodeBlock) {
+          html += '</code></pre>';
+          inCodeBlock = false;
+        } else {
+          if (inList) { html += listType === 'ul' ? '</ul>' : '</ol>'; inList = false; }
+          html += '<pre class="md-code-block"><code>';
+          inCodeBlock = true;
+        }
+        continue;
+      }
+      if (inCodeBlock) {
+        html += esc(line) + '\n';
+        continue;
+      }
+
+      if (inList && !/^\s*[-*]\s/.test(line) && !/^\s*\d+\.\s/.test(line) && line.trim() !== '') {
+        html += listType === 'ul' ? '</ul>' : '</ol>';
+        inList = false;
+      }
+
+      if (line.trim() === '') {
+        if (inList) { html += listType === 'ul' ? '</ul>' : '</ol>'; inList = false; }
+        continue;
+      }
+
+      var headerMatch = line.match(/^(#{1,4})\s+(.+)/);
+      if (headerMatch) {
+        var level = headerMatch[1].length;
+        html += '<h' + level + ' class="md-h' + level + '">' + inlineFormat(headerMatch[2]) + '</h' + level + '>';
+        continue;
+      }
+
+      if (/^[-*_]{3,}\s*$/.test(line.trim())) {
+        html += '<hr class="md-hr">';
+        continue;
+      }
+
+      var ulMatch = line.match(/^\s*[-*]\s+(.+)/);
+      if (ulMatch) {
+        if (!inList || listType !== 'ul') {
+          if (inList) html += listType === 'ul' ? '</ul>' : '</ol>';
+          html += '<ul class="md-list">';
+          inList = true; listType = 'ul';
+        }
+        html += '<li>' + inlineFormat(ulMatch[1]) + '</li>';
+        continue;
+      }
+
+      var olMatch = line.match(/^\s*\d+\.\s+(.+)/);
+      if (olMatch) {
+        if (!inList || listType !== 'ol') {
+          if (inList) html += listType === 'ul' ? '</ul>' : '</ol>';
+          html += '<ol class="md-list">';
+          inList = true; listType = 'ol';
+        }
+        html += '<li>' + inlineFormat(olMatch[1]) + '</li>';
+        continue;
+      }
+
+      html += '<p class="md-p">' + inlineFormat(line) + '</p>';
+    }
+
+    if (inCodeBlock) html += '</code></pre>';
+    if (inList) html += listType === 'ul' ? '</ul>' : '</ol>';
+    return html;
+  }
+
   // --- Agent Color Map ---
   var AGENT_COLORS = {
     jarvis: '#3b8bff', scout: '#06b6d4', analyst: '#7c5cff', forge: '#f59e0b',
@@ -115,6 +204,11 @@
   async function loadAgents() {
     var data = await api('/agents');
     state.agents = data.agents || [];
+  }
+
+  async function loadNotifications() {
+    var data = await api('/notifications?limit=100');
+    state.notifications = data.notifications || [];
   }
 
   // --- SSE Connection ---
@@ -194,6 +288,15 @@
         }
         return r;
       });
+    });
+
+    source.addEventListener('notification:created', function (e) {
+      var n = JSON.parse(e.data);
+      state.notifications = [n].concat(state.notifications);
+    });
+
+    source.addEventListener('notification:updated', function (e) {
+      loadNotifications().catch(function () {});
     });
 
     return source;
@@ -534,11 +637,439 @@
     container.innerHTML = html;
   }
 
-  // Inbox view: placeholder
+  // Inbox view: severity-tiered notifications with action buttons
   function renderInbox(container) {
-    // Static content -- safe for innerHTML
-    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Inbox</h2>'
-      + '<div class="empty-state">No notifications</div>';
+    var severityMap = { error: { cls: 'badge-red', label: 'CRITICAL' }, warning: { cls: 'badge-orange', label: 'WARNING' }, action: { cls: 'badge-blue', label: 'ACTION' }, info: { cls: 'badge-green', label: 'INFO' } };
+    var notifications = state.notifications || [];
+    var inboxFilter = container._inboxFilter || 'all';
+    var showDismissed = container._showDismissed || false;
+
+    var filtered = notifications.filter(function (n) {
+      if (!showDismissed && n.dismissed) return false;
+      if (inboxFilter !== 'all' && n.type !== inboxFilter) return false;
+      return true;
+    });
+
+    var unreadCount = notifications.filter(function (n) { return !n.read && !n.dismissed; }).length;
+
+    var html = '<div class="inbox-header"><h2 style="font-size: var(--font-size-lg);">Inbox '
+      + (unreadCount > 0 ? '<span class="unread-badge">' + unreadCount + '</span>' : '')
+      + '</h2></div>';
+
+    html += '<div class="inbox-filters">';
+    var filters = [{ key: 'all', label: 'All' }, { key: 'error', label: 'Critical' }, { key: 'warning', label: 'Warning' }, { key: 'info', label: 'Info' }];
+    filters.forEach(function (f) {
+      html += '<button class="inbox-filter' + (inboxFilter === f.key ? ' active' : '') + '" data-filter="' + f.key + '">' + f.label + '</button>';
+    });
+    html += '</div>';
+
+    if (filtered.length === 0) {
+      html += '<div class="empty-state">No notifications</div>';
+    } else {
+      html += '<div class="notification-list">';
+      filtered.forEach(function (n) {
+        var sev = severityMap[n.type] || severityMap.info;
+        var readClass = n.read ? ' read' : ' unread';
+        html += '<div class="notification-card severity-' + esc(n.type) + readClass + '" data-notif-id="' + esc(n.id) + '">'
+          + '<div class="notification-header">'
+          + '<span class="badge ' + sev.cls + '">' + sev.label + '</span>'
+          + '<span class="notification-title">' + esc(n.title) + '</span>'
+          + '<span class="notification-time">' + timeAgo(n.created_at) + '</span>'
+          + '</div>'
+          + '<div class="notification-body">' + esc(n.body ? n.body.substring(0, 120) : '') + '</div>'
+          + '<div class="notification-actions">'
+          + '<button class="btn" data-action="notif-view" data-nid="' + esc(n.id) + '">View</button>'
+          + '<button class="btn" data-action="notif-dismiss" data-nid="' + esc(n.id) + '">Dismiss</button>'
+          + '<button class="btn" data-action="notif-escalate" data-nid="' + esc(n.id) + '">Escalate</button>'
+          + '</div></div>';
+      });
+      html += '</div>';
+    }
+
+    html += '<div style="margin-top: var(--space-lg); text-align: center;">'
+      + '<button class="btn" data-action="toggle-dismissed">' + (showDismissed ? 'Hide dismissed' : 'Show dismissed') + '</button></div>';
+
+    container.innerHTML = html;
+
+    container.addEventListener('click', function (e) {
+      var filterBtn = e.target.closest('[data-filter]');
+      if (filterBtn) {
+        container._inboxFilter = filterBtn.getAttribute('data-filter');
+        container.innerHTML = '';
+        renderInbox(container);
+        return;
+      }
+      var toggleBtn = e.target.closest('[data-action="toggle-dismissed"]');
+      if (toggleBtn) {
+        container._showDismissed = !container._showDismissed;
+        container.innerHTML = '';
+        renderInbox(container);
+        return;
+      }
+      var actionBtn = e.target.closest('[data-action^="notif-"]');
+      if (!actionBtn) return;
+      var action = actionBtn.getAttribute('data-action');
+      var nid = actionBtn.getAttribute('data-nid');
+      if (!nid) return;
+      var actionMap = { 'notif-view': 'read', 'notif-dismiss': 'dismiss', 'notif-escalate': 'escalate' };
+      var apiAction = actionMap[action];
+      if (!apiAction) return;
+      actionBtn.textContent = '...';
+      actionBtn.disabled = true;
+      api('/notifications/' + nid, { method: 'PATCH', body: { action: apiAction } })
+        .then(function () {
+          loadNotifications().catch(function () {});
+          if (action === 'notif-view') {
+            var notif = state.notifications.find(function (n) { return String(n.id) === String(nid); });
+            if (notif && notif.action_type === 'view_run') {
+              location.hash = '#/activity';
+            }
+          }
+        })
+        .catch(function () { actionBtn.textContent = apiAction; actionBtn.disabled = false; });
+    });
+  }
+
+  // Crons view: table + 24h SAST timeline
+  function renderCrons(container) {
+    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Cron Schedule</h2>'
+      + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+
+    api('/crons').then(function (data) {
+      var crons = data.crons || [];
+      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Cron Schedule</h2>';
+
+      // Table
+      html += '<table class="cron-table"><thead><tr><th>Name</th><th>Agent</th><th>Schedule</th><th>Description</th></tr></thead><tbody>';
+      crons.forEach(function (c) {
+        var agentColor = AGENT_COLORS[c.agent] || 'var(--text-muted)';
+        html += '<tr><td>' + esc(c.name) + '</td>'
+          + '<td><span class="badge" style="background: color-mix(in srgb, ' + agentColor + ' 15%, transparent); color: ' + agentColor + '">' + esc(c.agent) + '</span></td>'
+          + '<td style="font-family: var(--font-mono); font-size: var(--font-size-xs)">' + esc(c.schedule) + '</td>'
+          + '<td>' + esc(c.description || '') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+
+      // 24h SAST Timeline
+      html += '<h3 style="font-size: var(--font-size-md); margin-top: var(--space-xl); margin-bottom: var(--space-sm); color: var(--text-secondary);">24h SAST Timeline</h3>';
+      html += '<div class="timeline-container">';
+      html += '<div class="timeline-hours">';
+      [0, 3, 6, 9, 12, 15, 18, 21].forEach(function (h) {
+        html += '<span>' + (h < 10 ? '0' : '') + h + '</span>';
+      });
+      html += '</div>';
+
+      // Current time indicator (SAST = UTC+2)
+      var now = new Date();
+      var utcH = now.getUTCHours();
+      var utcM = now.getUTCMinutes();
+      var sastH = (utcH + 2) % 24;
+      var nowPct = ((sastH + utcM / 60) / 24 * 100);
+      html += '<div class="timeline-now" style="left: ' + nowPct + '%"></div>';
+
+      // Cron markers
+      crons.forEach(function (c) {
+        var match = c.schedule.match(/^\d+\s+(\d+)\s/);
+        if (match) {
+          var hour = parseInt(match[1], 10);
+          var pct = (hour / 24 * 100);
+          var agentColor = AGENT_COLORS[c.agent] || 'var(--text-muted)';
+          html += '<div class="timeline-marker" style="left: ' + pct + '%; background: ' + agentColor + '; color: ' + agentColor + '" title="' + esc(c.name) + ' (' + esc(c.agent) + ')"></div>';
+          html += '<span class="timeline-label" style="left: ' + pct + '%">' + esc(c.name) + '</span>';
+        }
+      });
+
+      html += '</div>';
+
+      if (data.source) {
+        html += '<div style="margin-top: var(--space-sm); font-size: var(--font-size-xs); color: var(--text-muted);">Source: ' + esc(data.source) + '</div>';
+      }
+
+      container.innerHTML = html;
+    }).catch(function () {
+      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Cron Schedule</h2>'
+        + '<div class="empty-state">Failed to load cron data</div>';
+    });
+  }
+
+  // Briefs viewer: list/detail with markdown rendering
+  function renderBriefs(container) {
+    var selectedFile = container._selectedBrief || null;
+
+    if (selectedFile) {
+      container.innerHTML = '<button class="btn btn-back" data-action="briefs-back">Back</button>'
+        + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+      api('/briefs/' + encodeURIComponent(selectedFile)).then(function (data) {
+        container.innerHTML = '<button class="btn btn-back" data-action="briefs-back">Back</button>'
+          + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">' + esc(data.filename) + '</h2>'
+          + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
+        container.querySelector('[data-action="briefs-back"]').addEventListener('click', function () {
+          container._selectedBrief = null;
+          container.innerHTML = '';
+          renderBriefs(container);
+        });
+      }).catch(function () {
+        container.innerHTML = '<button class="btn btn-back" data-action="briefs-back">Back</button>'
+          + '<div class="empty-state">Failed to load brief</div>';
+        container.querySelector('[data-action="briefs-back"]').addEventListener('click', function () {
+          container._selectedBrief = null;
+          container.innerHTML = '';
+          renderBriefs(container);
+        });
+      });
+      return;
+    }
+
+    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Daily Briefs</h2>'
+      + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+
+    api('/briefs').then(function (data) {
+      var briefs = data.briefs || [];
+      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Daily Briefs</h2>';
+      if (briefs.length === 0) {
+        html += '<div class="empty-state">No briefs found</div>';
+      } else {
+        html += '<div class="file-list">';
+        briefs.forEach(function (b) {
+          html += '<div class="file-item" data-action="open-brief" data-filename="' + esc(b.filename) + '">'
+            + '<div class="file-item-name">' + esc(b.filename) + '</div>'
+            + '<div class="file-item-meta">' + esc(b.date || '') + '</div></div>';
+        });
+        html += '</div>';
+      }
+      container.innerHTML = html;
+      container.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-action="open-brief"]');
+        if (!item) return;
+        container._selectedBrief = item.getAttribute('data-filename');
+        container.innerHTML = '';
+        renderBriefs(container);
+      });
+    }).catch(function () {
+      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Daily Briefs</h2>'
+        + '<div class="empty-state">Failed to load briefs</div>';
+    });
+  }
+
+  // Audits viewer: list/detail pattern
+  function renderAudits(container) {
+    var selectedFile = container._selectedAudit || null;
+
+    if (selectedFile) {
+      container.innerHTML = '<button class="btn btn-back" data-action="audits-back">Back</button>'
+        + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+      api('/audits/' + encodeURIComponent(selectedFile)).then(function (data) {
+        container.innerHTML = '<button class="btn btn-back" data-action="audits-back">Back</button>'
+          + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">' + esc(data.filename) + '</h2>'
+          + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
+        container.querySelector('[data-action="audits-back"]').addEventListener('click', function () {
+          container._selectedAudit = null;
+          container.innerHTML = '';
+          renderAudits(container);
+        });
+      }).catch(function () {
+        container.innerHTML = '<button class="btn btn-back" data-action="audits-back">Back</button>'
+          + '<div class="empty-state">Failed to load audit</div>';
+        container.querySelector('[data-action="audits-back"]').addEventListener('click', function () {
+          container._selectedAudit = null;
+          container.innerHTML = '';
+          renderAudits(container);
+        });
+      });
+      return;
+    }
+
+    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Security Audits</h2>'
+      + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+
+    api('/audits').then(function (data) {
+      var audits = data.audits || [];
+      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Security Audits</h2>';
+      if (audits.length === 0) {
+        html += '<div class="empty-state">No audits found</div>';
+      } else {
+        html += '<div class="file-list">';
+        audits.forEach(function (a) {
+          html += '<div class="file-item" data-action="open-audit" data-filename="' + esc(a.filename) + '">'
+            + '<div class="file-item-name">' + esc(a.filename) + '</div></div>';
+        });
+        html += '</div>';
+      }
+      container.innerHTML = html;
+      container.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-action="open-audit"]');
+        if (!item) return;
+        container._selectedAudit = item.getAttribute('data-filename');
+        container.innerHTML = '';
+        renderAudits(container);
+      });
+    }).catch(function () {
+      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Security Audits</h2>'
+        + '<div class="empty-state">Failed to load audits</div>';
+    });
+  }
+
+  // Portfolio viewer: list/detail pattern
+  function renderPortfolio(container) {
+    var selectedFile = container._selectedPortfolio || null;
+
+    if (selectedFile) {
+      container.innerHTML = '<button class="btn btn-back" data-action="portfolio-back">Back</button>'
+        + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+      api('/portfolio/' + encodeURIComponent(selectedFile)).then(function (data) {
+        container.innerHTML = '<button class="btn btn-back" data-action="portfolio-back">Back</button>'
+          + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">' + esc(data.filename) + '</h2>'
+          + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
+        container.querySelector('[data-action="portfolio-back"]').addEventListener('click', function () {
+          container._selectedPortfolio = null;
+          container.innerHTML = '';
+          renderPortfolio(container);
+        });
+      }).catch(function () {
+        container.innerHTML = '<button class="btn btn-back" data-action="portfolio-back">Back</button>'
+          + '<div class="empty-state">Failed to load report</div>';
+        container.querySelector('[data-action="portfolio-back"]').addEventListener('click', function () {
+          container._selectedPortfolio = null;
+          container.innerHTML = '';
+          renderPortfolio(container);
+        });
+      });
+      return;
+    }
+
+    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Portfolio Reports</h2>'
+      + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+
+    api('/portfolio').then(function (data) {
+      var files = data.portfolio || [];
+      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Portfolio Reports</h2>';
+      if (files.length === 0) {
+        html += '<div class="empty-state">No portfolio reports found</div>';
+      } else {
+        html += '<div class="file-list">';
+        files.forEach(function (f) {
+          html += '<div class="file-item" data-action="open-portfolio" data-filename="' + esc(f.filename) + '">'
+            + '<div class="file-item-name">' + esc(f.filename) + '</div></div>';
+        });
+        html += '</div>';
+      }
+      container.innerHTML = html;
+      container.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-action="open-portfolio"]');
+        if (!item) return;
+        container._selectedPortfolio = item.getAttribute('data-filename');
+        container.innerHTML = '';
+        renderPortfolio(container);
+      });
+    }).catch(function () {
+      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Portfolio Reports</h2>'
+        + '<div class="empty-state">Failed to load portfolio</div>';
+    });
+  }
+
+  // Memory browser: search + file list
+  function renderMemory(container) {
+    var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Memory Browser</h2>';
+    html += '<div class="memory-search">'
+      + '<input class="input" type="text" id="memory-query" placeholder="Search Karpathy memory wiki..." />'
+      + '<button class="btn btn-primary" data-action="memory-search">Search</button>'
+      + '</div>';
+    html += '<div id="memory-results" class="memory-results"></div>';
+    html += '<h3 style="font-size: var(--font-size-md); margin-bottom: var(--space-sm); color: var(--text-secondary);">Memory Files</h3>';
+    html += '<div id="memory-files" class="file-list"><div class="empty-state"><div class="spinner"></div> Loading...</div></div>';
+    html += '<div id="memory-viewer"></div>';
+
+    container.innerHTML = html;
+
+    // Load memory file list
+    api('/memory').then(function (data) {
+      var filesContainer = document.getElementById('memory-files');
+      if (!filesContainer) return;
+      var files = data.files || [];
+      var fhtml = '';
+      if (data.has_memory_md) {
+        fhtml += '<div class="file-item" data-action="open-memory" data-filename="MEMORY.md" style="border-left: 3px solid var(--accent-green)">'
+          + '<div class="file-item-name" style="color: var(--accent-green)">MEMORY.md</div>'
+          + '<div class="file-item-meta">Top-level memory index</div></div>';
+      }
+      if (files.length === 0 && !data.has_memory_md) {
+        fhtml = '<div class="empty-state">No memory files found</div>';
+      } else {
+        files.forEach(function (f) {
+          fhtml += '<div class="file-item" data-action="open-memory" data-filename="' + esc(f) + '">'
+            + '<div class="file-item-name">' + esc(f) + '</div></div>';
+        });
+      }
+      filesContainer.innerHTML = fhtml;
+    }).catch(function () {
+      var filesContainer = document.getElementById('memory-files');
+      if (filesContainer) filesContainer.innerHTML = '<div class="empty-state">Failed to load memory files</div>';
+    });
+
+    // Event delegation
+    container.addEventListener('click', function (e) {
+      var searchBtn = e.target.closest('[data-action="memory-search"]');
+      if (searchBtn) {
+        var queryInput = document.getElementById('memory-query');
+        var query = queryInput ? queryInput.value.trim() : '';
+        if (!query) return;
+        var resultsDiv = document.getElementById('memory-results');
+        if (resultsDiv) resultsDiv.innerHTML = '<div class="empty-state"><div class="spinner"></div> Searching...</div>';
+        api('/memory/search?q=' + encodeURIComponent(query)).then(function (data) {
+          var results = data.results || [];
+          if (!resultsDiv) return;
+          if (results.length === 0) {
+            resultsDiv.innerHTML = '<div class="empty-state">No results found</div>';
+          } else {
+            var rhtml = '';
+            var escapedQuery = esc(query);
+            var queryRegex = new RegExp('(' + escapedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+            results.forEach(function (r) {
+              var text = esc(r.text || r.content || JSON.stringify(r));
+              text = text.replace(queryRegex, '<mark>$1</mark>');
+              rhtml += '<div class="memory-result">' + text + '</div>';
+            });
+            resultsDiv.innerHTML = rhtml;
+          }
+        }).catch(function () {
+          if (resultsDiv) resultsDiv.innerHTML = '<div class="empty-state">Search failed</div>';
+        });
+        return;
+      }
+
+      var memItem = e.target.closest('[data-action="open-memory"]');
+      if (memItem) {
+        var filename = memItem.getAttribute('data-filename');
+        var viewer = document.getElementById('memory-viewer');
+        if (!viewer) return;
+        viewer.innerHTML = '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+        api('/memory/' + encodeURIComponent(filename)).then(function (data) {
+          viewer.innerHTML = '<button class="btn btn-back" data-action="close-memory-viewer">Close</button>'
+            + '<h3 style="font-size: var(--font-size-md); margin: var(--space-md) 0;">' + esc(data.filename) + '</h3>'
+            + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
+        }).catch(function () {
+          viewer.innerHTML = '<div class="empty-state">Failed to load file</div>';
+        });
+        return;
+      }
+
+      var closeBtn = e.target.closest('[data-action="close-memory-viewer"]');
+      if (closeBtn) {
+        var viewer = document.getElementById('memory-viewer');
+        if (viewer) viewer.innerHTML = '';
+      }
+    });
+
+    // Enter key for search
+    var queryInput = document.getElementById('memory-query');
+    if (queryInput) {
+      queryInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          var searchBtn = container.querySelector('[data-action="memory-search"]');
+          if (searchBtn) searchBtn.click();
+        }
+      });
+    }
   }
 
   // --- Task Detail / Edit Overlay ---
@@ -828,7 +1359,12 @@
     '#/board': { render: renderBoard, label: 'Board' },
     '#/agents': { render: renderAgents, label: 'Agents' },
     '#/activity': { render: renderActivityView, label: 'Activity' },
-    '#/inbox': { render: renderInbox, label: 'Inbox' }
+    '#/inbox': { render: renderInbox, label: 'Inbox' },
+    '#/crons': { render: renderCrons, label: 'Crons' },
+    '#/briefs': { render: renderBriefs, label: 'Briefs' },
+    '#/audits': { render: renderAudits, label: 'Audits' },
+    '#/portfolio': { render: renderPortfolio, label: 'Portfolio' },
+    '#/memory': { render: renderMemory, label: 'Memory' }
   };
 
   function navigate() {
@@ -912,7 +1448,7 @@
         }
         // Navigation commands
         if (value.charAt(0) === '/') {
-          var routeMap = { '/board': '#/board', '/agents': '#/agents', '/activity': '#/activity', '/inbox': '#/inbox' };
+          var routeMap = { '/board': '#/board', '/agents': '#/agents', '/activity': '#/activity', '/inbox': '#/inbox', '/crons': '#/crons', '/briefs': '#/briefs', '/audits': '#/audits', '/portfolio': '#/portfolio', '/memory': '#/memory' };
           var route = routeMap[value.toLowerCase()];
           if (route) {
             location.hash = route;
@@ -984,10 +1520,8 @@
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
     var keyMap = {
-      '1': '#/board',
-      '2': '#/agents',
-      '3': '#/activity',
-      '4': '#/inbox'
+      '1': '#/board', '2': '#/agents', '3': '#/activity', '4': '#/inbox',
+      '5': '#/crons', '6': '#/briefs', '7': '#/audits', '8': '#/portfolio', '9': '#/memory'
     };
 
     if (keyMap[e.key]) {
@@ -1045,6 +1579,13 @@
     }
   });
 
+  onChange('notifications', function () {
+    if (state.activeTab === 'inbox') {
+      var main = document.getElementById('main-content');
+      if (main) { main.textContent = ''; renderInbox(main); }
+    }
+  });
+
   onChange('activeRuns', function () {
     if (state.activeTab === 'agents') {
       var main = document.getElementById('main-content');
@@ -1062,7 +1603,8 @@
     Promise.all([
       loadTasks().catch(function (err) { console.warn('Failed to load tasks:', err); }),
       loadActivity().catch(function (err) { console.warn('Failed to load activity:', err); }),
-      loadAgents().catch(function (err) { console.warn('Failed to load agents:', err); })
+      loadAgents().catch(function (err) { console.warn('Failed to load agents:', err); }),
+      loadNotifications().catch(function (err) { console.warn('Failed to load notifications:', err); })
     ]).then(function () {
       // Initial route
       navigate();
