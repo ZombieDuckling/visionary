@@ -27,13 +27,13 @@
 - [x] **DISP-06**: Task status auto-updates when agent dispatch starts and completes
 
 ### Notifications & Viewers (NOTIF)
-- [ ] **NOTIF-01**: Inbox with severity-tiered notifications (critical/warning/info)
-- [ ] **NOTIF-02**: Actionable notification buttons (approve, dismiss, escalate, view)
-- [ ] **NOTIF-03**: Cron schedule view with table and 24h SAST timeline visualization
-- [ ] **NOTIF-04**: Daily brief viewer rendering Scout markdown output
-- [ ] **NOTIF-05**: Security audit viewer rendering Sentinel markdown output
-- [ ] **NOTIF-06**: Portfolio viewer rendering Broker markdown output
-- [ ] **NOTIF-07**: Memory browser with Karpathy wiki search integration
+- [x] **NOTIF-01**: Inbox with severity-tiered notifications (critical/warning/info)
+- [x] **NOTIF-02**: Actionable notification buttons (approve, dismiss, escalate, view)
+- [x] **NOTIF-03**: Cron schedule view with table and 24h SAST timeline visualization
+- [x] **NOTIF-04**: Daily brief viewer rendering Scout markdown output
+- [x] **NOTIF-05**: Security audit viewer rendering Sentinel markdown output
+- [x] **NOTIF-06**: Portfolio viewer rendering Broker markdown output
+- [x] **NOTIF-07**: Memory browser with Karpathy wiki search integration
 
 ### Intelligence (INTEL)
 - [ ] **INTEL-01**: Interview/shaping mode — AI interviews user to refine task before dispatch
@@ -80,13 +80,13 @@
 | DISP-04 | Phase 3 | Complete |
 | DISP-05 | Phase 3 | Complete |
 | DISP-06 | Phase 3 | Complete |
-| NOTIF-01 | Phase 4 | Pending |
-| NOTIF-02 | Phase 4 | Pending |
-| NOTIF-03 | Phase 4 | Pending |
-| NOTIF-04 | Phase 4 | Pending |
-| NOTIF-05 | Phase 4 | Pending |
-| NOTIF-06 | Phase 4 | Pending |
-| NOTIF-07 | Phase 4 | Pending |
+| NOTIF-01 | Phase 4 | Complete |
+| NOTIF-02 | Phase 4 | Complete |
+| NOTIF-03 | Phase 4 | Complete |
+| NOTIF-04 | Phase 4 | Complete |
+| NOTIF-05 | Phase 4 | Complete |
+| NOTIF-06 | Phase 4 | Complete |
+| NOTIF-07 | Phase 4 | Complete |
 | INTEL-01 | Phase 5 | Pending |
 | INTEL-02 | Phase 5 | Pending |
 | INTEL-03 | Phase 5 | Pending |

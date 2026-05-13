@@ -81,7 +81,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01-PLAN.md — Notification inbox + cron timeline + brief/audit/portfolio viewers + memory browser (NOTIF-01 through NOTIF-07)
+- [x] 04-01-PLAN.md — Notification inbox + cron timeline + brief/audit/portfolio viewers + memory browser (NOTIF-01 through NOTIF-07)
 
 ### Phase 5: Intelligence
 **Goal**: Users can refine tasks through AI-assisted interviews before dispatch, and Jarvis automatically routes ambiguous tasks to the right sub-agent
