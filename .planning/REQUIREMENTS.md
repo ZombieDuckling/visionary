@@ -3,8 +3,8 @@
 ## v1 Requirements
 
 ### Foundation (FOUND)
-- [ ] **FOUND-01**: Server serves HTML dashboard from separate file (not template literal)
-- [ ] **FOUND-02**: SQLite database with WAL mode, migrations, and 5-table schema (projects, tasks, agent_runs, notifications, activity_log)
+- [x] **FOUND-01**: Server serves HTML dashboard from separate file (not template literal)
+- [x] **FOUND-02**: SQLite database with WAL mode, migrations, and 5-table schema (projects, tasks, agent_runs, notifications, activity_log)
 - [ ] **FOUND-03**: Proxy-based reactive state store in frontend with one-way data flow
 - [ ] **FOUND-04**: Dark ops-center design system (tokens, typography, spacing, component primitives)
 - [ ] **FOUND-05**: REST API with JSON responses for all CRUD operations
@@ -62,8 +62,8 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| FOUND-01 | Phase 1 | Pending |
-| FOUND-02 | Phase 1 | Pending |
+| FOUND-01 | Phase 1 | Complete |
+| FOUND-02 | Phase 1 | Complete |
 | FOUND-03 | Phase 1 | Pending |
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
