@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can create, read, update, and delete tasks via the REST API and see changes reflected in the browser
   4. Browser receives real-time push updates via SSE when data changes on the server
   5. Frontend state updates flow through a central reactive store (no direct DOM reads for state)
-**Plans**: TBD
+**Plans**: 3 plans (Wave 1: 01, Wave 2: 02+03 parallel)
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Database + server foundation (package.json, db.js, server.js, public/index.html)
+- [ ] 01-02-PLAN.md — REST API CRUD + SSE real-time push (server.js routes, sse.js)
+- [ ] 01-03-PLAN.md — Frontend state store + design system (public/app.js, public/styles.css, public/index.html)
 
 ### Phase 2: Board & Agents
 **Goal**: Users can manage tasks on a visual kanban board and see at-a-glance status of all 8 agents
