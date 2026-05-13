@@ -39,6 +39,7 @@
     tasks: [],
     activity: [],
     notifications: [],
+    agents: [],
     activeTab: 'board',
     sseConnected: false
   };
@@ -94,6 +95,11 @@
     state.activity = activity;
   }
 
+  async function loadAgents() {
+    var data = await api('/agents');
+    state.agents = data.agents || [];
+  }
+
   // --- SSE Connection ---
   function connectSSE() {
     var source = new EventSource('/api/events');
@@ -128,6 +134,13 @@
     source.addEventListener('activity:new', function (e) {
       var entry = JSON.parse(e.data);
       state.activity = [entry].concat(state.activity).slice(0, 100);
+    });
+
+    source.addEventListener('agent:status', function (e) {
+      var updated = JSON.parse(e.data);
+      state.agents = state.agents.map(function (a) {
+        return a.id === updated.id ? Object.assign({}, a, updated) : a;
+      });
     });
 
     return source;
@@ -340,22 +353,39 @@
     });
   }
 
-  // Agents view: grid of 8 agent cards
+  // Agents view: grid of 8 agent cards with live status
   function renderAgents(container) {
-    var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Agents</h2>'
+    var agents = state.agents.length > 0 ? state.agents : AGENTS;
+    var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Agent Desk</h2>'
       + '<div class="agent-grid">';
 
-    AGENTS.forEach(function (agent) {
-      var colorVar = '--agent-' + agent.id;
+    agents.forEach(function (agent) {
+      var colorVar = '--agent-' + esc(agent.id);
+      var statusClass = agent.status || 'idle';
+      // Strip date suffix from model (e.g. "claude-sonnet-4-20250514" -> "claude-sonnet-4")
+      var modelDisplay = '';
+      if (agent.model) {
+        modelDisplay = agent.model.replace(/-\d{8}$/, '');
+      }
+      var lastActivity = agent.last_activity ? timeAgo(agent.last_activity) : 'No activity yet';
+      var summary = agent.last_run_summary ? agent.last_run_summary.substring(0, 80) : '';
+
       html += '<div class="agent-card">'
-        + '<div class="agent-name" style="color: var(' + colorVar + ')">' + esc(agent.name) + '</div>'
+        + '<div class="agent-name" style="color: var(' + colorVar + ')">'
+        + '<span class="status-indicator ' + esc(statusClass) + '"></span>'
+        + esc(agent.icon || '') + ' ' + esc(agent.name)
+        + '</div>'
         + '<div class="agent-role">' + esc(agent.role) + '</div>'
-        + '<span class="badge badge-green">idle</span>'
-        + '</div>';
+        + '<div class="agent-model">' + esc(modelDisplay) + '</div>'
+        + '<div class="agent-last-activity">' + esc(lastActivity) + '</div>';
+      if (summary) {
+        html += '<div class="agent-summary">' + esc(summary) + '</div>';
+      }
+      html += '</div>';
     });
 
     html += '</div>';
-    // Agent data is hardcoded constants -- safe for innerHTML
+    // All dynamic content escaped via esc()
     container.innerHTML = html;
   }
 
@@ -700,12 +730,115 @@
     }
   }
 
+  // --- Command Bar ---
+  function showCommandBar() {
+    // Remove existing command bar if present
+    var existing = document.querySelector('.command-bar-overlay');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay command-bar-overlay';
+
+    var bar = document.createElement('div');
+    bar.className = 'command-bar';
+
+    var input = document.createElement('input');
+    input.className = 'command-input';
+    input.type = 'text';
+    input.placeholder = 'Type a command... (@agent message, /board, /agents)';
+
+    var hint = document.createElement('div');
+    hint.className = 'command-hint';
+    hint.innerHTML = '<kbd>@</kbd> assign agent &nbsp; <kbd>/</kbd> navigate &nbsp; <kbd>Enter</kbd> create task &nbsp; <kbd>Esc</kbd> close';
+
+    bar.appendChild(input);
+    bar.appendChild(hint);
+    overlay.appendChild(bar);
+    document.body.appendChild(overlay);
+
+    // Close on background click
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    // Command input keydown handler
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        return;
+      }
+      if (e.key === 'Enter') {
+        var value = input.value.trim();
+        if (!value) {
+          overlay.remove();
+          return;
+        }
+        // Navigation commands
+        if (value.charAt(0) === '/') {
+          var routeMap = { '/board': '#/board', '/agents': '#/agents', '/activity': '#/activity', '/inbox': '#/inbox' };
+          var route = routeMap[value.toLowerCase()];
+          if (route) {
+            location.hash = route;
+          }
+          overlay.remove();
+          return;
+        }
+        // Agent assignment: @agentId message
+        if (value.charAt(0) === '@') {
+          var match = value.match(/^@(\w+)\s+(.+)$/);
+          if (match) {
+            var agentId = match[1];
+            var message = match[2];
+            api('/tasks', { method: 'POST', body: { title: message, agent_id: agentId } })
+              .then(function () { overlay.remove(); })
+              .catch(function (err) {
+                hint.textContent = (err.data && err.data.error) ? err.data.error : 'Failed to create task';
+              });
+          } else {
+            hint.textContent = 'Format: @agent message';
+          }
+          return;
+        }
+        // Plain text: create unassigned task
+        api('/tasks', { method: 'POST', body: { title: value } })
+          .then(function () { overlay.remove(); })
+          .catch(function (err) {
+            hint.textContent = (err.data && err.data.error) ? err.data.error : 'Failed to create task';
+          });
+      }
+    });
+
+    // Auto-focus input
+    input.focus();
+  }
+
+  function hideCommandBar() {
+    var existing = document.querySelector('.command-bar-overlay');
+    if (existing) existing.remove();
+  }
+
+  function toggleCommandBar() {
+    var existing = document.querySelector('.command-bar-overlay');
+    if (existing) {
+      existing.remove();
+    } else {
+      showCommandBar();
+    }
+  }
+
   // --- Keyboard Shortcuts ---
   document.addEventListener('keydown', function (e) {
+    // Cmd+K / Ctrl+K: toggle command bar (works even in input fields)
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      toggleCommandBar();
+      return;
+    }
+
     // Skip if user is typing in a form field
     var tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    // Skip if modifier keys held (allow browser shortcuts)
+    // Skip if other modifier keys held (allow browser shortcuts)
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
     var keyMap = {
@@ -760,12 +893,23 @@
     }
   });
 
+  onChange('agents', function () {
+    if (state.activeTab === 'agents') {
+      var main = document.getElementById('main-content');
+      if (main) {
+        main.textContent = '';
+        renderAgents(main);
+      }
+    }
+  });
+
   // --- Initialization ---
   document.addEventListener('DOMContentLoaded', function () {
     // Load data in parallel -- catch errors gracefully (server may not be running)
     Promise.all([
       loadTasks().catch(function (err) { console.warn('Failed to load tasks:', err); }),
-      loadActivity().catch(function (err) { console.warn('Failed to load activity:', err); })
+      loadActivity().catch(function (err) { console.warn('Failed to load activity:', err); }),
+      loadAgents().catch(function (err) { console.warn('Failed to load agents:', err); })
     ]).then(function () {
       // Initial route
       navigate();

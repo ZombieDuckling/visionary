@@ -187,6 +187,48 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // GET /api/agents
+      if (method === 'GET' && pathname === '/api/agents') {
+        var agentConfigs = [
+          { id: 'jarvis', name: 'Jarvis', icon: '\u2699\uFE0F', role: 'Chief of Staff', model: 'claude-sonnet-4-20250514', color: '#3b8bff' },
+          { id: 'scout', name: 'Scout', icon: '\uD83D\uDD2D', role: 'Morning Intelligence', model: 'claude-sonnet-4-20250514', color: '#06b6d4' },
+          { id: 'analyst', name: 'Analyst', icon: '\uD83D\uDD2C', role: 'Research Deep-Diver', model: 'claude-sonnet-4-20250514', color: '#7c5cff' },
+          { id: 'forge', name: 'Forge', icon: '\uD83D\uDD28', role: 'Builder', model: 'claude-sonnet-4-20250514', color: '#f59e0b' },
+          { id: 'sentinel', name: 'Sentinel', icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor', model: 'llama3.2:3b', color: '#ef4444' },
+          { id: 'broker', name: 'Broker', icon: '\uD83D\uDCC8', role: 'Investment Intelligence', model: 'claude-sonnet-4-20250514', color: '#22c55e' },
+          { id: 'ops', name: 'Ops', icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps', model: 'llama3.2:3b', color: '#8b5cf6' },
+          { id: 'hunter', name: 'Hunter', icon: '\uD83C\uDFAF', role: 'Career & Opportunities', model: 'claude-sonnet-4-20250514', color: '#ec4899' }
+        ];
+        const latestRuns = stmts.getLatestRunPerAgent.all();
+        const runningAgents = stmts.getRunningAgents.all().map(r => r.agent_id);
+        const runMap = {};
+        latestRuns.forEach(function (r) { runMap[r.agent_id] = r; });
+        const agents = agentConfigs.map(function (cfg) {
+          const run = runMap[cfg.id];
+          let status = 'idle';
+          if (runningAgents.indexOf(cfg.id) !== -1) {
+            status = 'active';
+          } else if (run && run.status === 'failed') {
+            status = 'error';
+          }
+          return {
+            id: cfg.id,
+            name: cfg.name,
+            icon: cfg.icon,
+            role: cfg.role,
+            model: cfg.model,
+            color: cfg.color,
+            status: status,
+            last_activity: run ? (run.completed_at || run.started_at) : null,
+            last_run_status: run ? run.status : null,
+            last_run_duration_ms: run ? run.duration_ms : null,
+            last_run_summary: run && run.result_text ? run.result_text.substring(0, 120) : null
+          };
+        });
+        res.json({ agents });
+        return;
+      }
+
       // GET /api/notifications (placeholder -- consumed in Phase 4)
       if (method === 'GET' && pathname === '/api/notifications') {
         res.json({ notifications: [] });
