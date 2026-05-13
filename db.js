@@ -143,7 +143,9 @@ const stmts = {
     INSERT INTO activity_log (event_type, agent_id, task_id, project_id, summary, detail_json)
     VALUES (@event_type, @agent_id, @task_id, @project_id, @summary, @detail_json)
   `),
-  getRecentActivity: db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?')
+  getRecentActivity: db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?'),
+  getLatestRunPerAgent: db.prepare('SELECT agent_id, status, completed_at, started_at, duration_ms, result_text FROM agent_runs WHERE id IN (SELECT MAX(id) FROM agent_runs GROUP BY agent_id)'),
+  getRunningAgents: db.prepare('SELECT agent_id FROM agent_runs WHERE status = \'running\'')
 };
 
 module.exports = { db, stmts };

@@ -471,6 +471,55 @@ textarea {
   margin-bottom: var(--space-sm);
 }
 
+.status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: var(--space-xs);
+}
+
+.status-indicator.active {
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-indicator.idle {
+  background: var(--text-muted);
+}
+
+.status-indicator.error {
+  background: var(--accent-red);
+  box-shadow: 0 0 6px var(--accent-red);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.agent-model {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.agent-last-activity {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--space-sm);
+}
+
+.agent-summary {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* --- Activity Feed --- */
 .activity-list {
   display: flex;
@@ -600,6 +649,55 @@ textarea {
 
 .mt-lg {
   margin-top: var(--space-lg);
+}
+
+/* --- Command Bar --- */
+.command-bar-overlay {
+  justify-content: center;
+  padding-top: 20vh;
+  align-items: flex-start;
+}
+
+.command-bar {
+  width: 560px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  box-shadow: 0 8px 32px rgba(0, 255, 136, 0.1);
+}
+
+.command-input {
+  width: 100%;
+  padding: var(--space-md);
+  background: var(--bg-input);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-md);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.command-input::placeholder {
+  color: var(--text-muted);
+}
+
+.command-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-sm);
+  padding: 0 var(--space-sm);
+}
+
+.command-hint kbd {
+  display: inline-block;
+  padding: 1px 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
 }
 
 /* --- Empty State --- */

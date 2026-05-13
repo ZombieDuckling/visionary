@@ -57,5 +57,6 @@ bus.on('task:created', (d) => broadcast('task:created', d));
 bus.on('task:updated', (d) => broadcast('task:updated', d));
 bus.on('task:deleted', (d) => broadcast('task:deleted', d));
 bus.on('activity:new', (d) => broadcast('activity:new', d));
+bus.on('agent:status', (d) => broadcast('agent:status', d));
 
 module.exports = { bus, handleSSE, broadcast };
