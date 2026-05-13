@@ -46,12 +46,12 @@ Plans:
   2. User can create a new task with title, description, agent assignment, and priority from a form in the UI
   3. All 8 agents appear as status cards showing name, role, model, current status (active/idle/error), and last activity
   4. User can navigate tabs with number keys (1-8), open command bar with Cmd+K, and close modals with Escape
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1: 01, Wave 2: 02)
 **UI hint**: yes
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Kanban drag-and-drop + task detail editing (BOARD-01, BOARD-02, BOARD-03)
+- [ ] 02-02-PLAN.md — Agent status API + live cards + Cmd+K command bar + keyboard shortcuts (BOARD-04, BOARD-05, BOARD-06)
 
 ### Phase 3: Dispatch & Real-Time
 **Goal**: Users can dispatch tasks to agents, watch work happen in real time, and kill runaway processes
