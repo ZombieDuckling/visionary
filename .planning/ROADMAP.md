@@ -92,12 +92,11 @@ Plans:
   2. When dispatching an ambiguous task, Jarvis evaluates it and routes to the best sub-agent automatically
   3. User can view per-project context panels showing docs, status, and history for each project
   4. User can see token/cost estimates per agent run (when OpenClaw exposes usage data)
-**Plans**: TBD
+**Plans**: 1 plan (Wave 1: 01)
 **UI hint**: yes
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Interview shaping mode + Jarvis routing + project panels + cost tracking (INTEL-01 through INTEL-04)
 
 ## Progress
 
@@ -110,4 +109,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Board & Agents | 0/2 | Not started | - |
 | 3. Dispatch & Real-Time | 0/1 | Not started | - |
 | 4. Notifications & Viewers | 0/1 | Not started | - |
-| 5. Intelligence | 0/2 | Not started | - |
+| 5. Intelligence | 0/1 | Not started | - |
