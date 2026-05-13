@@ -19,12 +19,12 @@
 - [x] **BOARD-06**: Keyboard shortcuts for power users (1-8 tabs, Cmd+K command bar, Escape close)
 
 ### Dispatch & Real-Time (DISP)
-- [ ] **DISP-01**: Agent dispatch via OpenClaw CLI (execFile, not exec — no shell injection)
-- [ ] **DISP-02**: Command bar for quick dispatch to any agent with dropdown selector
-- [ ] **DISP-03**: Kill switch to terminate runaway agent processes
-- [ ] **DISP-04**: Real-time activity feed with agent-colored entries via SSE
-- [ ] **DISP-05**: Agent run tracking with start time, duration, status, outcome in SQLite
-- [ ] **DISP-06**: Task status auto-updates when agent dispatch starts and completes
+- [x] **DISP-01**: Agent dispatch via OpenClaw CLI (execFile, not exec — no shell injection)
+- [x] **DISP-02**: Command bar for quick dispatch to any agent with dropdown selector
+- [x] **DISP-03**: Kill switch to terminate runaway agent processes
+- [x] **DISP-04**: Real-time activity feed with agent-colored entries via SSE
+- [x] **DISP-05**: Agent run tracking with start time, duration, status, outcome in SQLite
+- [x] **DISP-06**: Task status auto-updates when agent dispatch starts and completes
 
 ### Notifications & Viewers (NOTIF)
 - [ ] **NOTIF-01**: Inbox with severity-tiered notifications (critical/warning/info)
@@ -74,12 +74,12 @@
 | BOARD-04 | Phase 2 | Complete |
 | BOARD-05 | Phase 2 | Complete |
 | BOARD-06 | Phase 2 | Complete |
-| DISP-01 | Phase 3 | Pending |
-| DISP-02 | Phase 3 | Pending |
-| DISP-03 | Phase 3 | Pending |
-| DISP-04 | Phase 3 | Pending |
-| DISP-05 | Phase 3 | Pending |
-| DISP-06 | Phase 3 | Pending |
+| DISP-01 | Phase 3 | Complete |
+| DISP-02 | Phase 3 | Complete |
+| DISP-03 | Phase 3 | Complete |
+| DISP-04 | Phase 3 | Complete |
+| DISP-05 | Phase 3 | Complete |
+| DISP-06 | Phase 3 | Complete |
 | NOTIF-01 | Phase 4 | Pending |
 | NOTIF-02 | Phase 4 | Pending |
 | NOTIF-03 | Phase 4 | Pending |
