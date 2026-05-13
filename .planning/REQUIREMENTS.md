@@ -62,8 +62,32 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| FOUND-01 through FOUND-06 | Phase 1 | Pending |
-| BOARD-01 through BOARD-06 | Phase 2 | Pending |
-| DISP-01 through DISP-06 | Phase 3 | Pending |
-| NOTIF-01 through NOTIF-07 | Phase 4 | Pending |
-| INTEL-01 through INTEL-04 | Phase 5 | Pending |
+| FOUND-01 | Phase 1 | Pending |
+| FOUND-02 | Phase 1 | Pending |
+| FOUND-03 | Phase 1 | Pending |
+| FOUND-04 | Phase 1 | Pending |
+| FOUND-05 | Phase 1 | Pending |
+| FOUND-06 | Phase 1 | Pending |
+| BOARD-01 | Phase 2 | Pending |
+| BOARD-02 | Phase 2 | Pending |
+| BOARD-03 | Phase 2 | Pending |
+| BOARD-04 | Phase 2 | Pending |
+| BOARD-05 | Phase 2 | Pending |
+| BOARD-06 | Phase 2 | Pending |
+| DISP-01 | Phase 3 | Pending |
+| DISP-02 | Phase 3 | Pending |
+| DISP-03 | Phase 3 | Pending |
+| DISP-04 | Phase 3 | Pending |
+| DISP-05 | Phase 3 | Pending |
+| DISP-06 | Phase 3 | Pending |
+| NOTIF-01 | Phase 4 | Pending |
+| NOTIF-02 | Phase 4 | Pending |
+| NOTIF-03 | Phase 4 | Pending |
+| NOTIF-04 | Phase 4 | Pending |
+| NOTIF-05 | Phase 4 | Pending |
+| NOTIF-06 | Phase 4 | Pending |
+| NOTIF-07 | Phase 4 | Pending |
+| INTEL-01 | Phase 5 | Pending |
+| INTEL-02 | Phase 5 | Pending |
+| INTEL-03 | Phase 5 | Pending |
+| INTEL-04 | Phase 5 | Pending |
