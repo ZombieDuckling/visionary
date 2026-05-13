@@ -66,7 +66,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01-PLAN.md — Backend dispatch engine + frontend dispatch UI, activity feed, kill switch (DISP-01 through DISP-06)
+- [x] 03-01-PLAN.md — Backend dispatch engine + frontend dispatch UI, activity feed, kill switch (DISP-01 through DISP-06)
 
 ### Phase 4: Notifications & Viewers
 **Goal**: Users receive actionable notifications from agent work and can view briefs, audits, portfolio data, cron schedules, and memory search results
