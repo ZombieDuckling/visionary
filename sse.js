@@ -62,5 +62,7 @@ bus.on('agent:started', (d) => broadcast('agent:started', d));
 bus.on('agent:completed', (d) => broadcast('agent:completed', d));
 bus.on('agent:failed', (d) => broadcast('agent:failed', d));
 bus.on('agent:progress', (d) => broadcast('agent:progress', d));
+bus.on('notification:created', (d) => broadcast('notification:created', d));
+bus.on('notification:updated', (d) => broadcast('notification:updated', d));
 
 module.exports = { bus, handleSSE, broadcast };

@@ -164,7 +164,22 @@ const stmts = {
   `),
   getRecentRuns: db.prepare(`
     SELECT * FROM agent_runs ORDER BY created_at DESC LIMIT ?
-  `)
+  `),
+
+  // Notification statements
+  getNotifications: db.prepare(`
+    SELECT n.*, ar.agent_id, ar.task_id FROM notifications n
+    LEFT JOIN agent_runs ar ON n.agent_run_id = ar.id
+    ORDER BY n.created_at DESC LIMIT ?
+  `),
+  getUnreadCount: db.prepare(`SELECT COUNT(*) as count FROM notifications WHERE read = 0 AND dismissed = 0`),
+  insertNotification: db.prepare(`
+    INSERT INTO notifications (agent_run_id, type, title, body, action_type, action_data)
+    VALUES (@agent_run_id, @type, @title, @body, @action_type, @action_data)
+  `),
+  markNotificationRead: db.prepare(`UPDATE notifications SET read = 1 WHERE id = ?`),
+  dismissNotification: db.prepare(`UPDATE notifications SET dismissed = 1 WHERE id = ?`),
+  getNotificationById: db.prepare(`SELECT * FROM notifications WHERE id = ?`)
 };
 
 module.exports = { db, stmts };

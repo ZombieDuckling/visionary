@@ -119,6 +119,21 @@ function dispatchAgent(taskId, agentId, message) {
         result_text: resultText, error: null, duration_ms: durationMs
       });
 
+      // Create notification for completed run
+      const notifResult = stmts.insertNotification.run({
+        agent_run_id: runId,
+        type: 'info',
+        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' completed task #' + taskId,
+        body: resultText ? resultText.substring(0, 500) : 'No output',
+        action_type: 'view_run',
+        action_data: JSON.stringify({ run_id: runId, task_id: taskId })
+      });
+      bus.emit('notification:created', {
+        id: Number(notifResult.lastInsertRowid),
+        agent_id: agentId, task_id: taskId, type: 'info',
+        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' completed task #' + taskId
+      });
+
       // Update task to review
       const currentTask = stmts.getTaskById.get(taskId);
       if (currentTask) {
@@ -151,6 +166,21 @@ function dispatchAgent(taskId, agentId, message) {
       stmts.completeRun.run({
         id: runId, status, result_json: null, result_text: null,
         error: error.message, duration_ms: durationMs
+      });
+
+      // Create notification for failed/timed-out run
+      const failNotifResult = stmts.insertNotification.run({
+        agent_run_id: runId,
+        type: status === 'timeout' ? 'warning' : 'error',
+        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' ' + status + ' on task #' + taskId,
+        body: error.message.substring(0, 500),
+        action_type: 'view_run',
+        action_data: JSON.stringify({ run_id: runId, task_id: taskId })
+      });
+      bus.emit('notification:created', {
+        id: Number(failNotifResult.lastInsertRowid),
+        agent_id: agentId, task_id: taskId, type: status === 'timeout' ? 'warning' : 'error',
+        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' ' + status + ' on task #' + taskId
       });
 
       // Do NOT change task status -- leave in_progress for retry
@@ -192,6 +222,9 @@ function readBody(req) {
     });
   });
 }
+
+// Workspace path for briefs, audits, portfolio, memory
+const WORKSPACE = path.join(process.env.HOME || '/Users/joshuasack', '.openclaw', 'workspace');
 
 // Static file server
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -492,9 +525,192 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // GET /api/notifications (placeholder -- consumed in Phase 4)
+      // GET /api/notifications
       if (method === 'GET' && pathname === '/api/notifications') {
-        res.json({ notifications: [] });
+        const limitParam = parseInt(url.searchParams.get('limit'), 10);
+        const limit = (!isNaN(limitParam) && limitParam > 0) ? Math.min(limitParam, 200) : 50;
+        const notifications = stmts.getNotifications.all(limit);
+        const unread = stmts.getUnreadCount.get();
+        res.json({ notifications, unread_count: unread.count });
+        return;
+      }
+
+      // PATCH /api/notifications/:id -- read/dismiss/escalate actions
+      if (method === 'PATCH' && pathname.startsWith('/api/notifications/')) {
+        const id = parseInt(pathname.split('/')[3], 10);
+        if (isNaN(id)) { res.json({ error: 'Invalid notification id' }, 400); return; }
+        const notif = stmts.getNotificationById.get(id);
+        if (!notif) { res.json({ error: 'Notification not found' }, 404); return; }
+        const body = await readBody(req);
+        if (!body) { res.json({ error: 'Request body required' }, 400); return; }
+        const validActions = ['read', 'dismiss', 'escalate'];
+        if (!body.action || validActions.indexOf(body.action) === -1) {
+          res.json({ error: 'Invalid action. Must be: ' + validActions.join(', ') }, 400);
+          return;
+        }
+        if (body.action === 'read') {
+          stmts.markNotificationRead.run(id);
+        } else if (body.action === 'dismiss') {
+          stmts.dismissNotification.run(id);
+        } else if (body.action === 'escalate') {
+          stmts.markNotificationRead.run(id);
+          stmts.insertActivity.run({
+            event_type: 'notification.escalated', agent_id: null, task_id: null,
+            project_id: null, summary: 'Escalated: ' + notif.title,
+            detail_json: JSON.stringify({ notification_id: id })
+          });
+          bus.emit('activity:new', { event_type: 'notification.escalated', summary: 'Escalated: ' + notif.title });
+        }
+        bus.emit('notification:updated', { id, action: body.action });
+        res.json({ ok: true });
+        return;
+      }
+
+      // GET /api/crons -- cron schedule from OpenClaw CLI
+      if (method === 'GET' && pathname === '/api/crons') {
+        execFile('openclaw', ['cron', 'list', '--json'], {
+          timeout: 10000,
+          env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+        }, (error, stdout) => {
+          if (error) {
+            res.json({ crons: [
+              { name: 'Morning Brief', agent: 'scout', schedule: '0 6 * * *', description: 'Daily intelligence brief' },
+              { name: 'Daily Build', agent: 'forge', schedule: '0 9 * * 1-5', description: 'Automated build check' },
+              { name: 'Security Audit AM', agent: 'sentinel', schedule: '0 8 * * *', description: 'Morning security scan' },
+              { name: 'Security Audit PM', agent: 'sentinel', schedule: '0 16 * * *', description: 'Afternoon security scan' },
+              { name: 'Wiki Reindex', agent: 'analyst', schedule: '0 2 * * *', description: 'Karpathy memory wiki reindex' },
+              { name: 'LinkedIn AM', agent: 'hunter', schedule: '0 7 * * 1-5', description: 'Morning LinkedIn scan' },
+              { name: 'LinkedIn PM', agent: 'hunter', schedule: '0 14 * * 1-5', description: 'Afternoon LinkedIn scan' }
+            ], source: 'fallback' });
+          } else {
+            try {
+              const cleaned = cleanCliOutput(stdout);
+              const parsed = JSON.parse(cleaned);
+              res.json({ crons: parsed.crons || parsed, source: 'live' });
+            } catch {
+              res.json({ crons: [], source: 'error', error: 'Failed to parse cron output' });
+            }
+          }
+        });
+        return;
+      }
+
+      // GET /api/briefs -- list Scout daily briefs
+      if (method === 'GET' && pathname === '/api/briefs') {
+        try {
+          const docsDir = path.join(WORKSPACE, 'docs');
+          const files = fs.readdirSync(docsDir).filter(f => f.startsWith('daily-brief-') && f.endsWith('.md'));
+          files.sort().reverse();
+          res.json({ briefs: files.map(f => ({ filename: f, date: f.replace('daily-brief-', '').replace('.md', '') })) });
+        } catch { res.json({ briefs: [] }); }
+        return;
+      }
+
+      // GET /api/briefs/:filename -- read a specific brief
+      if (method === 'GET' && pathname.startsWith('/api/briefs/') && pathname.split('/').length === 4) {
+        const filename = pathname.split('/')[3];
+        if (!/^[a-zA-Z0-9._-]+\.md$/.test(filename)) { res.json({ error: 'Invalid filename' }, 400); return; }
+        try {
+          const content = fs.readFileSync(path.join(WORKSPACE, 'docs', filename), 'utf8');
+          res.json({ filename, content });
+        } catch { res.json({ error: 'File not found' }, 404); }
+        return;
+      }
+
+      // GET /api/audits -- list Sentinel audit files
+      if (method === 'GET' && pathname === '/api/audits') {
+        try {
+          const auditDir = path.join(WORKSPACE, 'docs', 'audits');
+          const files = fs.readdirSync(auditDir).filter(f => f.endsWith('.md'));
+          files.sort().reverse();
+          res.json({ audits: files.map(f => ({ filename: f })) });
+        } catch { res.json({ audits: [] }); }
+        return;
+      }
+
+      // GET /api/audits/:filename -- read a specific audit
+      if (method === 'GET' && pathname.startsWith('/api/audits/') && pathname.split('/').length === 4) {
+        const filename = pathname.split('/')[3];
+        if (!/^[a-zA-Z0-9._-]+\.md$/.test(filename)) { res.json({ error: 'Invalid filename' }, 400); return; }
+        try {
+          const content = fs.readFileSync(path.join(WORKSPACE, 'docs', 'audits', filename), 'utf8');
+          res.json({ filename, content });
+        } catch { res.json({ error: 'File not found' }, 404); }
+        return;
+      }
+
+      // GET /api/portfolio -- list Broker portfolio files
+      if (method === 'GET' && pathname === '/api/portfolio') {
+        try {
+          const portfolioDir = path.join(WORKSPACE, 'docs', 'portfolio');
+          const files = fs.readdirSync(portfolioDir).filter(f => f.endsWith('.md'));
+          files.sort().reverse();
+          res.json({ portfolio: files.map(f => ({ filename: f })) });
+        } catch { res.json({ portfolio: [] }); }
+        return;
+      }
+
+      // GET /api/portfolio/:filename -- read a specific portfolio report
+      if (method === 'GET' && pathname.startsWith('/api/portfolio/') && pathname.split('/').length === 4) {
+        const filename = pathname.split('/')[3];
+        if (!/^[a-zA-Z0-9._-]+\.md$/.test(filename)) { res.json({ error: 'Invalid filename' }, 400); return; }
+        try {
+          const content = fs.readFileSync(path.join(WORKSPACE, 'docs', 'portfolio', filename), 'utf8');
+          res.json({ filename, content });
+        } catch { res.json({ error: 'File not found' }, 404); }
+        return;
+      }
+
+      // GET /api/memory/search -- Karpathy wiki search
+      if (method === 'GET' && pathname === '/api/memory/search') {
+        const query = url.searchParams.get('q');
+        if (!query || !query.trim()) { res.json({ error: 'Query parameter q is required' }, 400); return; }
+        const scriptPath = path.join(WORKSPACE, 'scripts', 'karpathy-memory.py');
+        execFile('python3', [scriptPath, 'search', query.trim()], {
+          timeout: 15000,
+          maxBuffer: 5 * 1024 * 1024
+        }, (error, stdout) => {
+          if (error) {
+            res.json({ results: [], error: error.message });
+          } else {
+            try {
+              const results = JSON.parse(stdout.trim());
+              res.json({ results: Array.isArray(results) ? results : [] });
+            } catch {
+              const lines = stdout.trim().split('\n').filter(Boolean);
+              res.json({ results: lines.map((line, i) => ({ id: i, text: line })) });
+            }
+          }
+        });
+        return;
+      }
+
+      // GET /api/memory -- list memory files
+      if (method === 'GET' && pathname === '/api/memory') {
+        try {
+          const memDir = path.join(WORKSPACE, 'memory');
+          let files = [];
+          try { files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')); } catch {}
+          let hasTopLevel = false;
+          try { fs.accessSync(path.join(WORKSPACE, 'MEMORY.md')); hasTopLevel = true; } catch {}
+          res.json({ files, has_memory_md: hasTopLevel });
+        } catch { res.json({ files: [], has_memory_md: false }); }
+        return;
+      }
+
+      // GET /api/memory/:filename -- read a specific memory file
+      if (method === 'GET' && pathname.startsWith('/api/memory/') && pathname !== '/api/memory/search') {
+        const filename = pathname.split('/').slice(3).join('/');
+        if (!/^[a-zA-Z0-9._-]+\.md$/.test(filename)) { res.json({ error: 'Invalid filename' }, 400); return; }
+        try {
+          let content;
+          try {
+            content = fs.readFileSync(path.join(WORKSPACE, 'memory', filename), 'utf8');
+          } catch {
+            content = fs.readFileSync(path.join(WORKSPACE, filename), 'utf8');
+          }
+          res.json({ filename, content });
+        } catch { res.json({ error: 'File not found' }, 404); }
         return;
       }
 
