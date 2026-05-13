@@ -7,8 +7,8 @@
 - [x] **FOUND-02**: SQLite database with WAL mode, migrations, and 5-table schema (projects, tasks, agent_runs, notifications, activity_log)
 - [ ] **FOUND-03**: Proxy-based reactive state store in frontend with one-way data flow
 - [ ] **FOUND-04**: Dark ops-center design system (tokens, typography, spacing, component primitives)
-- [ ] **FOUND-05**: REST API with JSON responses for all CRUD operations
-- [ ] **FOUND-06**: SSE endpoint for real-time push updates to browser
+- [x] **FOUND-05**: REST API with JSON responses for all CRUD operations
+- [x] **FOUND-06**: SSE endpoint for real-time push updates to browser
 
 ### Board & Agents (BOARD)
 - [ ] **BOARD-01**: Kanban board with columns: To Do, In Progress, Review, Done
@@ -66,8 +66,8 @@
 | FOUND-02 | Phase 1 | Complete |
 | FOUND-03 | Phase 1 | Pending |
 | FOUND-04 | Phase 1 | Pending |
-| FOUND-05 | Phase 1 | Pending |
-| FOUND-06 | Phase 1 | Pending |
+| FOUND-05 | Phase 1 | Complete |
+| FOUND-06 | Phase 1 | Complete |
 | BOARD-01 | Phase 2 | Pending |
 | BOARD-02 | Phase 2 | Pending |
 | BOARD-03 | Phase 2 | Pending |
