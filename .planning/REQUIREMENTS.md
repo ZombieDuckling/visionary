@@ -11,9 +11,9 @@
 - [x] **FOUND-06**: SSE endpoint for real-time push updates to browser
 
 ### Board & Agents (BOARD)
-- [ ] **BOARD-01**: Kanban board with columns: To Do, In Progress, Review, Done
-- [ ] **BOARD-02**: Drag-and-drop task movement between columns via HTML5 DnD API
-- [ ] **BOARD-03**: Task creation with title, description, agent assignment, priority
+- [x] **BOARD-01**: Kanban board with columns: To Do, In Progress, Review, Done
+- [x] **BOARD-02**: Drag-and-drop task movement between columns via HTML5 DnD API
+- [x] **BOARD-03**: Task creation with title, description, agent assignment, priority
 - [ ] **BOARD-04**: Agent status cards showing name, role, model, last activity, current status
 - [ ] **BOARD-05**: Agent desk grid with live status indicators (active/idle/error)
 - [ ] **BOARD-06**: Keyboard shortcuts for power users (1-8 tabs, Cmd+K command bar, Escape close)
@@ -68,9 +68,9 @@
 | FOUND-04 | Phase 1 | Complete |
 | FOUND-05 | Phase 1 | Complete |
 | FOUND-06 | Phase 1 | Complete |
-| BOARD-01 | Phase 2 | Pending |
-| BOARD-02 | Phase 2 | Pending |
-| BOARD-03 | Phase 2 | Pending |
+| BOARD-01 | Phase 2 | Complete |
+| BOARD-02 | Phase 2 | Complete |
+| BOARD-03 | Phase 2 | Complete |
 | BOARD-04 | Phase 2 | Pending |
 | BOARD-05 | Phase 2 | Pending |
 | BOARD-06 | Phase 2 | Pending |
