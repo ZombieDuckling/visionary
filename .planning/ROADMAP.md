@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — Database + server foundation (package.json, db.js, server.js, public/index.html)
-- [ ] 01-02-PLAN.md — REST API CRUD + SSE real-time push (server.js routes, sse.js)
+- [x] 01-02-PLAN.md — REST API CRUD + SSE real-time push (server.js routes, sse.js)
 - [ ] 01-03-PLAN.md — Frontend state store + design system (public/app.js, public/styles.css, public/index.html)
 
 ### Phase 2: Board & Agents
@@ -108,7 +108,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 2/3 | In Progress|  |
 | 2. Board & Agents | 0/2 | Not started | - |
 | 3. Dispatch & Real-Time | 0/2 | Not started | - |
 | 4. Notifications & Viewers | 0/2 | Not started | - |
