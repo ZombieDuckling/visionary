@@ -146,6 +146,7 @@
     notifications: [],
     agents: [],
     activeRuns: [],
+    projects: [],
     activeTab: 'board',
     sseConnected: false
   };
@@ -558,6 +559,9 @@
         + '<div class="agent-last-activity">' + esc(lastActivity) + '</div>';
       if (summary) {
         html += '<div class="agent-summary">' + esc(summary) + '</div>';
+      }
+      if (agent.last_run_cost) {
+        html += '<div class="agent-cost">Last run: $' + agent.last_run_cost.toFixed(4) + '</div>';
       }
       if (activeRun) {
         html += '<div class="agent-running">'
@@ -1147,6 +1151,7 @@
       + '<div id="form-error" class="form-error hidden"></div>'
       + '<div class="task-detail-actions">'
       + '<button type="button" class="btn btn-danger" id="delete-task-btn">Delete</button>'
+      + '<button type="button" class="btn btn-shape" id="shape-task-detail-btn">Shape</button>'
       + '<button type="button" class="btn btn-dispatch" id="dispatch-task-btn">Dispatch</button>'
       + '<div class="form-actions">'
       + '<button type="button" class="btn" id="cancel-edit">Cancel</button>'
@@ -1196,21 +1201,32 @@
         });
     });
 
+    // Shape button in task detail
+    overlay.querySelector('#shape-task-detail-btn').addEventListener('click', function () {
+      overlay.remove();
+      showInterviewOverlay(task.id);
+    });
+
     // Dispatch button
     var dispatchBtn = overlay.querySelector('#dispatch-task-btn');
     dispatchBtn.addEventListener('click', function () {
       var agentSelect = overlay.querySelector('select[name="agent_id"]');
       var selectedAgent = agentSelect ? agentSelect.value : task.agent_id;
-      if (!selectedAgent) {
-        var errorEl = overlay.querySelector('#form-error');
-        errorEl.textContent = 'Select an agent before dispatching';
-        errorEl.classList.remove('hidden');
-        return;
-      }
       dispatchBtn.textContent = 'Dispatching...';
       dispatchBtn.disabled = true;
-      api('/dispatch', { method: 'POST', body: { task_id: task.id, agent_id: selectedAgent } })
-        .then(function () { overlay.remove(); })
+      var dispatchBody = { task_id: task.id };
+      if (selectedAgent) {
+        dispatchBody.agent_id = selectedAgent;
+      } else {
+        dispatchBody.auto_route = true;
+      }
+      api('/dispatch', { method: 'POST', body: dispatchBody })
+        .then(function (result) {
+          overlay.remove();
+          if (result.routed) {
+            showToast('Routed to ' + result.agent_id + ' (' + (result.routing ? result.routing.confidence : '') + ')');
+          }
+        })
         .catch(function (err) {
           dispatchBtn.textContent = 'Dispatch';
           dispatchBtn.disabled = false;
@@ -1298,6 +1314,7 @@
       + '</div>'
       + '<div id="form-error" class="form-error hidden"></div>'
       + '<div class="form-actions">'
+      + '<button type="button" class="btn btn-shape" id="shape-task-btn">Shape with Jarvis</button>'
       + '<button type="button" class="btn" id="cancel-task">Cancel</button>'
       + '<button type="submit" class="btn btn-primary">Create Task</button>'
       + '</div>'
@@ -1314,6 +1331,12 @@
     // Cancel button
     overlay.querySelector('#cancel-task').addEventListener('click', function () {
       overlay.remove();
+    });
+
+    // Shape with Jarvis button
+    overlay.querySelector('#shape-task-btn').addEventListener('click', function () {
+      overlay.remove();
+      showInterviewOverlay(null);
     });
 
     // Form submit
@@ -1354,6 +1377,424 @@
     if (titleInput) titleInput.focus();
   }
 
+  // --- Toast Notification ---
+  function showToast(message, duration) {
+    duration = duration || 3000;
+    var toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(function () {
+      toast.classList.add('fade-out');
+      setTimeout(function () { toast.remove(); }, 300);
+    }, duration);
+  }
+
+  // --- INTEL-01: Interview/Shaping Mode ---
+  function showInterviewOverlay(taskId) {
+    var existing = document.querySelector('.overlay');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay interview-overlay';
+
+    overlay.innerHTML = '<div class="overlay-content">'
+      + '<div class="interview-header">'
+      + '<h2 style="color: var(--accent-green); font-size: var(--font-size-lg);">Shape Task with Jarvis</h2>'
+      + '<button class="btn" id="interview-close">Close</button>'
+      + '</div>'
+      + '<div class="interview-messages" id="interview-messages">'
+      + '<div class="interview-typing"><div class="spinner"></div> Jarvis is thinking...</div>'
+      + '</div>'
+      + '<div id="interview-ready-area"></div>'
+      + '<div class="interview-input-area">'
+      + '<input class="input" type="text" id="interview-input" placeholder="Type your answer..." />'
+      + '<button class="btn btn-primary" id="interview-send">Send</button>'
+      + '</div>'
+      + '</div>';
+
+    document.body.appendChild(overlay);
+
+    var sessionId = null;
+    var messagesDiv = overlay.querySelector('#interview-messages');
+    var inputEl = overlay.querySelector('#interview-input');
+    var sendBtn = overlay.querySelector('#interview-send');
+    var readyArea = overlay.querySelector('#interview-ready-area');
+
+    overlay.querySelector('#interview-close').addEventListener('click', function () { overlay.remove(); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+
+    function addBubble(role, content) {
+      var bubble = document.createElement('div');
+      bubble.className = 'interview-msg ' + role;
+      if (role === 'assistant') {
+        bubble.innerHTML = renderMarkdown(content);
+      } else {
+        bubble.textContent = content;
+      }
+      messagesDiv.appendChild(bubble);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function showTyping() {
+      var el = document.createElement('div');
+      el.className = 'interview-typing';
+      el.id = 'interview-typing-indicator';
+      el.innerHTML = '<div class="spinner"></div> Jarvis is thinking...';
+      messagesDiv.appendChild(el);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function hideTyping() {
+      var el = document.getElementById('interview-typing-indicator');
+      if (el) el.remove();
+    }
+
+    // Start interview
+    api('/interview/start', { method: 'POST', body: { task_id: taskId || undefined } })
+      .then(function (data) {
+        sessionId = data.session_id;
+        messagesDiv.innerHTML = '';
+        if (data.messages && data.messages.length > 0) {
+          data.messages.forEach(function (m) { addBubble(m.role, m.content); });
+        }
+        inputEl.focus();
+      })
+      .catch(function (err) {
+        messagesDiv.innerHTML = '<div class="empty-state">Failed to start interview: ' + esc(err.message) + '</div>';
+      });
+
+    function sendMessage() {
+      var msg = inputEl.value.trim();
+      if (!msg || !sessionId) return;
+      inputEl.value = '';
+      addBubble('user', msg);
+      showTyping();
+      inputEl.disabled = true;
+      sendBtn.disabled = true;
+
+      api('/interview/' + sessionId + '/reply', { method: 'POST', body: { message: msg } })
+        .then(function (data) {
+          hideTyping();
+          inputEl.disabled = false;
+          sendBtn.disabled = false;
+          // Show latest assistant message
+          var msgs = data.messages || [];
+          if (msgs.length > 0) {
+            var last = msgs[msgs.length - 1];
+            if (last.role === 'assistant') addBubble('assistant', last.content);
+          }
+          // Check if completed
+          if (data.status === 'completed') {
+            inputEl.disabled = true;
+            sendBtn.disabled = true;
+            // Show ready banner
+            var agentName = data.suggested_agent || 'jarvis';
+            var agentDisplay = AGENTS.find(function (a) { return a.id === agentName; });
+            var displayName = agentDisplay ? agentDisplay.name : agentName;
+
+            var agentOptions = AGENTS.map(function (a) {
+              var sel = a.id === agentName ? ' selected' : '';
+              return '<option value="' + esc(a.id) + '"' + sel + '>' + esc(a.name) + ' - ' + esc(a.role) + '</option>';
+            }).join('');
+
+            readyArea.innerHTML = '<div class="interview-ready">'
+              + '<h4>Task Ready</h4>'
+              + '<p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-sm);">'
+              + '<strong>' + esc(data.refined_title || 'Refined Task') + '</strong></p>'
+              + '<p style="font-size: var(--font-size-xs); color: var(--text-muted); margin-bottom: var(--space-md);">'
+              + esc((data.refined_description || '').substring(0, 200)) + '</p>'
+              + '<div style="display: flex; gap: var(--space-sm); align-items: center;">'
+              + '<select id="interview-agent-override" style="flex: 1;">' + agentOptions + '</select>'
+              + '<button class="btn btn-primary" id="interview-dispatch">Dispatch to ' + esc(displayName) + '</button>'
+              + '</div></div>';
+
+            var dispatchBtn = readyArea.querySelector('#interview-dispatch');
+            var agentSelect = readyArea.querySelector('#interview-agent-override');
+            agentSelect.addEventListener('change', function () {
+              var sel = AGENTS.find(function (a) { return a.id === agentSelect.value; });
+              dispatchBtn.textContent = 'Dispatch to ' + (sel ? sel.name : agentSelect.value);
+            });
+            dispatchBtn.addEventListener('click', function () {
+              dispatchBtn.textContent = 'Dispatching...';
+              dispatchBtn.disabled = true;
+              api('/interview/' + sessionId + '/dispatch', {
+                method: 'POST', body: { agent_id: agentSelect.value }
+              }).then(function (result) {
+                overlay.remove();
+                showToast('Dispatched to ' + (result.agent_id || 'agent'));
+                location.hash = '#/board';
+              }).catch(function (err) {
+                dispatchBtn.textContent = 'Dispatch';
+                dispatchBtn.disabled = false;
+                showToast('Dispatch failed: ' + (err.data ? err.data.error : err.message));
+              });
+            });
+          }
+          inputEl.focus();
+        })
+        .catch(function (err) {
+          hideTyping();
+          inputEl.disabled = false;
+          sendBtn.disabled = false;
+          addBubble('assistant', 'Error: ' + (err.data ? err.data.error : err.message));
+        });
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    inputEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') sendMessage();
+    });
+  }
+
+  // --- INTEL-03: Projects Tab ---
+  function renderProjects(container) {
+    var selectedProject = container._selectedProject || null;
+
+    if (selectedProject) {
+      container.innerHTML = '<button class="btn btn-back" data-action="projects-back">Back</button>'
+        + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+      api('/projects/' + selectedProject).then(function (data) {
+        var p = data.project;
+        var html = '<button class="btn btn-back" data-action="projects-back">Back</button>'
+          + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-sm);">'
+          + '<span style="color: ' + esc(p.color || '#00ff41') + '">' + esc(p.name) + '</span>'
+          + ' <span class="badge badge-green">' + esc(p.status) + '</span></h2>'
+          + '<p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-lg);">' + esc(p.description || '') + '</p>'
+          + '<button class="btn" data-action="edit-project" data-pid="' + esc(p.id) + '" style="margin-bottom: var(--space-lg);">Edit Project</button>';
+
+        // Tasks section
+        html += '<div class="project-detail-section"><h3>Tasks (' + (data.tasks ? data.tasks.length : 0) + ')</h3>';
+        if (data.tasks && data.tasks.length > 0) {
+          html += '<div class="task-list">';
+          data.tasks.forEach(function (t) {
+            var statusCls = t.status === 'done' ? 'badge-green' : t.status === 'in_progress' ? 'badge-blue' : t.status === 'review' ? 'badge-orange' : 'text-muted';
+            html += '<div class="task-item" data-action="view-task" data-task-id="' + esc(t.id) + '">'
+              + '<span class="task-title">' + esc(t.title) + '</span>'
+              + '<span class="badge ' + statusCls + '">' + esc(t.status) + '</span></div>';
+          });
+          html += '</div>';
+        } else {
+          html += '<div class="empty-state">No tasks in this project</div>';
+        }
+        html += '</div>';
+
+        // Runs section
+        html += '<div class="project-detail-section"><h3>Recent Runs (' + (data.runs ? data.runs.length : 0) + ')</h3>';
+        if (data.runs && data.runs.length > 0) {
+          html += '<div class="activity-list">';
+          data.runs.forEach(function (r) {
+            var statusCls = r.status === 'completed' ? 'badge-green' : r.status === 'failed' ? 'badge-red' : 'badge-blue';
+            html += '<div class="activity-item">'
+              + '<span class="badge ' + statusCls + '">' + esc(r.status) + '</span>'
+              + '<span>' + esc(r.agent_id) + ' - Task #' + esc(r.task_id) + '</span>'
+              + '<span class="text-muted">' + timeAgo(r.created_at) + '</span>'
+              + (r.estimated_cost_usd ? '<span class="agent-cost">$' + r.estimated_cost_usd.toFixed(4) + '</span>' : '')
+              + '</div>';
+          });
+          html += '</div>';
+        } else {
+          html += '<div class="empty-state">No runs yet</div>';
+        }
+        html += '</div>';
+
+        // Docs section
+        html += '<div class="project-detail-section"><h3>Documents (' + (data.docs ? data.docs.length : 0) + ')</h3>';
+        if (data.docs && data.docs.length > 0) {
+          html += '<div class="file-list">';
+          data.docs.forEach(function (d) {
+            html += '<div class="file-item"><div class="file-item-name">' + esc(d) + '</div></div>';
+          });
+          html += '</div>';
+        } else {
+          html += '<div class="empty-state">No documents found</div>';
+        }
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        // Event delegation
+        container.addEventListener('click', function (e) {
+          var back = e.target.closest('[data-action="projects-back"]');
+          if (back) { container._selectedProject = null; container.innerHTML = ''; renderProjects(container); return; }
+          var viewTask = e.target.closest('[data-action="view-task"]');
+          if (viewTask) { showTaskDetail(viewTask.getAttribute('data-task-id')); return; }
+          var editBtn = e.target.closest('[data-action="edit-project"]');
+          if (editBtn) { showEditProjectForm(editBtn.getAttribute('data-pid')); }
+        });
+      }).catch(function () {
+        container.innerHTML = '<button class="btn btn-back" data-action="projects-back">Back</button>'
+          + '<div class="empty-state">Failed to load project</div>';
+        container.querySelector('[data-action="projects-back"]').addEventListener('click', function () {
+          container._selectedProject = null; container.innerHTML = ''; renderProjects(container);
+        });
+      });
+      return;
+    }
+
+    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Projects</h2>'
+      + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+
+    api('/projects').then(function (data) {
+      var projects = data.projects || [];
+      var html = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">'
+        + '<h2 style="font-size: var(--font-size-lg);">Projects</h2>'
+        + '<button class="btn btn-primary" data-action="new-project">+ New Project</button></div>';
+
+      if (projects.length === 0) {
+        html += '<div class="empty-state">No projects yet. Create one to get started.</div>';
+      } else {
+        html += '<div class="project-grid">';
+        projects.forEach(function (p) {
+          var statusBadge = p.status === 'active' ? 'badge-green' : p.status === 'paused' ? 'badge-orange' : 'text-muted';
+          html += '<div class="project-card" data-action="view-project" data-pid="' + esc(p.id) + '">'
+            + '<div class="project-name" style="color: ' + esc(p.color || '#00ff41') + '">' + esc(p.name) + '</div>'
+            + '<div class="project-desc">' + esc(p.description || '') + '</div>'
+            + '<div class="project-stats">'
+            + '<span>' + esc(p.active_task_count) + ' active / ' + esc(p.task_count) + ' total tasks</span>'
+            + '<span class="badge ' + statusBadge + '">' + esc(p.status) + '</span>'
+            + '</div></div>';
+        });
+        html += '</div>';
+      }
+      container.innerHTML = html;
+
+      container.addEventListener('click', function (e) {
+        var newBtn = e.target.closest('[data-action="new-project"]');
+        if (newBtn) { showCreateProjectForm(); return; }
+        var card = e.target.closest('[data-action="view-project"]');
+        if (card) { container._selectedProject = card.getAttribute('data-pid'); container.innerHTML = ''; renderProjects(container); }
+      });
+    }).catch(function () {
+      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Projects</h2>'
+        + '<div class="empty-state">Failed to load projects</div>';
+    });
+  }
+
+  // --- Project Create Form ---
+  function showCreateProjectForm() {
+    var existing = document.querySelector('.overlay');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+
+    var presetColors = ['#00ff41', '#00aaff', '#ff8800', '#ff4444', '#aa77ff', '#00ddff'];
+    var swatchHtml = presetColors.map(function (c, i) {
+      return '<div class="color-swatch' + (i === 0 ? ' selected' : '') + '" data-color="' + c + '" style="background: ' + c + '"></div>';
+    }).join('');
+
+    overlay.innerHTML = '<div class="overlay-content">'
+      + '<h2>New Project</h2>'
+      + '<form id="create-project-form">'
+      + '<div class="form-group"><label>Name</label><input class="input" type="text" name="name" required placeholder="Project name..." /></div>'
+      + '<div class="form-group"><label>Description</label><textarea class="input" name="description" rows="2" placeholder="Optional description..."></textarea></div>'
+      + '<div class="form-group"><label>Color</label><div class="color-swatches">' + swatchHtml + '</div><input type="hidden" name="color" value="#00ff41" /></div>'
+      + '<div id="form-error" class="form-error hidden"></div>'
+      + '<div class="form-actions"><button type="button" class="btn" id="cancel-project">Cancel</button><button type="submit" class="btn btn-primary">Create Project</button></div>'
+      + '</form></div>';
+
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#cancel-project').addEventListener('click', function () { overlay.remove(); });
+
+    // Color swatch selection
+    overlay.querySelectorAll('.color-swatch').forEach(function (swatch) {
+      swatch.addEventListener('click', function () {
+        overlay.querySelectorAll('.color-swatch').forEach(function (s) { s.classList.remove('selected'); });
+        swatch.classList.add('selected');
+        overlay.querySelector('input[name="color"]').value = swatch.getAttribute('data-color');
+      });
+    });
+
+    overlay.querySelector('#create-project-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var form = e.target;
+      var errorEl = overlay.querySelector('#form-error');
+      errorEl.classList.add('hidden');
+      var body = { name: form.name.value.trim(), description: form.description.value.trim(), color: form.color.value };
+      if (!body.name) { errorEl.textContent = 'Name is required'; errorEl.classList.remove('hidden'); return; }
+      try {
+        await api('/projects', { method: 'POST', body: body });
+        overlay.remove();
+        // Re-render projects tab
+        var main = document.getElementById('main-content');
+        if (main && state.activeTab === 'projects') { main.innerHTML = ''; renderProjects(main); }
+      } catch (err) {
+        errorEl.textContent = (err.data && err.data.error) ? err.data.error : 'Failed to create project';
+        errorEl.classList.remove('hidden');
+      }
+    });
+
+    overlay.querySelector('input[name="name"]').focus();
+  }
+
+  // --- Project Edit Form ---
+  function showEditProjectForm(projectId) {
+    api('/projects/' + projectId).then(function (data) {
+      var p = data.project;
+      var existing = document.querySelector('.overlay');
+      if (existing) existing.remove();
+      var overlay = document.createElement('div');
+      overlay.className = 'overlay';
+
+      var presetColors = ['#00ff41', '#00aaff', '#ff8800', '#ff4444', '#aa77ff', '#00ddff'];
+      var swatchHtml = presetColors.map(function (c) {
+        return '<div class="color-swatch' + (c === p.color ? ' selected' : '') + '" data-color="' + c + '" style="background: ' + c + '"></div>';
+      }).join('');
+
+      var statusOpts = ['active', 'paused', 'archived'].map(function (s) {
+        return '<option value="' + s + '"' + (s === p.status ? ' selected' : '') + '>' + s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+      }).join('');
+
+      overlay.innerHTML = '<div class="overlay-content">'
+        + '<h2>Edit Project</h2>'
+        + '<form id="edit-project-form">'
+        + '<div class="form-group"><label>Name</label><input class="input" type="text" name="name" required value="' + esc(p.name) + '" /></div>'
+        + '<div class="form-group"><label>Description</label><textarea class="input" name="description" rows="2">' + esc(p.description || '') + '</textarea></div>'
+        + '<div class="form-group"><label>Status</label><select name="status">' + statusOpts + '</select></div>'
+        + '<div class="form-group"><label>Color</label><div class="color-swatches">' + swatchHtml + '</div><input type="hidden" name="color" value="' + esc(p.color || '#00ff41') + '" /></div>'
+        + '<div id="form-error" class="form-error hidden"></div>'
+        + '<div class="form-actions"><button type="button" class="btn" id="cancel-edit-project">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
+        + '</form></div>';
+
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+      overlay.querySelector('#cancel-edit-project').addEventListener('click', function () { overlay.remove(); });
+
+      overlay.querySelectorAll('.color-swatch').forEach(function (swatch) {
+        swatch.addEventListener('click', function () {
+          overlay.querySelectorAll('.color-swatch').forEach(function (s) { s.classList.remove('selected'); });
+          swatch.classList.add('selected');
+          overlay.querySelector('input[name="color"]').value = swatch.getAttribute('data-color');
+        });
+      });
+
+      overlay.querySelector('#edit-project-form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var form = e.target;
+        var errorEl = overlay.querySelector('#form-error');
+        errorEl.classList.add('hidden');
+        var body = { name: form.name.value.trim(), description: form.description.value.trim(), color: form.color.value, status: form.status.value };
+        try {
+          await api('/projects/' + projectId, { method: 'PATCH', body: body });
+          overlay.remove();
+          var main = document.getElementById('main-content');
+          if (main && state.activeTab === 'projects') { main.innerHTML = ''; renderProjects(main); }
+        } catch (err) {
+          errorEl.textContent = (err.data && err.data.error) ? err.data.error : 'Failed to update project';
+          errorEl.classList.remove('hidden');
+        }
+      });
+    });
+  }
+
+  // --- INTEL-04: Load Projects ---
+  async function loadProjects() {
+    var data = await api('/projects');
+    state.projects = data.projects || [];
+  }
+
   // --- Tab Router (hash-based) ---
   var tabs = {
     '#/board': { render: renderBoard, label: 'Board' },
@@ -1364,7 +1805,8 @@
     '#/briefs': { render: renderBriefs, label: 'Briefs' },
     '#/audits': { render: renderAudits, label: 'Audits' },
     '#/portfolio': { render: renderPortfolio, label: 'Portfolio' },
-    '#/memory': { render: renderMemory, label: 'Memory' }
+    '#/memory': { render: renderMemory, label: 'Memory' },
+    '#/projects': { render: renderProjects, label: 'Projects' }
   };
 
   function navigate() {
@@ -1448,7 +1890,7 @@
         }
         // Navigation commands
         if (value.charAt(0) === '/') {
-          var routeMap = { '/board': '#/board', '/agents': '#/agents', '/activity': '#/activity', '/inbox': '#/inbox', '/crons': '#/crons', '/briefs': '#/briefs', '/audits': '#/audits', '/portfolio': '#/portfolio', '/memory': '#/memory' };
+          var routeMap = { '/board': '#/board', '/agents': '#/agents', '/activity': '#/activity', '/inbox': '#/inbox', '/crons': '#/crons', '/briefs': '#/briefs', '/audits': '#/audits', '/portfolio': '#/portfolio', '/memory': '#/memory', '/projects': '#/projects' };
           var route = routeMap[value.toLowerCase()];
           if (route) {
             location.hash = route;
@@ -1462,11 +1904,20 @@
           if (match) {
             var agentId = match[1];
             var message = match[2];
+            // INTEL-02: @jarvis route: triggers auto-routing
+            var dispatchBody = { agent_id: agentId, message: message };
+            if (agentId === 'jarvis' && message.toLowerCase().indexOf('route:') === 0) {
+              dispatchBody.message = message.substring(6).trim();
+              dispatchBody.auto_route = true;
+            }
             hint.textContent = 'Dispatching to ' + agentId + '...';
             input.disabled = true;
-            api('/dispatch', { method: 'POST', body: { agent_id: agentId, message: message } })
-              .then(function () {
+            api('/dispatch', { method: 'POST', body: dispatchBody })
+              .then(function (result) {
                 overlay.remove();
+                if (result.routed) {
+                  showToast('Routed to ' + result.agent_id + ' (' + (result.routing ? result.routing.confidence : '') + ')');
+                }
               })
               .catch(function (err) {
                 input.disabled = false;
@@ -1477,7 +1928,24 @@
           }
           return;
         }
-        // Plain text: create unassigned task
+        // INTEL-02: Long plain text (>20 chars) auto-routes instead of creating unassigned task
+        if (value.length > 20) {
+          hint.textContent = 'Auto-routing...';
+          input.disabled = true;
+          api('/dispatch', { method: 'POST', body: { agent_id: 'jarvis', message: value, auto_route: true } })
+            .then(function (result) {
+              overlay.remove();
+              if (result.routed) {
+                showToast('Routed to ' + result.agent_id + ' (' + (result.routing ? result.routing.confidence : '') + ')');
+              }
+            })
+            .catch(function (err) {
+              input.disabled = false;
+              hint.textContent = (err.data && err.data.error) ? err.data.error : 'Dispatch failed';
+            });
+          return;
+        }
+        // Short plain text: create unassigned task
         api('/tasks', { method: 'POST', body: { title: value } })
           .then(function () { overlay.remove(); })
           .catch(function (err) {
@@ -1521,7 +1989,8 @@
 
     var keyMap = {
       '1': '#/board', '2': '#/agents', '3': '#/activity', '4': '#/inbox',
-      '5': '#/crons', '6': '#/briefs', '7': '#/audits', '8': '#/portfolio', '9': '#/memory'
+      '5': '#/crons', '6': '#/briefs', '7': '#/audits', '8': '#/portfolio', '9': '#/memory',
+      '0': '#/projects'
     };
 
     if (keyMap[e.key]) {
@@ -1597,6 +2066,13 @@
     }
   });
 
+  onChange('projects', function () {
+    if (state.activeTab === 'projects') {
+      var main = document.getElementById('main-content');
+      if (main) { main.innerHTML = ''; renderProjects(main); }
+    }
+  });
+
   // --- Initialization ---
   document.addEventListener('DOMContentLoaded', function () {
     // Load data in parallel -- catch errors gracefully (server may not be running)
@@ -1604,7 +2080,8 @@
       loadTasks().catch(function (err) { console.warn('Failed to load tasks:', err); }),
       loadActivity().catch(function (err) { console.warn('Failed to load activity:', err); }),
       loadAgents().catch(function (err) { console.warn('Failed to load agents:', err); }),
-      loadNotifications().catch(function (err) { console.warn('Failed to load notifications:', err); })
+      loadNotifications().catch(function (err) { console.warn('Failed to load notifications:', err); }),
+      loadProjects().catch(function (err) { console.warn('Failed to load projects:', err); })
     ]).then(function () {
       // Initial route
       navigate();

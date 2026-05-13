@@ -89,6 +89,28 @@ const migrations = [
   CREATE INDEX idx_notifications_read ON notifications(read);
   CREATE INDEX idx_activity_created ON activity_log(created_at DESC);
   CREATE INDEX idx_activity_agent ON activity_log(agent_id);
+  `,
+
+  // Migration 1 -> 2: Interview sessions, token columns, project indexes
+  `
+  CREATE TABLE IF NOT EXISTS interview_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER REFERENCES tasks(id),
+    status TEXT DEFAULT 'active' CHECK(status IN ('active','completed','cancelled')),
+    messages_json TEXT DEFAULT '[]',
+    refined_title TEXT,
+    refined_description TEXT,
+    suggested_agent TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  ALTER TABLE agent_runs ADD COLUMN input_tokens INTEGER;
+  ALTER TABLE agent_runs ADD COLUMN output_tokens INTEGER;
+  ALTER TABLE agent_runs ADD COLUMN estimated_cost_usd REAL;
+
+  CREATE INDEX idx_interview_task ON interview_sessions(task_id);
+  CREATE INDEX idx_projects_status ON projects(status);
   `
 ];
 
@@ -179,7 +201,48 @@ const stmts = {
   `),
   markNotificationRead: db.prepare(`UPDATE notifications SET read = 1 WHERE id = ?`),
   dismissNotification: db.prepare(`UPDATE notifications SET dismissed = 1 WHERE id = ?`),
-  getNotificationById: db.prepare(`SELECT * FROM notifications WHERE id = ?`)
+  getNotificationById: db.prepare(`SELECT * FROM notifications WHERE id = ?`),
+
+  // Interview session statements
+  insertInterview: db.prepare(`
+    INSERT INTO interview_sessions (task_id, messages_json) VALUES (@task_id, @messages_json)
+  `),
+  getInterviewById: db.prepare(`SELECT * FROM interview_sessions WHERE id = ?`),
+  getInterviewByTask: db.prepare(`
+    SELECT * FROM interview_sessions WHERE task_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1
+  `),
+  updateInterview: db.prepare(`
+    UPDATE interview_sessions SET
+      messages_json = @messages_json, refined_title = @refined_title,
+      refined_description = @refined_description, suggested_agent = @suggested_agent,
+      status = @status, updated_at = datetime('now')
+    WHERE id = @id
+  `),
+
+  // Project CRUD statements
+  getAllProjects: db.prepare(`SELECT * FROM projects ORDER BY name`),
+  getProjectById: db.prepare(`SELECT * FROM projects WHERE id = ?`),
+  insertProject: db.prepare(`
+    INSERT INTO projects (name, slug, description, color) VALUES (@name, @slug, @description, @color)
+  `),
+  updateProject: db.prepare(`
+    UPDATE projects SET name = @name, description = @description, color = @color,
+    status = @status, updated_at = datetime('now') WHERE id = @id
+  `),
+  getTasksByProject: db.prepare(`SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at DESC`),
+  getRunsByProject: db.prepare(`
+    SELECT ar.* FROM agent_runs ar JOIN tasks t ON ar.task_id = t.id
+    WHERE t.project_id = ? ORDER BY ar.created_at DESC LIMIT 20
+  `),
+
+  // Token/cost statements
+  updateRunTokens: db.prepare(`
+    UPDATE agent_runs SET input_tokens = @input_tokens, output_tokens = @output_tokens,
+    estimated_cost_usd = @estimated_cost_usd WHERE id = @id
+  `),
+  getLastRunCost: db.prepare(`
+    SELECT estimated_cost_usd FROM agent_runs WHERE agent_id = ? AND estimated_cost_usd IS NOT NULL ORDER BY id DESC LIMIT 1
+  `)
 };
 
 module.exports = { db, stmts };

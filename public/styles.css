@@ -884,3 +884,137 @@ textarea {
 
 /* Back button for viewer detail */
 .btn-back { margin-bottom: var(--space-lg); }
+
+/* --- Phase 5: Intelligence Features --- */
+
+/* Interview/Shaping Mode */
+.interview-overlay .overlay-content {
+  max-width: 600px;
+  height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+.interview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+.interview-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md) 0;
+}
+.interview-msg {
+  max-width: 80%;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.interview-msg.assistant {
+  align-self: flex-start;
+  background: rgba(0, 255, 136, 0.08);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  color: var(--text-primary);
+}
+.interview-msg.user {
+  align-self: flex-end;
+  background: rgba(0, 170, 255, 0.1);
+  border: 1px solid rgba(0, 170, 255, 0.2);
+  color: var(--text-primary);
+}
+.interview-input-area {
+  display: flex;
+  gap: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border);
+}
+.interview-input-area .input { flex: 1; }
+.interview-typing {
+  font-size: var(--font-size-xs);
+  color: var(--accent-green);
+  padding: var(--space-xs) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.interview-ready {
+  background: rgba(0, 255, 136, 0.05);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-top: var(--space-sm);
+}
+.interview-ready h4 { color: var(--accent-green); margin-bottom: var(--space-sm); font-size: var(--font-size-sm); }
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  bottom: 40px;
+  right: var(--space-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-lg);
+  font-size: var(--font-size-sm);
+  color: var(--accent-green);
+  z-index: 2000;
+  animation: toast-in 0.3s ease;
+}
+.toast.fade-out { animation: toast-out 0.3s ease forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toast-out { from { opacity: 1; } to { opacity: 0; transform: translateY(10px); } }
+
+/* Project panels */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-md);
+}
+.project-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.project-card:hover { border-color: #3a3e44; background: var(--bg-hover); }
+.project-name { font-weight: bold; font-size: var(--font-size-md); margin-bottom: var(--space-xs); }
+.project-desc { font-size: var(--font-size-xs); color: var(--text-secondary); margin-bottom: var(--space-sm); max-height: 40px; overflow: hidden; }
+.project-stats { display: flex; gap: var(--space-md); font-size: var(--font-size-xs); color: var(--text-muted); }
+.project-detail-section { margin-bottom: var(--space-xl); }
+.project-detail-section h3 { font-size: var(--font-size-md); color: var(--text-secondary); margin-bottom: var(--space-sm); border-bottom: 1px solid var(--border); padding-bottom: var(--space-xs); }
+
+/* Cost badge on agent cards */
+.agent-cost {
+  font-size: var(--font-size-xs);
+  color: var(--accent-orange);
+  margin-top: var(--space-xs);
+}
+
+/* Color swatches for project creation */
+.color-swatches { display: flex; gap: var(--space-sm); margin-top: var(--space-xs); }
+.color-swatch {
+  width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: border-color 0.15s;
+}
+.color-swatch.selected { border-color: var(--text-primary); }
+.color-swatch:hover { border-color: var(--text-secondary); }
+
+/* Shape button */
+.btn-shape {
+  background: rgba(0, 255, 136, 0.1);
+  color: var(--accent-green);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  cursor: pointer;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+}
+.btn-shape:hover { background: rgba(0, 255, 136, 0.2); }

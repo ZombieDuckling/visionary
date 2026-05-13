@@ -30,6 +30,32 @@ const agentConfigs = [
 ];
 const validAgentIds = agentConfigs.map(a => a.id);
 
+// INTEL-02: Jarvis auto-routing — keyword matching to select best agent
+function routeToAgent(description) {
+  const lower = (description || '').toLowerCase();
+  const routeMap = [
+    { agent_id: 'sentinel', keywords: ['security', 'audit', 'vulnerability', 'pentest', 'scan', 'threat', 'cyber'] },
+    { agent_id: 'scout', keywords: ['news', 'brief', 'morning', 'intelligence', 'scan', 'summary', 'digest'] },
+    { agent_id: 'analyst', keywords: ['research', 'analysis', 'deep-dive', 'investigate', 'report', 'data', 'compare'] },
+    { agent_id: 'forge', keywords: ['build', 'code', 'dashboard', 'automate', 'script', 'deploy', 'feature', 'fix', 'bug'] },
+    { agent_id: 'broker', keywords: ['invest', 'portfolio', 'market', 'stock', 'finance', 'trading', 'crypto'] },
+    { agent_id: 'ops', keywords: ['infra', 'docker', 'server', 'devops', 'nginx', 'kubernetes', 'backup'] },
+    { agent_id: 'hunter', keywords: ['job', 'career', 'cv', 'resume', 'linkedin', 'opportunity'] }
+  ];
+
+  for (let i = 0; i < routeMap.length; i++) {
+    const matched = routeMap[i].keywords.filter(function (kw) { return lower.indexOf(kw) !== -1; });
+    if (matched.length > 0) {
+      return {
+        agent_id: routeMap[i].agent_id,
+        confidence: matched.length >= 2 ? 'high' : 'medium',
+        matched_keywords: matched
+      };
+    }
+  }
+  return { agent_id: 'jarvis', confidence: 'low', matched_keywords: [] };
+}
+
 // Track running agent processes for kill switch
 // Map<runId, { process, agentId, taskId, startTime }>
 const activeDispatches = new Map();
@@ -118,6 +144,22 @@ function dispatchAgent(taskId, agentId, message) {
         id: runId, status: 'completed', result_json: cleaned,
         result_text: resultText, error: null, duration_ms: durationMs
       });
+
+      // INTEL-04: Parse token usage from CLI JSON output and estimate cost
+      try {
+        const parsed = JSON.parse(cleaned);
+        const usage = parsed.usage || parsed.token_usage || (parsed.metrics && parsed.metrics);
+        if (usage && (usage.input_tokens || usage.output_tokens)) {
+          const inputTok = usage.input_tokens || 0;
+          const outputTok = usage.output_tokens || 0;
+          const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
+          const isLlama = agentCfg && agentCfg.model && agentCfg.model.indexOf('llama') !== -1;
+          const cost = isLlama
+            ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
+            : (inputTok * 0.003 + outputTok * 0.015) / 1000;
+          stmts.updateRunTokens.run({ id: runId, input_tokens: inputTok, output_tokens: outputTok, estimated_cost_usd: cost });
+        }
+      } catch (_tokenErr) { /* not valid JSON or no usage data */ }
 
       // Create notification for completed run
       const notifResult = stmts.insertNotification.run({
@@ -396,6 +438,8 @@ const server = http.createServer(async (req, res) => {
           } else if (run && run.status === 'failed') {
             status = 'error';
           }
+          // INTEL-04: Include last run cost
+          const costRow = stmts.getLastRunCost.get(cfg.id);
           return {
             id: cfg.id,
             name: cfg.name,
@@ -407,7 +451,8 @@ const server = http.createServer(async (req, res) => {
             last_activity: run ? (run.completed_at || run.started_at) : null,
             last_run_status: run ? run.status : null,
             last_run_duration_ms: run ? run.duration_ms : null,
-            last_run_summary: run && run.result_text ? run.result_text.substring(0, 120) : null
+            last_run_summary: run && run.result_text ? run.result_text.substring(0, 120) : null,
+            last_run_cost: costRow ? costRow.estimated_cost_usd : null
           };
         });
         res.json({ agents });
@@ -455,9 +500,14 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        // INTEL-02: Jarvis auto-routing when no agent specified or explicit auto_route
+        let routing = null;
         if (!agentId) {
-          res.json({ error: 'No agent specified. Provide agent_id or assign one to the task.' }, 400);
-          return;
+          routing = routeToAgent(message);
+          agentId = routing.agent_id;
+        } else if (body.auto_route === true && agentId === 'jarvis') {
+          routing = routeToAgent(message);
+          agentId = routing.agent_id;
         }
 
         // Validate agent_id against allowlist (T-03-01 mitigation)
@@ -467,7 +517,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         const runId = dispatchAgent(taskId, agentId, message);
-        res.json({ run_id: runId, agent_id: agentId, task_id: taskId }, 202);
+        res.json({ run_id: runId, agent_id: agentId, task_id: taskId, routed: !!routing, routing: routing || null }, 202);
         return;
       }
 
@@ -711,6 +761,312 @@ const server = http.createServer(async (req, res) => {
           }
           res.json({ filename, content });
         } catch { res.json({ error: 'File not found' }, 404); }
+        return;
+      }
+
+      // ===== INTEL-01: Interview API =====
+
+      // POST /api/interview/start
+      if (method === 'POST' && pathname === '/api/interview/start') {
+        const body = await readBody(req);
+        let taskContext = '';
+        let taskId = null;
+        if (body && body.task_id) {
+          const task = stmts.getTaskById.get(body.task_id);
+          if (task) {
+            taskId = task.id;
+            taskContext = '\n\nTask to refine:\nTitle: ' + task.title + (task.description ? '\nDescription: ' + task.description : '');
+          }
+        }
+
+        const systemPrompt = 'You are Jarvis, the chief of staff AI. Interview the user to refine this task. Ask 2-3 clarifying questions about scope, priority, and target outcome. Keep questions short and specific. When you have enough information, summarize the refined task starting with "REFINED TASK:" on its own line, followed by a title on the next line, then the full description.' + taskContext;
+
+        const initialMessages = [{ role: 'system', content: systemPrompt }];
+        const result = stmts.insertInterview.run({ task_id: taskId, messages_json: JSON.stringify(initialMessages) });
+        const sessionId = Number(result.lastInsertRowid);
+
+        // Call Jarvis for first question
+        const cliMessage = systemPrompt + '\n\nPlease ask your first clarifying question about this task.';
+        execFile('openclaw', [
+          'agent', '--agent', 'jarvis', '--message', cliMessage, '--json', '--timeout', '30'
+        ], {
+          timeout: 35000, maxBuffer: 5 * 1024 * 1024,
+          env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+        }, (error, stdout) => {
+          let responseText = 'What would you like to accomplish with this task? Please describe the goal, scope, and any constraints.';
+          if (!error) {
+            try {
+              const cleaned = cleanCliOutput(stdout);
+              const parsed = JSON.parse(cleaned);
+              if (parsed.payloads && Array.isArray(parsed.payloads)) {
+                responseText = parsed.payloads.map(function (p) { return p.text; }).join('\n');
+              } else if (parsed.result) {
+                responseText = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+              } else {
+                responseText = cleaned;
+              }
+            } catch {
+              responseText = cleanCliOutput(stdout) || responseText;
+            }
+          }
+
+          const messages = initialMessages.concat([{ role: 'assistant', content: responseText }]);
+          stmts.updateInterview.run({
+            id: sessionId, messages_json: JSON.stringify(messages),
+            refined_title: null, refined_description: null, suggested_agent: null, status: 'active'
+          });
+          bus.emit('interview:updated', { session_id: sessionId });
+          res.json({ session_id: sessionId, messages: [{ role: 'assistant', content: responseText }] });
+        });
+        return;
+      }
+
+      // POST /api/interview/:id/reply
+      if (method === 'POST' && /^\/api\/interview\/(\d+)\/reply$/.test(pathname)) {
+        const sessionId = parseInt(pathname.match(/^\/api\/interview\/(\d+)\/reply$/)[1], 10);
+        const session = stmts.getInterviewById.get(sessionId);
+        if (!session) { res.json({ error: 'Interview session not found' }, 404); return; }
+        if (session.status !== 'active') { res.json({ error: 'Interview session is ' + session.status }, 400); return; }
+
+        const body = await readBody(req);
+        if (!body || !body.message || typeof body.message !== 'string') {
+          res.json({ error: 'message is required' }, 400); return;
+        }
+
+        // T-05-01: Cap message length
+        const userMsg = body.message.substring(0, 2000);
+        let messages = JSON.parse(session.messages_json || '[]');
+
+        // T-05-04: Max 20 messages per session
+        if (messages.length >= 20) {
+          res.json({ error: 'Interview session has reached maximum messages' }, 400); return;
+        }
+
+        messages.push({ role: 'user', content: userMsg });
+
+        // Build conversation context for Jarvis
+        const convoContext = messages.map(function (m) {
+          if (m.role === 'system') return '[System] ' + m.content;
+          if (m.role === 'assistant') return '[Jarvis] ' + m.content;
+          return '[User] ' + m.content;
+        }).join('\n\n');
+
+        execFile('openclaw', [
+          'agent', '--agent', 'jarvis', '--message', convoContext, '--json', '--timeout', '30'
+        ], {
+          timeout: 35000, maxBuffer: 5 * 1024 * 1024,
+          env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+        }, (error, stdout) => {
+          let responseText = 'I have enough context. Let me prepare the refined task specification.';
+          if (!error) {
+            try {
+              const cleaned = cleanCliOutput(stdout);
+              const parsed = JSON.parse(cleaned);
+              if (parsed.payloads && Array.isArray(parsed.payloads)) {
+                responseText = parsed.payloads.map(function (p) { return p.text; }).join('\n');
+              } else if (parsed.result) {
+                responseText = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+              } else {
+                responseText = cleaned;
+              }
+            } catch {
+              responseText = cleanCliOutput(stdout) || responseText;
+            }
+          }
+
+          messages.push({ role: 'assistant', content: responseText });
+
+          // Check if Jarvis indicated task is ready
+          let refinedTitle = null;
+          let refinedDescription = null;
+          let suggestedAgent = null;
+          let newStatus = 'active';
+
+          const readyMatch = responseText.match(/(?:TASK READY:|REFINED TASK:)\s*(.*)/is);
+          if (readyMatch) {
+            const afterMarker = readyMatch[1].trim();
+            const lines = afterMarker.split('\n').filter(function (l) { return l.trim(); });
+            refinedTitle = (lines[0] || 'Refined Task').replace(/^#+\s*/, '').replace(/^\*+/, '').replace(/\*+$/, '').trim();
+            refinedDescription = lines.slice(1).join('\n').trim() || afterMarker;
+            const routeResult = routeToAgent(refinedDescription || refinedTitle);
+            suggestedAgent = routeResult.agent_id;
+            newStatus = 'completed';
+          }
+
+          stmts.updateInterview.run({
+            id: sessionId, messages_json: JSON.stringify(messages),
+            refined_title: refinedTitle, refined_description: refinedDescription,
+            suggested_agent: suggestedAgent, status: newStatus
+          });
+          bus.emit('interview:updated', { session_id: sessionId });
+
+          const responseMessages = messages.filter(function (m) { return m.role !== 'system'; });
+          res.json({
+            session_id: sessionId, messages: responseMessages, status: newStatus,
+            refined_title: refinedTitle, refined_description: refinedDescription,
+            suggested_agent: suggestedAgent
+          });
+        });
+        return;
+      }
+
+      // POST /api/interview/:id/dispatch
+      if (method === 'POST' && /^\/api\/interview\/(\d+)\/dispatch$/.test(pathname)) {
+        const sessionId = parseInt(pathname.match(/^\/api\/interview\/(\d+)\/dispatch$/)[1], 10);
+        const session = stmts.getInterviewById.get(sessionId);
+        if (!session) { res.json({ error: 'Interview session not found' }, 404); return; }
+
+        const body = await readBody(req);
+        const agentOverride = body && body.agent_id ? body.agent_id : null;
+        const useAgent = agentOverride || session.suggested_agent || 'jarvis';
+
+        if (validAgentIds.indexOf(useAgent) === -1) {
+          res.json({ error: 'Unknown agent: ' + useAgent }, 400); return;
+        }
+
+        let taskId = session.task_id;
+        if (!taskId) {
+          // Create a new task from refined interview
+          const title = session.refined_title || 'Interview Task';
+          const desc = session.refined_description || '';
+          const taskResult = stmts.insertTask.run({
+            title: title, description: desc, status: 'todo', priority: 'medium',
+            agent_id: useAgent, project_id: null, sort_order: 0
+          });
+          taskId = Number(taskResult.lastInsertRowid);
+          const newTask = stmts.getTaskById.get(taskId);
+          bus.emit('task:created', newTask);
+          bus.emit('activity:new', { event_type: 'task.created', summary: 'Task created from interview: ' + newTask.title, task_id: taskId });
+        } else {
+          // Update existing task with refined data
+          const existing = stmts.getTaskById.get(taskId);
+          if (existing) {
+            stmts.updateTask.run({
+              id: taskId,
+              title: session.refined_title || existing.title,
+              description: session.refined_description || existing.description,
+              status: existing.status, priority: existing.priority,
+              agent_id: useAgent, sort_order: existing.sort_order
+            });
+            bus.emit('task:updated', stmts.getTaskById.get(taskId));
+          }
+        }
+
+        const message = (session.refined_title || 'Task') + ': ' + (session.refined_description || '');
+        const runId = dispatchAgent(taskId, useAgent, message);
+        res.json({ run_id: runId, task_id: taskId, agent_id: useAgent }, 202);
+        return;
+      }
+
+      // GET /api/interview/:id
+      if (method === 'GET' && /^\/api\/interview\/(\d+)$/.test(pathname)) {
+        const sessionId = parseInt(pathname.match(/^\/api\/interview\/(\d+)$/)[1], 10);
+        const session = stmts.getInterviewById.get(sessionId);
+        if (!session) { res.json({ error: 'Interview session not found' }, 404); return; }
+        let messages = [];
+        try { messages = JSON.parse(session.messages_json || '[]'); } catch {}
+        const filtered = messages.filter(function (m) { return m.role !== 'system'; });
+        res.json({
+          session_id: session.id, task_id: session.task_id, status: session.status,
+          messages: filtered, refined_title: session.refined_title,
+          refined_description: session.refined_description, suggested_agent: session.suggested_agent
+        });
+        return;
+      }
+
+      // ===== INTEL-03: Project CRUD =====
+
+      // GET /api/projects
+      if (method === 'GET' && pathname === '/api/projects') {
+        const projects = stmts.getAllProjects.all();
+        const result = projects.map(function (p) {
+          const taskCount = db.prepare('SELECT COUNT(*) as count FROM tasks WHERE project_id = ?').get(p.id);
+          const activeCount = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done'").get(p.id);
+          return Object.assign({}, p, {
+            task_count: taskCount ? taskCount.count : 0,
+            active_task_count: activeCount ? activeCount.count : 0
+          });
+        });
+        res.json({ projects: result });
+        return;
+      }
+
+      // GET /api/projects/:id
+      if (method === 'GET' && /^\/api\/projects\/(\d+)$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)$/)[1], 10);
+        const project = stmts.getProjectById.get(projectId);
+        if (!project) { res.json({ error: 'Project not found' }, 404); return; }
+        const tasks = stmts.getTasksByProject.all(projectId);
+        const runs = stmts.getRunsByProject.all(projectId);
+        // T-05-03: Safe directory listing for project docs
+        let docs = [];
+        if (project.slug && /^[a-zA-Z0-9._-]+$/.test(project.slug)) {
+          const projectDocsDir = path.join(WORKSPACE, 'projects', project.slug);
+          try {
+            if (projectDocsDir.startsWith(path.join(WORKSPACE, 'projects'))) {
+              docs = fs.readdirSync(projectDocsDir).filter(function (f) { return f.endsWith('.md'); });
+            }
+          } catch { /* directory doesn't exist */ }
+        }
+        res.json({ project: project, tasks: tasks, runs: runs, docs: docs });
+        return;
+      }
+
+      // POST /api/projects
+      if (method === 'POST' && pathname === '/api/projects') {
+        const body = await readBody(req);
+        if (!body || !body.name || typeof body.name !== 'string' || !body.name.trim()) {
+          res.json({ error: 'name is required' }, 400); return;
+        }
+        // T-05-02: Generate slug from name, strip non-alphanumeric
+        const slug = body.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        if (!slug) { res.json({ error: 'Invalid project name' }, 400); return; }
+        try {
+          const result = stmts.insertProject.run({
+            name: body.name.trim(), slug: slug,
+            description: body.description || null,
+            color: body.color || '#00ff41'
+          });
+          const project = stmts.getProjectById.get(result.lastInsertRowid);
+          stmts.insertActivity.run({
+            event_type: 'project.created', agent_id: null, task_id: null,
+            project_id: project.id, summary: 'Project created: ' + project.name,
+            detail_json: JSON.stringify(project)
+          });
+          bus.emit('activity:new', { event_type: 'project.created', summary: 'Project created: ' + project.name });
+          res.json({ project: project }, 201);
+        } catch (err) {
+          if (err.message && err.message.indexOf('UNIQUE') !== -1) {
+            res.json({ error: 'Project slug already exists' }, 409);
+          } else {
+            throw err;
+          }
+        }
+        return;
+      }
+
+      // PATCH /api/projects/:id
+      if (method === 'PATCH' && /^\/api\/projects\/(\d+)$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)$/)[1], 10);
+        const existing = stmts.getProjectById.get(projectId);
+        if (!existing) { res.json({ error: 'Project not found' }, 404); return; }
+        const body = await readBody(req);
+        if (!body) { res.json({ error: 'Request body required' }, 400); return; }
+        stmts.updateProject.run({
+          id: projectId,
+          name: body.name !== undefined ? body.name : existing.name,
+          description: body.description !== undefined ? body.description : existing.description,
+          color: body.color !== undefined ? body.color : existing.color,
+          status: body.status !== undefined ? body.status : existing.status
+        });
+        const updated = stmts.getProjectById.get(projectId);
+        stmts.insertActivity.run({
+          event_type: 'project.updated', agent_id: null, task_id: null,
+          project_id: projectId, summary: 'Project updated: ' + updated.name,
+          detail_json: JSON.stringify(updated)
+        });
+        bus.emit('activity:new', { event_type: 'project.updated', summary: 'Project updated: ' + updated.name });
+        res.json({ project: updated });
         return;
       }
 
