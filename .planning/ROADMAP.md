@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans (Wave 1: 01, Wave 2: 02+03 parallel)
 
 Plans:
-- [ ] 01-01-PLAN.md — Database + server foundation (package.json, db.js, server.js, public/index.html)
+- [x] 01-01-PLAN.md — Database + server foundation (package.json, db.js, server.js, public/index.html)
 - [ ] 01-02-PLAN.md — REST API CRUD + SSE real-time push (server.js routes, sse.js)
 - [ ] 01-03-PLAN.md — Frontend state store + design system (public/app.js, public/styles.css, public/index.html)
 
