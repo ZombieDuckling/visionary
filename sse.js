@@ -58,5 +58,9 @@ bus.on('task:updated', (d) => broadcast('task:updated', d));
 bus.on('task:deleted', (d) => broadcast('task:deleted', d));
 bus.on('activity:new', (d) => broadcast('activity:new', d));
 bus.on('agent:status', (d) => broadcast('agent:status', d));
+bus.on('agent:started', (d) => broadcast('agent:started', d));
+bus.on('agent:completed', (d) => broadcast('agent:completed', d));
+bus.on('agent:failed', (d) => broadcast('agent:failed', d));
+bus.on('agent:progress', (d) => broadcast('agent:progress', d));
 
 module.exports = { bus, handleSSE, broadcast };

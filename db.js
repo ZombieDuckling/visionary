@@ -145,7 +145,26 @@ const stmts = {
   `),
   getRecentActivity: db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?'),
   getLatestRunPerAgent: db.prepare('SELECT agent_id, status, completed_at, started_at, duration_ms, result_text FROM agent_runs WHERE id IN (SELECT MAX(id) FROM agent_runs GROUP BY agent_id)'),
-  getRunningAgents: db.prepare('SELECT agent_id FROM agent_runs WHERE status = \'running\'')
+  getRunningAgents: db.prepare('SELECT agent_id FROM agent_runs WHERE status = \'running\''),
+  insertRun: db.prepare(`
+    INSERT INTO agent_runs (task_id, agent_id, message, status, started_at)
+    VALUES (@task_id, @agent_id, @message, 'running', datetime('now'))
+  `),
+  completeRun: db.prepare(`
+    UPDATE agent_runs SET
+      status = @status, result_json = @result_json, result_text = @result_text,
+      error = @error, duration_ms = @duration_ms, completed_at = datetime('now')
+    WHERE id = @id
+  `),
+  getRunsByTask: db.prepare(`
+    SELECT * FROM agent_runs WHERE task_id = ? ORDER BY created_at DESC
+  `),
+  getRunById: db.prepare(`
+    SELECT * FROM agent_runs WHERE id = ?
+  `),
+  getRecentRuns: db.prepare(`
+    SELECT * FROM agent_runs ORDER BY created_at DESC LIMIT ?
+  `)
 };
 
 module.exports = { db, stmts };

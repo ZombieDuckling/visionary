@@ -1,7 +1,8 @@
 /* ============================================
    Visionary Mission Control - Frontend App
    Proxy-based reactive state store, SSE,
-   tab router, task board, agent cards
+   tab router, task board, agent cards,
+   dispatch engine, activity feed, kill switch
    ============================================ */
 
 (function () {
@@ -34,12 +35,28 @@
     return days + 'd ago';
   }
 
+  // --- Elapsed Time Formatter ---
+  function formatElapsed(ms) {
+    if (!ms || ms < 1000) return '0s';
+    var s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    var m = Math.floor(s / 60);
+    return m + 'm ' + (s % 60) + 's';
+  }
+
+  // --- Agent Color Map ---
+  var AGENT_COLORS = {
+    jarvis: '#3b8bff', scout: '#06b6d4', analyst: '#7c5cff', forge: '#f59e0b',
+    sentinel: '#ef4444', broker: '#22c55e', ops: '#8b5cf6', hunter: '#ec4899'
+  };
+
   // --- Reactive State Store (Proxy-based) ---
   var _state = {
     tasks: [],
     activity: [],
     notifications: [],
     agents: [],
+    activeRuns: [],
     activeTab: 'board',
     sseConnected: false
   };
@@ -143,6 +160,42 @@
       });
     });
 
+    // --- Agent dispatch SSE events ---
+
+    source.addEventListener('agent:started', function (e) {
+      var d = JSON.parse(e.data);
+      state.activeRuns = [].concat(state.activeRuns, [{
+        run_id: d.run_id, agent_id: d.agent_id, task_id: d.task_id, elapsed_ms: 0
+      }]);
+      loadAgents().catch(function () {});
+    });
+
+    source.addEventListener('agent:completed', function (e) {
+      var d = JSON.parse(e.data);
+      state.activeRuns = state.activeRuns.filter(function (r) {
+        return r.run_id !== d.run_id;
+      });
+      loadAgents().catch(function () {});
+    });
+
+    source.addEventListener('agent:failed', function (e) {
+      var d = JSON.parse(e.data);
+      state.activeRuns = state.activeRuns.filter(function (r) {
+        return r.run_id !== d.run_id;
+      });
+      loadAgents().catch(function () {});
+    });
+
+    source.addEventListener('agent:progress', function (e) {
+      var d = JSON.parse(e.data);
+      state.activeRuns = state.activeRuns.map(function (r) {
+        if (r.run_id === d.run_id) {
+          return Object.assign({}, r, { elapsed_ms: d.elapsed_ms });
+        }
+        return r;
+      });
+    });
+
     return source;
   }
 
@@ -189,14 +242,27 @@
   function taskCard(task) {
     var priorityClass = task.priority ? 'priority-' + esc(task.priority) : '';
     var borderColor = STATUS_BORDER_COLOR[task.status] || 'var(--text-muted)';
-    return '<div class="board-card ' + priorityClass + '" draggable="true" data-action="view-task" data-task-id="' + esc(task.id) + '" style="border-left: 3px solid ' + borderColor + '">'
+
+    // Check if task has an active dispatch running
+    var isRunning = false;
+    for (var r = 0; r < state.activeRuns.length; r++) {
+      if (state.activeRuns[r].task_id === task.id) { isRunning = true; break; }
+    }
+
+    var html = '<div class="board-card ' + priorityClass + '" draggable="true" data-action="view-task" data-task-id="' + esc(task.id) + '" style="border-left: 3px solid ' + borderColor + '">'
       + '<div class="board-card-title">' + esc(task.title) + '</div>'
       + '<div class="board-card-meta">'
       + priorityBadge(task.priority)
       + agentBadge(task.agent_id)
       + '<span class="text-muted">' + timeAgo(task.created_at) + '</span>'
-      + '</div>'
       + '</div>';
+
+    if (isRunning) {
+      html += '<div class="task-running-indicator"><div class="spinner"></div> Running...</div>';
+    }
+
+    html += '</div>';
+    return html;
   }
 
   // --- Render Functions ---
@@ -353,7 +419,7 @@
     });
   }
 
-  // Agents view: grid of 8 agent cards with live status
+  // Agents view: grid of 8 agent cards with live status + kill switch
   function renderAgents(container) {
     var agents = state.agents.length > 0 ? state.agents : AGENTS;
     var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Agent Desk</h2>'
@@ -370,6 +436,15 @@
       var lastActivity = agent.last_activity ? timeAgo(agent.last_activity) : 'No activity yet';
       var summary = agent.last_run_summary ? agent.last_run_summary.substring(0, 80) : '';
 
+      // Check for active run on this agent
+      var activeRun = null;
+      for (var j = 0; j < state.activeRuns.length; j++) {
+        if (state.activeRuns[j].agent_id === agent.id) {
+          activeRun = state.activeRuns[j];
+          break;
+        }
+      }
+
       html += '<div class="agent-card">'
         + '<div class="agent-name" style="color: var(' + colorVar + ')">'
         + '<span class="status-indicator ' + esc(statusClass) + '"></span>'
@@ -381,15 +456,33 @@
       if (summary) {
         html += '<div class="agent-summary">' + esc(summary) + '</div>';
       }
+      if (activeRun) {
+        html += '<div class="agent-running">'
+          + '<div class="spinner"></div>'
+          + '<span>Running ' + esc(formatElapsed(activeRun.elapsed_ms)) + '</span>'
+          + '<button class="btn-kill" data-action="kill-agent" data-run-id="' + esc(activeRun.run_id) + '">Kill</button>'
+          + '</div>';
+      }
       html += '</div>';
     });
 
     html += '</div>';
     // All dynamic content escaped via esc()
     container.innerHTML = html;
+
+    // Kill button delegation
+    container.addEventListener('click', function (e) {
+      var killBtn = e.target.closest('[data-action="kill-agent"]');
+      if (!killBtn) return;
+      var runId = killBtn.getAttribute('data-run-id');
+      killBtn.textContent = 'Killing...';
+      killBtn.disabled = true;
+      api('/dispatch/' + runId + '/kill', { method: 'POST' })
+        .catch(function (err) { console.warn('Kill failed:', err); });
+    });
   }
 
-  // Activity view: list of activity entries
+  // Activity view: list of activity entries with agent-colored borders
   function renderActivityView(container) {
     var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Activity</h2>';
 
@@ -406,14 +499,33 @@
         var d = new Date(entry.created_at);
         time = d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
       }
+
+      // Event type badge color
       var typeCls = 'badge-blue';
       if (entry.event_type && entry.event_type.indexOf('created') !== -1) typeCls = 'badge-green';
       if (entry.event_type && entry.event_type.indexOf('deleted') !== -1) typeCls = 'badge-red';
       if (entry.event_type && entry.event_type.indexOf('updated') !== -1) typeCls = 'badge-orange';
+      if (entry.event_type && entry.event_type.indexOf('dispatched') !== -1) typeCls = 'badge-blue';
+      if (entry.event_type && entry.event_type.indexOf('completed') !== -1) typeCls = 'badge-green';
+      if (entry.event_type && entry.event_type.indexOf('failed') !== -1) typeCls = 'badge-red';
+      if (entry.event_type && entry.event_type.indexOf('timeout') !== -1) typeCls = 'badge-red';
+      if (entry.event_type && entry.event_type.indexOf('killed') !== -1) typeCls = 'badge-red';
 
-      html += '<div class="activity-item">'
+      // Agent-colored left border
+      var agentColor = entry.agent_id ? (AGENT_COLORS[entry.agent_id] || 'var(--text-muted)') : '';
+      var borderStyle = agentColor ? ' style="border-left: 3px solid ' + agentColor + '"' : '';
+
+      // Agent badge
+      var agentBadgeHtml = '';
+      if (entry.agent_id) {
+        var bgColor = 'color-mix(in srgb, ' + agentColor + ' 15%, transparent)';
+        agentBadgeHtml = '<span class="activity-agent-badge" style="background: ' + bgColor + '; color: ' + agentColor + '">' + esc(entry.agent_id) + '</span>';
+      }
+
+      html += '<div class="activity-item"' + borderStyle + '>'
         + '<span class="activity-time">' + esc(time) + '</span>'
         + '<span class="badge ' + typeCls + '">' + esc(entry.event_type || 'event') + '</span>'
+        + agentBadgeHtml
         + '<span class="activity-summary">' + esc(entry.summary || entry.payload || '') + '</span>'
         + '</div>';
     });
@@ -504,6 +616,7 @@
       + '<div id="form-error" class="form-error hidden"></div>'
       + '<div class="task-detail-actions">'
       + '<button type="button" class="btn btn-danger" id="delete-task-btn">Delete</button>'
+      + '<button type="button" class="btn btn-dispatch" id="dispatch-task-btn">Dispatch</button>'
       + '<div class="form-actions">'
       + '<button type="button" class="btn" id="cancel-edit">Cancel</button>'
       + '<button type="submit" class="btn btn-primary">Save</button>'
@@ -548,6 +661,30 @@
         .catch(function (err) {
           var errorEl = overlay.querySelector('#form-error');
           errorEl.textContent = (err.data && err.data.error) ? err.data.error : 'Failed to delete task';
+          errorEl.classList.remove('hidden');
+        });
+    });
+
+    // Dispatch button
+    var dispatchBtn = overlay.querySelector('#dispatch-task-btn');
+    dispatchBtn.addEventListener('click', function () {
+      var agentSelect = overlay.querySelector('select[name="agent_id"]');
+      var selectedAgent = agentSelect ? agentSelect.value : task.agent_id;
+      if (!selectedAgent) {
+        var errorEl = overlay.querySelector('#form-error');
+        errorEl.textContent = 'Select an agent before dispatching';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      dispatchBtn.textContent = 'Dispatching...';
+      dispatchBtn.disabled = true;
+      api('/dispatch', { method: 'POST', body: { task_id: task.id, agent_id: selectedAgent } })
+        .then(function () { overlay.remove(); })
+        .catch(function (err) {
+          dispatchBtn.textContent = 'Dispatch';
+          dispatchBtn.disabled = false;
+          var errorEl = overlay.querySelector('#form-error');
+          errorEl.textContent = (err.data && err.data.error) ? err.data.error : 'Dispatch failed';
           errorEl.classList.remove('hidden');
         });
     });
@@ -745,11 +882,11 @@
     var input = document.createElement('input');
     input.className = 'command-input';
     input.type = 'text';
-    input.placeholder = 'Type a command... (@agent message, /board, /agents)';
+    input.placeholder = 'Type a command... (@agent message to dispatch, /board, /agents, or plain text to create task)';
 
     var hint = document.createElement('div');
     hint.className = 'command-hint';
-    hint.innerHTML = '<kbd>@</kbd> assign agent &nbsp; <kbd>/</kbd> navigate &nbsp; <kbd>Enter</kbd> create task &nbsp; <kbd>Esc</kbd> close';
+    hint.innerHTML = '<kbd>@agent</kbd> dispatch &nbsp; <kbd>/route</kbd> navigate &nbsp; <kbd>text</kbd> create task &nbsp; <kbd>Esc</kbd> close';
 
     bar.appendChild(input);
     bar.appendChild(hint);
@@ -783,16 +920,21 @@
           overlay.remove();
           return;
         }
-        // Agent assignment: @agentId message
+        // Agent dispatch: @agentId message -> dispatch to agent (creates task + dispatches)
         if (value.charAt(0) === '@') {
           var match = value.match(/^@(\w+)\s+(.+)$/);
           if (match) {
             var agentId = match[1];
             var message = match[2];
-            api('/tasks', { method: 'POST', body: { title: message, agent_id: agentId } })
-              .then(function () { overlay.remove(); })
+            hint.textContent = 'Dispatching to ' + agentId + '...';
+            input.disabled = true;
+            api('/dispatch', { method: 'POST', body: { agent_id: agentId, message: message } })
+              .then(function () {
+                overlay.remove();
+              })
               .catch(function (err) {
-                hint.textContent = (err.data && err.data.error) ? err.data.error : 'Failed to create task';
+                input.disabled = false;
+                hint.textContent = (err.data && err.data.error) ? err.data.error : 'Dispatch failed';
               });
           } else {
             hint.textContent = 'Format: @agent message';
@@ -900,6 +1042,17 @@
         main.textContent = '';
         renderAgents(main);
       }
+    }
+  });
+
+  onChange('activeRuns', function () {
+    if (state.activeTab === 'agents') {
+      var main = document.getElementById('main-content');
+      if (main) { main.innerHTML = ''; renderAgents(main); }
+    }
+    if (state.activeTab === 'board') {
+      var main = document.getElementById('main-content');
+      if (main) { main.innerHTML = ''; renderBoard(main); }
     }
   });
 
