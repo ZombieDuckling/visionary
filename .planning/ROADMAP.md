@@ -51,7 +51,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — Kanban drag-and-drop + task detail editing (BOARD-01, BOARD-02, BOARD-03)
-- [ ] 02-02-PLAN.md — Agent status API + live cards + Cmd+K command bar + keyboard shortcuts (BOARD-04, BOARD-05, BOARD-06)
+- [x] 02-02-PLAN.md — Agent status API + live cards + Cmd+K command bar + keyboard shortcuts (BOARD-04, BOARD-05, BOARD-06)
 
 ### Phase 3: Dispatch & Real-Time
 **Goal**: Users can dispatch tasks to agents, watch work happen in real time, and kill runaway processes
