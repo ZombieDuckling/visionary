@@ -77,12 +77,11 @@ Plans:
   2. User can view the cron schedule as a table and a 24-hour SAST timeline showing all 7 cron jobs
   3. User can open and read rendered markdown for daily briefs (Scout), security audits (Sentinel), and portfolio reports (Broker)
   4. User can search the Karpathy memory wiki and browse results from the memory browser tab
-**Plans**: TBD
+**Plans**: 1 plan (Wave 1: 01)
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md — Notification inbox + cron timeline + brief/audit/portfolio viewers + memory browser (NOTIF-01 through NOTIF-07)
 
 ### Phase 5: Intelligence
 **Goal**: Users can refine tasks through AI-assisted interviews before dispatch, and Jarvis automatically routes ambiguous tasks to the right sub-agent
@@ -110,5 +109,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Foundation | 3/3 | Complete   | 2026-05-13 |
 | 2. Board & Agents | 0/2 | Not started | - |
 | 3. Dispatch & Real-Time | 0/1 | Not started | - |
-| 4. Notifications & Viewers | 0/2 | Not started | - |
+| 4. Notifications & Viewers | 0/1 | Not started | - |
 | 5. Intelligence | 0/2 | Not started | - |
