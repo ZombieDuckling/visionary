@@ -64,10 +64,17 @@ function routeToAgent(description) {
 // Map<runId, { process, agentId, taskId, startTime }>
 const activeDispatches = new Map();
 
+// Track active reviews to prevent concurrent review loops
+const activeReviews = new Set();
+
 // Auto-review: dispatch Reviewer agent to evaluate completed work
 function triggerReview(taskId, runId, originalAgent, resultText) {
+  // Prevent concurrent reviews on same task
+  if (activeReviews.has(taskId)) return;
+  activeReviews.add(taskId);
+
   const task = stmts.getTaskById.get(taskId);
-  if (!task) return;
+  if (!task) { activeReviews.delete(taskId); return; }
 
   const reviewPrompt = 'Review the output from agent "' + originalAgent + '" on task #' + taskId + ': "' + (task.title || '').replace(/"/g, '\\"') + '".\n\n'
     + 'Task description: ' + (task.description || 'None').replace(/"/g, '\\"') + '\n\n'
@@ -120,6 +127,7 @@ function triggerReview(taskId, runId, originalAgent, resultText) {
         stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'info', title: 'Reviewer approved task #' + taskId, body: summary, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
         stmts.insertActivity.run({ event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Approved: ' + task.title + ' — ' + summary, detail_json: null });
         bus.emit('activity:new', { event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, summary: 'Approved: ' + summary });
+        activeReviews.delete(taskId);
 
       } else if (upperOutput.indexOf('REJECT') !== -1) {
         // Move task back to todo and redeploy original agent
@@ -137,6 +145,7 @@ function triggerReview(taskId, runId, originalAgent, resultText) {
         stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Reviewer rejected task #' + taskId, body: feedback + ' — Redeploying ' + originalAgent, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
         stmts.insertActivity.run({ event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Rejected: ' + task.title + ' — ' + feedback, detail_json: null });
         bus.emit('activity:new', { event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, summary: 'Rejected: ' + feedback });
+        activeReviews.delete(taskId);
 
         // Redeploy original agent with review feedback
         setTimeout(function () {
@@ -168,9 +177,27 @@ function triggerReview(taskId, runId, originalAgent, resultText) {
       }
     } else {
       stmts.completeRun.run({ id: reviewRunId, status: 'failed', result_json: null, result_text: null, error: (error || {}).message || 'unknown', duration_ms: durationMs });
+      activeReviews.delete(taskId);
     }
   });
   child.unref();
+}
+
+// Inter-agent messaging: agents can leave messages for each other via the activity_log
+// Agents read messages by querying GET /api/messages?to=<agent_id>
+function postAgentMessage(fromAgent, toAgent, subject, body, taskId) {
+  stmts.insertActivity.run({
+    event_type: 'agent.message',
+    agent_id: fromAgent,
+    task_id: taskId || null,
+    project_id: null,
+    summary: '[' + fromAgent + ' → ' + toAgent + '] ' + subject,
+    detail_json: JSON.stringify({ from: fromAgent, to: toAgent, subject, body })
+  });
+  bus.emit('activity:new', {
+    event_type: 'agent.message', agent_id: fromAgent, task_id: taskId,
+    summary: '[' + fromAgent + ' → ' + toAgent + '] ' + subject
+  });
 }
 
 // Strip ANSI escape codes from CLI output
@@ -539,6 +566,35 @@ const server = http.createServer(async (req, res) => {
         const limit = (!isNaN(limitParam) && limitParam > 0) ? Math.min(limitParam, 200) : 50;
         const activity = stmts.getRecentActivity.all(limit);
         res.json({ activity });
+        return;
+      }
+
+      // GET /api/messages?to=<agent_id> — inter-agent messages
+      if (method === 'GET' && pathname === '/api/messages') {
+        const toAgent = url.searchParams.get('to');
+        const fromAgent = url.searchParams.get('from');
+        const limit = Math.min(parseInt(url.searchParams.get('limit'), 10) || 20, 100);
+        let messages;
+        if (toAgent) {
+          messages = db.prepare("SELECT * FROM activity_log WHERE event_type='agent.message' AND detail_json LIKE ? ORDER BY created_at DESC LIMIT ?").all('%"to":"' + toAgent + '"%', limit);
+        } else if (fromAgent) {
+          messages = db.prepare("SELECT * FROM activity_log WHERE event_type='agent.message' AND agent_id=? ORDER BY created_at DESC LIMIT ?").all(fromAgent, limit);
+        } else {
+          messages = db.prepare("SELECT * FROM activity_log WHERE event_type='agent.message' ORDER BY created_at DESC LIMIT ?").all(limit);
+        }
+        res.json({ messages });
+        return;
+      }
+
+      // POST /api/messages — send inter-agent message
+      if (method === 'POST' && pathname === '/api/messages') {
+        const body = await readBody(req);
+        if (!body || !body.from || !body.to || !body.subject) {
+          res.json({ error: 'from, to, and subject required' }, 400);
+          return;
+        }
+        postAgentMessage(body.from, body.to, body.subject, body.body || '', body.task_id || null);
+        res.json({ ok: true });
         return;
       }
 
