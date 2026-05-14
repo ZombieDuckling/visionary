@@ -18,21 +18,49 @@ const MIME_TYPES = {
 };
 
 // Agent configurations (module-level for dispatch validation + GET /api/agents)
-// Display metadata — models are fetched live from OpenClaw CLI
+// Agent configurations with runtime routing
+// runtime: which CLI to use for dispatch
+//   openclaw = openclaw agent --agent <id>
+//   claude   = claude -p "<message>" --max-turns 5
+//   codex    = codex exec "<message>" --skip-git-repo-check
+//   gemini   = gemini -p "<message>"
+//   ollama   = ollama run <model> "<message>"
 const agentConfigs = [
-  { id: 'main', ocId: 'main', name: 'Jarvis', icon: '\u2699\uFE0F', role: 'Chief of Staff', model: 'GPT-5.4', color: '#3b8bff' },
-  { id: 'scout', ocId: 'scout', name: 'Scout', icon: '\uD83D\uDD2D', role: 'Morning Intelligence', model: 'GPT-5.4-mini', color: '#06b6d4' },
-  { id: 'analyst', ocId: 'analyst', name: 'Analyst', icon: '\uD83D\uDD2C', role: 'Research Deep-Diver', model: 'GPT-5.4', color: '#7c5cff' },
-  { id: 'forge', ocId: 'forge', name: 'Forge', icon: '\uD83D\uDD28', role: 'Builder', model: 'GPT-5.4-mini', color: '#f59e0b' },
-  { id: 'sentinel', ocId: 'sentinel', name: 'Sentinel', icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor', model: 'llama3.2:3b (local)', color: '#ef4444' },
-  { id: 'broker', ocId: 'broker', name: 'Broker', icon: '\uD83D\uDCC8', role: 'Investment Intelligence', model: 'GPT-5.4-mini', color: '#22c55e' },
-  { id: 'ops', ocId: 'ops', name: 'Ops', icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps', model: 'llama3.2:3b (local)', color: '#8b5cf6' },
-  { id: 'hunter', ocId: 'hunter', name: 'Hunter', icon: '\uD83C\uDFAF', role: 'Career & Opportunities', model: 'GPT-5.4-mini', color: '#ec4899' },
-  { id: 'reviewer', ocId: 'reviewer', name: 'Reviewer', icon: '\uD83D\uDD0D', role: 'Quality Gate & Review', model: 'GPT-5.4', color: '#f97316' }
+  { id: 'main',       name: 'Jarvis',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'GPT-5.4',            runtime: 'openclaw', color: '#3b8bff' },
+  { id: 'scout',      name: 'Scout',      icon: '\uD83D\uDD2D',       role: 'Morning Intelligence — news, signals',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#06b6d4' },
+  { id: 'analyst',    name: 'Analyst',     icon: '\uD83D\uDD2C',       role: 'Research Deep-Diver — OpenClaw tools',         model: 'GPT-5.4',            runtime: 'openclaw', color: '#7c5cff' },
+  { id: 'forge',      name: 'Forge',      icon: '\uD83D\uDD28',       role: 'Builder — OpenClaw workspace projects',        model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#f59e0b' },
+  { id: 'sentinel',   name: 'Sentinel',   icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor — audits, health',           model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#ef4444' },
+  { id: 'broker',     name: 'Broker',     icon: '\uD83D\uDCC8',       role: 'Investment & Financial Intelligence',           model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#22c55e' },
+  { id: 'ops',        name: 'Ops',        icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps',                      model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#8b5cf6' },
+  { id: 'hunter',     name: 'Hunter',     icon: '\uD83C\uDFAF',       role: 'Career & Opportunities',                       model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ec4899' },
+  { id: 'reviewer',   name: 'Reviewer',   icon: '\uD83D\uDD0D',       role: 'Quality Gate & Review',                        model: 'GPT-5.4',            runtime: 'openclaw', color: '#f97316' },
+  { id: 'coder',      name: 'Coder',      icon: '\uD83E\uDDD1\u200D\uD83D\uDCBB', role: 'Deep coding — debug, refactor, architecture', model: 'Claude Opus 4.6',  runtime: 'claude',   color: '#d97706' },
+  { id: 'researcher', name: 'Researcher', icon: '\uD83C\uDF10',       role: 'Multi-source research — long context',          model: 'Gemini 2.5 Pro',     runtime: 'gemini',   color: '#4285f4' },
+  { id: 'designer',   name: 'Designer',   icon: '\uD83C\uDFA8',       role: 'UI/UX — design systems, visual polish',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#e879f9' },
 ];
-// Map both 'main' and 'jarvis' to the same agent for dispatch compatibility
 const agentAliases = { jarvis: 'main' };
 const validAgentIds = agentConfigs.map(a => a.id).concat(['jarvis']);
+
+// Build CLI command per runtime
+function buildDispatchCommand(agentId, message) {
+  const cfg = agentConfigs.find(a => a.id === agentId);
+  const runtime = cfg ? cfg.runtime : 'openclaw';
+
+  switch (runtime) {
+    case 'claude':
+      return { bin: 'claude', args: ['-p', message, '--max-turns', '5'] };
+    case 'codex':
+      return { bin: 'codex', args: ['exec', message, '--skip-git-repo-check'] };
+    case 'gemini':
+      return { bin: 'gemini', args: ['-p', message] };
+    case 'ollama':
+      return { bin: 'ollama', args: ['run', 'llama3.2:3b', message] };
+    case 'openclaw':
+    default:
+      return { bin: 'openclaw', args: ['agent', '--agent', agentId, '--message', message, '--json', '--timeout', '600'] };
+  }
+}
 
 // INTEL-02: Jarvis auto-routing — keyword matching to select best agent
 function routeToAgent(description) {
@@ -252,14 +280,18 @@ function dispatchAgent(taskId, agentId, message) {
   if (updatedTask) bus.emit('task:updated', updatedTask);
   bus.emit('activity:new', { event_type: 'agent.dispatched', agent_id: agentId, task_id: taskId, summary: 'Dispatched ' + agentId + ' for task #' + taskId });
 
-  // Spawn CLI process (execFile -- no shell, prevents injection)
-  const child = execFile('openclaw', [
-    'agent', '--agent', agentId,
-    '--message', message,
-    '--json',
-    '--timeout', '600'
-  ], {
-    timeout: 660000,       // 11 min hard kill (above CLI's 10 min)
+  // Spawn CLI process via runtime-specific command (execFile -- no shell, prevents injection)
+  const cmd = buildDispatchCommand(agentId, message);
+  const cfg = agentConfigs.find(a => a.id === agentId);
+  const runtimeLabel = cfg ? cfg.runtime : 'openclaw';
+  stmts.insertActivity.run({
+    event_type: 'dispatch.runtime', agent_id: agentId, task_id: taskId,
+    project_id: null, summary: agentId + ' dispatched via ' + runtimeLabel + ' (' + cmd.bin + ')',
+    detail_json: JSON.stringify({ runtime: runtimeLabel, bin: cmd.bin })
+  });
+
+  const child = execFile(cmd.bin, cmd.args, {
+    timeout: 660000,
     maxBuffer: 10 * 1024 * 1024,
     env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
   }, (error, stdout, stderr) => {
