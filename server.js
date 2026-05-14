@@ -26,7 +26,8 @@ const agentConfigs = [
   { id: 'sentinel', name: 'Sentinel', icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor', model: 'llama3.2:3b', color: '#ef4444' },
   { id: 'broker', name: 'Broker', icon: '\uD83D\uDCC8', role: 'Investment Intelligence', model: 'claude-sonnet-4-20250514', color: '#22c55e' },
   { id: 'ops', name: 'Ops', icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps', model: 'llama3.2:3b', color: '#8b5cf6' },
-  { id: 'hunter', name: 'Hunter', icon: '\uD83C\uDFAF', role: 'Career & Opportunities', model: 'claude-sonnet-4-20250514', color: '#ec4899' }
+  { id: 'hunter', name: 'Hunter', icon: '\uD83C\uDFAF', role: 'Career & Opportunities', model: 'claude-sonnet-4-20250514', color: '#ec4899' },
+  { id: 'reviewer', name: 'Reviewer', icon: '\uD83D\uDD0D', role: 'Quality Gate & Review', model: 'claude-sonnet-4-20250514', color: '#f97316' }
 ];
 const validAgentIds = agentConfigs.map(a => a.id);
 
@@ -59,6 +60,115 @@ function routeToAgent(description) {
 // Track running agent processes for kill switch
 // Map<runId, { process, agentId, taskId, startTime }>
 const activeDispatches = new Map();
+
+// Auto-review: dispatch Reviewer agent to evaluate completed work
+function triggerReview(taskId, runId, originalAgent, resultText) {
+  const task = stmts.getTaskById.get(taskId);
+  if (!task) return;
+
+  const reviewPrompt = 'Review the output from agent "' + originalAgent + '" on task #' + taskId + ': "' + (task.title || '').replace(/"/g, '\\"') + '".\n\n'
+    + 'Task description: ' + (task.description || 'None').replace(/"/g, '\\"') + '\n\n'
+    + 'Agent output (first 2000 chars):\n' + (resultText || 'No output captured').substring(0, 2000).replace(/"/g, '\\"') + '\n\n'
+    + 'Evaluate for completeness, quality, correctness, and actionability.\n'
+    + 'Respond with EXACTLY one of these formats:\n'
+    + 'APPROVE: [one-line summary of what was delivered]\n'
+    + 'REJECT: [specific issues that need fixing]\n\n'
+    + 'Be strict. Only approve work that Josh can use immediately.';
+
+  const args = ['agent', '--agent', 'reviewer', '--message', reviewPrompt, '--json', '--timeout', '120'];
+  const env = Object.assign({}, process.env, { PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' });
+
+  const reviewRun = stmts.insertRun.run({
+    task_id: taskId, agent_id: 'reviewer', session_id: null,
+    message: 'Reviewing ' + originalAgent + ' output on task #' + taskId,
+    status: 'running'
+  });
+  const reviewRunId = Number(reviewRun.lastInsertRowid);
+
+  stmts.insertActivity.run({
+    event_type: 'review.started', agent_id: 'reviewer', task_id: taskId,
+    project_id: task.project_id, summary: 'Reviewer evaluating ' + originalAgent + ' output on "' + task.title + '"',
+    detail_json: JSON.stringify({ original_agent: originalAgent, original_run: runId })
+  });
+  bus.emit('activity:new', { event_type: 'review.started', agent_id: 'reviewer', task_id: taskId, summary: 'Reviewing ' + originalAgent + ' output' });
+
+  const startTime = Date.now();
+  const child = execFile('openclaw', args, { env, timeout: 130000, maxBuffer: 4 * 1024 * 1024 }, function (error, stdout, stderr) {
+    const durationMs = Date.now() - startTime;
+    const output = cleanCliOutput(stdout || '');
+
+    if (!error && output) {
+      stmts.completeRun.run({ id: reviewRunId, status: 'completed', result_json: null, result_text: output, error: null, duration_ms: durationMs });
+
+      const upperOutput = output.toUpperCase();
+      if (upperOutput.indexOf('APPROVE') !== -1) {
+        // Move task to done
+        stmts.updateTask.run({
+          id: taskId, title: task.title, description: task.description,
+          status: 'done', priority: task.priority,
+          agent_id: task.agent_id, sort_order: task.sort_order
+        });
+        const doneTask = stmts.getTaskById.get(taskId);
+        bus.emit('task:updated', doneTask);
+
+        const approveMatch = output.match(/APPROVE[:\s]*(.*)/i);
+        const summary = approveMatch ? approveMatch[1].trim().substring(0, 200) : 'Work approved';
+
+        stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'info', title: 'Reviewer approved task #' + taskId, body: summary, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+        stmts.insertActivity.run({ event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Approved: ' + task.title + ' — ' + summary, detail_json: null });
+        bus.emit('activity:new', { event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, summary: 'Approved: ' + summary });
+
+      } else if (upperOutput.indexOf('REJECT') !== -1) {
+        // Move task back to todo and redeploy original agent
+        stmts.updateTask.run({
+          id: taskId, title: task.title, description: task.description,
+          status: 'todo', priority: task.priority,
+          agent_id: task.agent_id, sort_order: task.sort_order
+        });
+        const todoTask = stmts.getTaskById.get(taskId);
+        bus.emit('task:updated', todoTask);
+
+        const rejectMatch = output.match(/REJECT[:\s]*(.*)/i);
+        const feedback = rejectMatch ? rejectMatch[1].trim().substring(0, 500) : 'Quality issues found';
+
+        stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Reviewer rejected task #' + taskId, body: feedback + ' — Redeploying ' + originalAgent, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+        stmts.insertActivity.run({ event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Rejected: ' + task.title + ' — ' + feedback, detail_json: null });
+        bus.emit('activity:new', { event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, summary: 'Rejected: ' + feedback });
+
+        // Redeploy original agent with review feedback
+        setTimeout(function () {
+          const redeployMsg = 'Your previous work on task "' + task.title + '" was reviewed and rejected. Feedback: ' + feedback + '\n\nOriginal task: ' + (task.description || task.title) + '\n\nPlease fix the issues and redo the work.';
+          const redeployArgs = ['agent', '--agent', originalAgent, '--message', redeployMsg, '--json', '--timeout', '600'];
+
+          const redeployRun = stmts.insertRun.run({ task_id: taskId, agent_id: originalAgent, session_id: null, message: 'Redeploy after review rejection', status: 'running' });
+          const redeployRunId = Number(redeployRun.lastInsertRowid);
+
+          stmts.updateTask.run({ id: taskId, title: task.title, description: task.description, status: 'in_progress', priority: task.priority, agent_id: originalAgent, sort_order: task.sort_order });
+          bus.emit('task:updated', stmts.getTaskById.get(taskId));
+          bus.emit('activity:new', { event_type: 'agent.redeployed', agent_id: originalAgent, task_id: taskId, summary: originalAgent + ' redeployed on "' + task.title + '" after review rejection' });
+
+          const redeployStart = Date.now();
+          execFile('openclaw', redeployArgs, { env, timeout: 610000, maxBuffer: 4 * 1024 * 1024 }, function (err2, stdout2) {
+            const dur2 = Date.now() - redeployStart;
+            const out2 = cleanCliOutput(stdout2 || '');
+            if (!err2 && out2) {
+              stmts.completeRun.run({ id: redeployRunId, status: 'completed', result_json: null, result_text: out2, error: null, duration_ms: dur2 });
+              stmts.updateTask.run({ id: taskId, title: task.title, description: task.description, status: 'review', priority: task.priority, agent_id: originalAgent, sort_order: task.sort_order });
+              bus.emit('task:updated', stmts.getTaskById.get(taskId));
+              // Trigger review again
+              triggerReview(taskId, redeployRunId, originalAgent, out2);
+            } else {
+              stmts.completeRun.run({ id: redeployRunId, status: 'failed', result_json: null, result_text: null, error: (err2 || {}).message || 'unknown', duration_ms: dur2 });
+            }
+          });
+        }, 2000);
+      }
+    } else {
+      stmts.completeRun.run({ id: reviewRunId, status: 'failed', result_json: null, result_text: null, error: (error || {}).message || 'unknown', duration_ms: durationMs });
+    }
+  });
+  child.unref();
+}
 
 // Strip ANSI escape codes from CLI output
 function stripAnsi(str) {
@@ -198,6 +308,11 @@ function dispatchAgent(taskId, agentId, message) {
         run_id: runId, agent_id: agentId, task_id: taskId,
         duration_ms: durationMs, result_text: resultText ? resultText.substring(0, 200) : ''
       });
+
+      // Auto-trigger Reviewer on completed tasks
+      if (agentId !== 'reviewer') {
+        triggerReview(taskId, runId, agentId, resultText);
+      }
       bus.emit('activity:new', {
         event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
         summary: agentId + ' completed task #' + taskId + ' (' + Math.round(durationMs / 1000) + 's)'

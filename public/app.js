@@ -136,7 +136,7 @@
   // --- Agent Color Map ---
   var AGENT_COLORS = {
     jarvis: '#3b8bff', scout: '#06b6d4', analyst: '#7c5cff', forge: '#f59e0b',
-    sentinel: '#ef4444', broker: '#22c55e', ops: '#8b5cf6', hunter: '#ec4899'
+    sentinel: '#ef4444', broker: '#22c55e', ops: '#8b5cf6', hunter: '#ec4899', reviewer: '#f97316'
   };
 
   // --- Agent Emoji Map ---
