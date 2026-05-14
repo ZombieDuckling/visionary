@@ -18,18 +18,21 @@ const MIME_TYPES = {
 };
 
 // Agent configurations (module-level for dispatch validation + GET /api/agents)
+// Display metadata — models are fetched live from OpenClaw CLI
 const agentConfigs = [
-  { id: 'jarvis', name: 'Jarvis', icon: '\u2699\uFE0F', role: 'Chief of Staff', model: 'claude-sonnet-4-20250514', color: '#3b8bff' },
-  { id: 'scout', name: 'Scout', icon: '\uD83D\uDD2D', role: 'Morning Intelligence', model: 'claude-sonnet-4-20250514', color: '#06b6d4' },
-  { id: 'analyst', name: 'Analyst', icon: '\uD83D\uDD2C', role: 'Research Deep-Diver', model: 'claude-sonnet-4-20250514', color: '#7c5cff' },
-  { id: 'forge', name: 'Forge', icon: '\uD83D\uDD28', role: 'Builder', model: 'claude-sonnet-4-20250514', color: '#f59e0b' },
-  { id: 'sentinel', name: 'Sentinel', icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor', model: 'llama3.2:3b', color: '#ef4444' },
-  { id: 'broker', name: 'Broker', icon: '\uD83D\uDCC8', role: 'Investment Intelligence', model: 'claude-sonnet-4-20250514', color: '#22c55e' },
-  { id: 'ops', name: 'Ops', icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps', model: 'llama3.2:3b', color: '#8b5cf6' },
-  { id: 'hunter', name: 'Hunter', icon: '\uD83C\uDFAF', role: 'Career & Opportunities', model: 'claude-sonnet-4-20250514', color: '#ec4899' },
-  { id: 'reviewer', name: 'Reviewer', icon: '\uD83D\uDD0D', role: 'Quality Gate & Review', model: 'claude-sonnet-4-20250514', color: '#f97316' }
+  { id: 'main', ocId: 'main', name: 'Jarvis', icon: '\u2699\uFE0F', role: 'Chief of Staff', model: 'GPT-5.4', color: '#3b8bff' },
+  { id: 'scout', ocId: 'scout', name: 'Scout', icon: '\uD83D\uDD2D', role: 'Morning Intelligence', model: 'GPT-5.4-mini', color: '#06b6d4' },
+  { id: 'analyst', ocId: 'analyst', name: 'Analyst', icon: '\uD83D\uDD2C', role: 'Research Deep-Diver', model: 'GPT-5.4', color: '#7c5cff' },
+  { id: 'forge', ocId: 'forge', name: 'Forge', icon: '\uD83D\uDD28', role: 'Builder', model: 'GPT-5.4-mini', color: '#f59e0b' },
+  { id: 'sentinel', ocId: 'sentinel', name: 'Sentinel', icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor', model: 'llama3.2:3b (local)', color: '#ef4444' },
+  { id: 'broker', ocId: 'broker', name: 'Broker', icon: '\uD83D\uDCC8', role: 'Investment Intelligence', model: 'GPT-5.4-mini', color: '#22c55e' },
+  { id: 'ops', ocId: 'ops', name: 'Ops', icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps', model: 'llama3.2:3b (local)', color: '#8b5cf6' },
+  { id: 'hunter', ocId: 'hunter', name: 'Hunter', icon: '\uD83C\uDFAF', role: 'Career & Opportunities', model: 'GPT-5.4-mini', color: '#ec4899' },
+  { id: 'reviewer', ocId: 'reviewer', name: 'Reviewer', icon: '\uD83D\uDD0D', role: 'Quality Gate & Review', model: 'GPT-5.4', color: '#f97316' }
 ];
-const validAgentIds = agentConfigs.map(a => a.id);
+// Map both 'main' and 'jarvis' to the same agent for dispatch compatibility
+const agentAliases = { jarvis: 'main' };
+const validAgentIds = agentConfigs.map(a => a.id).concat(['jarvis']);
 
 // INTEL-02: Jarvis auto-routing — keyword matching to select best agent
 function routeToAgent(description) {
