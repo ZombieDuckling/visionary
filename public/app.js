@@ -193,13 +193,13 @@
   }
 
   async function loadTasks() {
-    var tasks = await api('/tasks');
-    state.tasks = tasks;
+    var data = await api('/tasks');
+    state.tasks = data.tasks || data || [];
   }
 
   async function loadActivity() {
-    var activity = await api('/activity?limit=50');
-    state.activity = activity;
+    var data = await api('/activity');
+    state.activity = data.activity || data || [];
   }
 
   async function loadAgents() {
@@ -208,7 +208,7 @@
   }
 
   async function loadNotifications() {
-    var data = await api('/notifications?limit=100');
+    var data = await api('/notifications');
     state.notifications = data.notifications || [];
   }
 
@@ -740,17 +740,25 @@
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/crons').then(function (data) {
-      var crons = data.crons || [];
+      var raw = data.crons || data || {};
+      var crons = raw.jobs || (Array.isArray(raw) ? raw : []);
       var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Cron Schedule</h2>';
 
       // Table
-      html += '<table class="cron-table"><thead><tr><th>Name</th><th>Agent</th><th>Schedule</th><th>Description</th></tr></thead><tbody>';
+      html += '<table class="cron-table"><thead><tr><th>Name</th><th>Agent</th><th>Schedule</th><th>Next Run</th><th>Status</th></tr></thead><tbody>';
       crons.forEach(function (c) {
-        var agentColor = AGENT_COLORS[c.agent] || 'var(--text-muted)';
-        html += '<tr><td>' + esc(c.name) + '</td>'
-          + '<td><span class="badge" style="background: color-mix(in srgb, ' + agentColor + ' 15%, transparent); color: ' + agentColor + '">' + esc(c.agent) + '</span></td>'
-          + '<td style="font-family: var(--font-mono); font-size: var(--font-size-xs)">' + esc(c.schedule) + '</td>'
-          + '<td>' + esc(c.description || '') + '</td></tr>';
+        var aid = c.agentId || c.agent || '';
+        var agentColor = AGENT_COLORS[aid] || 'var(--text-muted)';
+        var sched = (c.schedule && c.schedule.expr) ? c.schedule.expr : (typeof c.schedule === 'string' ? c.schedule : '');
+        var tz = (c.schedule && c.schedule.tz) ? ' (' + c.schedule.tz + ')' : '';
+        var nextRun = (c.state && c.state.nextRunAtMs) ? new Date(c.state.nextRunAtMs).toLocaleString('en-ZA', {timeZone:'Africa/Johannesburg', hour:'2-digit', minute:'2-digit', month:'short', day:'numeric'}) : '-';
+        var st = (c.state && c.state.lastStatus) || 'idle';
+        var stClass = st === 'ok' ? 'badge-success' : st === 'error' ? 'badge-error' : 'badge-default';
+        html += '<tr><td>' + esc(c.name || '') + '</td>'
+          + '<td><span class="badge" style="background: color-mix(in srgb, ' + agentColor + ' 15%, transparent); color: ' + agentColor + '">' + esc(aid) + '</span></td>'
+          + '<td style="font-family: var(--font-mono); font-size: var(--font-size-xs)">' + esc(sched + tz) + '</td>'
+          + '<td>' + esc(nextRun) + '</td>'
+          + '<td><span class="badge ' + stClass + '">' + esc(st) + '</span></td></tr>';
       });
       html += '</tbody></table>';
 
@@ -773,13 +781,15 @@
 
       // Cron markers
       crons.forEach(function (c) {
-        var match = c.schedule.match(/^\d+\s+(\d+)\s/);
+        var expr = (c.schedule && c.schedule.expr) ? c.schedule.expr : (typeof c.schedule === 'string' ? c.schedule : '');
+        var match = expr.match(/^\d+\s+(\d+)\s/);
         if (match) {
           var hour = parseInt(match[1], 10);
           var pct = (hour / 24 * 100);
-          var agentColor = AGENT_COLORS[c.agent] || 'var(--text-muted)';
-          html += '<div class="timeline-marker" style="left: ' + pct + '%; background: ' + agentColor + '; color: ' + agentColor + '" title="' + esc(c.name) + ' (' + esc(c.agent) + ')"></div>';
-          html += '<span class="timeline-label" style="left: ' + pct + '%">' + esc(c.name) + '</span>';
+          var aid = c.agentId || c.agent || '';
+          var agentColor = AGENT_COLORS[aid] || 'var(--text-muted)';
+          html += '<div class="timeline-marker" style="left: ' + pct + '%; background: ' + agentColor + '; color: ' + agentColor + '" title="' + esc(c.name) + ' (' + esc(aid) + ')"></div>';
+          html += '<span class="timeline-label" style="left: ' + pct + '%">' + esc(c.name || '') + '</span>';
         }
       });
 
