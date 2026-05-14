@@ -397,8 +397,8 @@ textarea {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-md);
-  min-height: calc(100vh - 140px);
-  align-items: start;
+  min-height: calc(100vh - 160px);
+  align-items: stretch;
 }
 
 .board-column {
