@@ -139,6 +139,15 @@
     sentinel: '#ef4444', broker: '#22c55e', ops: '#8b5cf6', hunter: '#ec4899'
   };
 
+  // --- Agent Emoji Map ---
+  var AGENT_ICONS = {
+    jarvis: '\u2699\uFE0F', scout: '\uD83D\uDD2D', analyst: '\uD83D\uDD2C', forge: '\uD83D\uDD28',
+    sentinel: '\uD83D\uDEE1\uFE0F', broker: '\uD83D\uDCC8', ops: '\uD83D\uDDA5\uFE0F', hunter: '\uD83C\uDFAF'
+  };
+
+  // --- Last SSE Event Time ---
+  var _lastSSEEventTime = null;
+
   // --- Reactive State Store (Proxy-based) ---
   var _state = {
     tasks: [],
@@ -171,6 +180,18 @@
       _listeners[prop] = [];
     }
     _listeners[prop].push(fn);
+  }
+
+  // --- Status Bar Updater ---
+  function updateStatusBar() {
+    var agentsEl = document.getElementById('status-agents');
+    var tasksEl = document.getElementById('status-tasks');
+    var lastEventEl = document.getElementById('status-last-event');
+    if (agentsEl) agentsEl.textContent = state.agents.length || '0';
+    if (tasksEl) tasksEl.textContent = state.tasks.length || '0';
+    if (lastEventEl && _lastSSEEventTime) {
+      lastEventEl.textContent = timeAgo(_lastSSEEventTime);
+    }
   }
 
   // --- Fetch Helpers ---
@@ -224,12 +245,20 @@
       state.sseConnected = false;
     };
 
+    // Helper to track last event time
+    function markEvent() {
+      _lastSSEEventTime = new Date().toISOString();
+      updateStatusBar();
+    }
+
     source.addEventListener('task:created', function (e) {
+      markEvent();
       var task = JSON.parse(e.data);
       state.tasks = [].concat(state.tasks, [task]);
     });
 
     source.addEventListener('task:updated', function (e) {
+      markEvent();
       var updated = JSON.parse(e.data);
       state.tasks = state.tasks.map(function (t) {
         return t.id === updated.id ? updated : t;
@@ -237,6 +266,7 @@
     });
 
     source.addEventListener('task:deleted', function (e) {
+      markEvent();
       var deleted = JSON.parse(e.data);
       state.tasks = state.tasks.filter(function (t) {
         return t.id !== deleted.id;
@@ -244,11 +274,13 @@
     });
 
     source.addEventListener('activity:new', function (e) {
+      markEvent();
       var entry = JSON.parse(e.data);
       state.activity = [entry].concat(state.activity).slice(0, 100);
     });
 
     source.addEventListener('agent:status', function (e) {
+      markEvent();
       var updated = JSON.parse(e.data);
       state.agents = state.agents.map(function (a) {
         return a.id === updated.id ? Object.assign({}, a, updated) : a;
@@ -258,6 +290,7 @@
     // --- Agent dispatch SSE events ---
 
     source.addEventListener('agent:started', function (e) {
+      markEvent();
       var d = JSON.parse(e.data);
       state.activeRuns = [].concat(state.activeRuns, [{
         run_id: d.run_id, agent_id: d.agent_id, task_id: d.task_id, elapsed_ms: 0
@@ -266,6 +299,7 @@
     });
 
     source.addEventListener('agent:completed', function (e) {
+      markEvent();
       var d = JSON.parse(e.data);
       state.activeRuns = state.activeRuns.filter(function (r) {
         return r.run_id !== d.run_id;
@@ -274,6 +308,7 @@
     });
 
     source.addEventListener('agent:failed', function (e) {
+      markEvent();
       var d = JSON.parse(e.data);
       state.activeRuns = state.activeRuns.filter(function (r) {
         return r.run_id !== d.run_id;
@@ -282,6 +317,7 @@
     });
 
     source.addEventListener('agent:progress', function (e) {
+      markEvent();
       var d = JSON.parse(e.data);
       state.activeRuns = state.activeRuns.map(function (r) {
         if (r.run_id === d.run_id) {
@@ -292,11 +328,13 @@
     });
 
     source.addEventListener('notification:created', function (e) {
+      markEvent();
       var n = JSON.parse(e.data);
       state.notifications = [n].concat(state.notifications);
     });
 
     source.addEventListener('notification:updated', function (e) {
+      markEvent();
       loadNotifications().catch(function () {});
     });
 
@@ -387,7 +425,7 @@
     });
 
     var html = '<div class="board-header">'
-      + '<h2 style="font-size: var(--font-size-lg);">Task Board</h2>'
+      + '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCCB</span> Task Board</h2>'
       + '<button class="btn btn-primary" data-action="new-task">+ New Task</button>'
       + '</div>'
       + '<div class="board-grid">';
@@ -399,6 +437,9 @@
         + '<span>' + esc(labels[s]) + '</span>'
         + '<span class="count">' + tasks.length + '</span>'
         + '</div>';
+      if (tasks.length === 0) {
+        html += '<div class="board-column-empty">Drop tasks here</div>';
+      }
       tasks.forEach(function (t) {
         html += taskCard(t);
       });
@@ -526,11 +567,11 @@
   // Agents view: grid of 8 agent cards with live status + kill switch
   function renderAgents(container) {
     var agents = state.agents.length > 0 ? state.agents : AGENTS;
-    var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Agent Desk</h2>'
+    var html = '<h2 class="section-header"><span class="section-header-icon">\uD83E\uDD16</span> Agent Desk</h2>'
       + '<div class="agent-grid">';
 
     agents.forEach(function (agent) {
-      var colorVar = '--agent-' + esc(agent.id);
+      var agentColor = agent.color || AGENT_COLORS[agent.id] || '#888';
       var statusClass = agent.status || 'idle';
       // Strip date suffix from model (e.g. "claude-sonnet-4-20250514" -> "claude-sonnet-4")
       var modelDisplay = '';
@@ -539,6 +580,7 @@
       }
       var lastActivity = agent.last_activity ? timeAgo(agent.last_activity) : 'No activity yet';
       var summary = agent.last_run_summary ? agent.last_run_summary.substring(0, 80) : '';
+      var icon = agent.icon || AGENT_ICONS[agent.id] || '';
 
       // Check for active run on this agent
       var activeRun = null;
@@ -549,10 +591,12 @@
         }
       }
 
-      html += '<div class="agent-card">'
-        + '<div class="agent-name" style="color: var(' + colorVar + ')">'
+      // Agent card with colored glow border
+      html += '<div class="agent-card" style="border-color: color-mix(in srgb, ' + agentColor + ' 30%, var(--border)); box-shadow: 0 0 12px color-mix(in srgb, ' + agentColor + ' 10%, transparent), inset 0 1px 0 color-mix(in srgb, ' + agentColor + ' 8%, transparent);">'
+        + '<div class="agent-icon-lg">' + esc(icon) + '</div>'
+        + '<div class="agent-name" style="color: ' + agentColor + '">'
         + '<span class="status-indicator ' + esc(statusClass) + '"></span>'
-        + esc(agent.icon || '') + ' ' + esc(agent.name)
+        + esc(agent.name)
         + '</div>'
         + '<div class="agent-role">' + esc(agent.role) + '</div>'
         + '<div class="agent-model">' + esc(modelDisplay) + '</div>'
@@ -570,6 +614,10 @@
           + '<button class="btn-kill" data-action="kill-agent" data-run-id="' + esc(activeRun.run_id) + '">Kill</button>'
           + '</div>';
       }
+      // Dispatch button
+      html += '<button class="agent-dispatch-btn" data-action="dispatch-agent" data-agent-id="' + esc(agent.id) + '" '
+        + 'style="background: color-mix(in srgb, ' + agentColor + ' 12%, transparent); color: ' + agentColor + '; border-color: color-mix(in srgb, ' + agentColor + ' 30%, transparent);"'
+        + '>\u25B6 Dispatch</button>';
       html += '</div>';
     });
 
@@ -577,24 +625,86 @@
     // All dynamic content escaped via esc()
     container.innerHTML = html;
 
-    // Kill button delegation
+    // Event delegation
     container.addEventListener('click', function (e) {
+      // Kill button
       var killBtn = e.target.closest('[data-action="kill-agent"]');
-      if (!killBtn) return;
-      var runId = killBtn.getAttribute('data-run-id');
-      killBtn.textContent = 'Killing...';
-      killBtn.disabled = true;
-      api('/dispatch/' + runId + '/kill', { method: 'POST' })
-        .catch(function (err) { console.warn('Kill failed:', err); });
+      if (killBtn) {
+        var runId = killBtn.getAttribute('data-run-id');
+        killBtn.textContent = 'Killing...';
+        killBtn.disabled = true;
+        api('/dispatch/' + runId + '/kill', { method: 'POST' })
+          .catch(function (err) { console.warn('Kill failed:', err); });
+        return;
+      }
+      // Dispatch button
+      var dispatchBtn = e.target.closest('[data-action="dispatch-agent"]');
+      if (dispatchBtn) {
+        var agentId = dispatchBtn.getAttribute('data-agent-id');
+        showAgentDispatchForm(agentId);
+      }
     });
+  }
+
+  // Agent dispatch quick form
+  function showAgentDispatchForm(agentId) {
+    var existing = document.querySelector('.overlay');
+    if (existing) existing.remove();
+
+    var agentColor = AGENT_COLORS[agentId] || '#888';
+    var icon = AGENT_ICONS[agentId] || '';
+    var agentObj = AGENTS.find(function (a) { return a.id === agentId; });
+    var agentName = agentObj ? agentObj.name : agentId;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '<div class="overlay-content">'
+      + '<h2 style="color: ' + agentColor + '">' + esc(icon) + ' Dispatch ' + esc(agentName) + '</h2>'
+      + '<form id="agent-dispatch-form">'
+      + '<div class="form-group">'
+      + '<label>Message / Task Description</label>'
+      + '<textarea class="input" name="message" rows="4" placeholder="What should ' + esc(agentName) + ' do?" required></textarea>'
+      + '</div>'
+      + '<div id="form-error" class="form-error hidden"></div>'
+      + '<div class="form-actions">'
+      + '<button type="button" class="btn" id="cancel-dispatch">Cancel</button>'
+      + '<button type="submit" class="btn btn-primary">\u25B6 Dispatch</button>'
+      + '</div></form></div>';
+
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#cancel-dispatch').addEventListener('click', function () { overlay.remove(); });
+
+    overlay.querySelector('#agent-dispatch-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var form = e.target;
+      var errorEl = overlay.querySelector('#form-error');
+      errorEl.classList.add('hidden');
+      var message = form.message.value.trim();
+      if (!message) { errorEl.textContent = 'Message is required'; errorEl.classList.remove('hidden'); return; }
+      try {
+        await api('/dispatch', { method: 'POST', body: { agent_id: agentId, message: message } });
+        overlay.remove();
+        showToast('Dispatched to ' + agentName);
+      } catch (err) {
+        errorEl.textContent = (err.data && err.data.error) ? err.data.error : 'Dispatch failed';
+        errorEl.classList.remove('hidden');
+      }
+    });
+
+    overlay.querySelector('textarea[name="message"]').focus();
   }
 
   // Activity view: list of activity entries with agent-colored borders
   function renderActivityView(container) {
-    var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Activity</h2>';
+    var html = '<h2 class="section-header"><span class="section-header-icon">\u26A1</span> Activity</h2>';
 
     if (state.activity.length === 0) {
-      html += '<div class="empty-state">No activity yet</div>';
+      html += '<div class="empty-state">'
+        + '<div class="empty-state-icon">\uD83D\uDCE1</div>'
+        + '<div class="empty-state-title">No activity yet</div>'
+        + '<div class="empty-state-desc">Agent dispatches, task updates, and system events will appear here in real-time.</div>'
+        + '</div>';
       container.innerHTML = html;
       return;
     }
@@ -656,7 +766,7 @@
 
     var unreadCount = notifications.filter(function (n) { return !n.read && !n.dismissed; }).length;
 
-    var html = '<div class="inbox-header"><h2 style="font-size: var(--font-size-lg);">Inbox '
+    var html = '<div class="inbox-header"><h2 class="section-header"><span class="section-header-icon">\uD83D\uDCE5</span> Inbox '
       + (unreadCount > 0 ? '<span class="unread-badge">' + unreadCount + '</span>' : '')
       + '</h2></div>';
 
@@ -668,7 +778,11 @@
     html += '</div>';
 
     if (filtered.length === 0) {
-      html += '<div class="empty-state">No notifications</div>';
+      html += '<div class="empty-state">'
+        + '<div class="empty-state-icon">\u2705</div>'
+        + '<div class="empty-state-title">All clear</div>'
+        + '<div class="empty-state-desc">No notifications to show.</div>'
+        + '</div>';
     } else {
       html += '<div class="notification-list">';
       filtered.forEach(function (n) {
@@ -736,13 +850,13 @@
 
   // Crons view: table + 24h SAST timeline
   function renderCrons(container) {
-    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Cron Schedule</h2>'
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\u23F0</span> Cron Schedule</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/crons').then(function (data) {
       var raw = data.crons || data || {};
       var crons = raw.jobs || (Array.isArray(raw) ? raw : []);
-      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Cron Schedule</h2>';
+      var html = '<h2 class="section-header"><span class="section-header-icon">\u23F0</span> Cron Schedule</h2>';
 
       // Table
       html += '<table class="cron-table"><thead><tr><th>Name</th><th>Agent</th><th>Schedule</th><th>Next Run</th><th>Status</th></tr></thead><tbody>';
@@ -779,7 +893,8 @@
       var nowPct = ((sastH + utcM / 60) / 24 * 100);
       html += '<div class="timeline-now" style="left: ' + nowPct + '%"></div>';
 
-      // Cron markers
+      // Cron markers - track used positions to avoid overlap
+      var usedPositions = [];
       crons.forEach(function (c) {
         var expr = (c.schedule && c.schedule.expr) ? c.schedule.expr : (typeof c.schedule === 'string' ? c.schedule : '');
         var match = expr.match(/^\d+\s+(\d+)\s/);
@@ -788,8 +903,16 @@
           var pct = (hour / 24 * 100);
           var aid = c.agentId || c.agent || '';
           var agentColor = AGENT_COLORS[aid] || 'var(--text-muted)';
+          // Offset overlapping labels
+          var labelOffset = 24;
+          for (var u = 0; u < usedPositions.length; u++) {
+            if (Math.abs(usedPositions[u] - pct) < 5) {
+              labelOffset += 14;
+            }
+          }
+          usedPositions.push(pct);
           html += '<div class="timeline-marker" style="left: ' + pct + '%; background: ' + agentColor + '; color: ' + agentColor + '" title="' + esc(c.name) + ' (' + esc(aid) + ')"></div>';
-          html += '<span class="timeline-label" style="left: ' + pct + '%">' + esc(c.name || '') + '</span>';
+          html += '<span class="timeline-label" style="left: ' + pct + '%; bottom: ' + labelOffset + 'px">' + esc(c.name || '') + '</span>';
         }
       });
 
@@ -801,189 +924,188 @@
 
       container.innerHTML = html;
     }).catch(function () {
-      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Cron Schedule</h2>'
-        + '<div class="empty-state">Failed to load cron data</div>';
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\u23F0</span> Cron Schedule</h2>'
+        + '<div class="empty-state">'
+        + '<div class="empty-state-icon">\u26A0\uFE0F</div>'
+        + '<div class="empty-state-title">Failed to load cron data</div>'
+        + '</div>';
     });
   }
 
-  // Briefs viewer: list/detail with markdown rendering
+  // Briefs viewer: list with inline expand/collapse
   function renderBriefs(container) {
-    var selectedFile = container._selectedBrief || null;
-
-    if (selectedFile) {
-      container.innerHTML = '<button class="btn btn-back" data-action="briefs-back">Back</button>'
-        + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
-      api('/briefs/' + encodeURIComponent(selectedFile)).then(function (data) {
-        container.innerHTML = '<button class="btn btn-back" data-action="briefs-back">Back</button>'
-          + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">' + esc(data.filename) + '</h2>'
-          + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
-        container.querySelector('[data-action="briefs-back"]').addEventListener('click', function () {
-          container._selectedBrief = null;
-          container.innerHTML = '';
-          renderBriefs(container);
-        });
-      }).catch(function () {
-        container.innerHTML = '<button class="btn btn-back" data-action="briefs-back">Back</button>'
-          + '<div class="empty-state">Failed to load brief</div>';
-        container.querySelector('[data-action="briefs-back"]').addEventListener('click', function () {
-          container._selectedBrief = null;
-          container.innerHTML = '';
-          renderBriefs(container);
-        });
-      });
-      return;
-    }
-
-    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Daily Briefs</h2>'
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCF0</span> Daily Briefs</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/briefs').then(function (data) {
       var briefs = data.briefs || [];
-      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Daily Briefs</h2>';
+      var html = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCF0</span> Daily Briefs</h2>';
       if (briefs.length === 0) {
-        html += '<div class="empty-state">No briefs found</div>';
+        html += '<div class="empty-state">'
+          + '<div class="empty-state-icon">\uD83D\uDCF0</div>'
+          + '<div class="empty-state-title">No briefs found</div>'
+          + '<div class="empty-state-desc">Scout\'s daily intelligence briefs will appear here.</div>'
+          + '</div>';
       } else {
         html += '<div class="file-list">';
         briefs.forEach(function (b) {
-          html += '<div class="file-item" data-action="open-brief" data-filename="' + esc(b.filename) + '">'
-            + '<div class="file-item-name">' + esc(b.filename) + '</div>'
-            + '<div class="file-item-meta">' + esc(b.date || '') + '</div></div>';
+          html += '<div class="file-item" data-action="toggle-brief" data-filename="' + esc(b.filename) + '">'
+            + '<div class="file-item-name">\uD83D\uDCC4 ' + esc(b.filename) + '</div>'
+            + '<div class="file-item-meta">' + esc(b.date || '') + '</div>'
+            + '<div class="file-item-content" style="display: none;" id="brief-content-' + esc(b.filename).replace(/[^a-zA-Z0-9]/g, '-') + '"></div>'
+            + '</div>';
         });
         html += '</div>';
       }
       container.innerHTML = html;
       container.addEventListener('click', function (e) {
-        var item = e.target.closest('[data-action="open-brief"]');
+        var item = e.target.closest('[data-action="toggle-brief"]');
         if (!item) return;
-        container._selectedBrief = item.getAttribute('data-filename');
-        container.innerHTML = '';
-        renderBriefs(container);
+        var filename = item.getAttribute('data-filename');
+        var contentId = 'brief-content-' + filename.replace(/[^a-zA-Z0-9]/g, '-');
+        var contentEl = document.getElementById(contentId);
+        if (!contentEl) return;
+
+        if (contentEl.style.display === 'none') {
+          // Expand
+          item.classList.add('file-item-expanded');
+          contentEl.style.display = 'block';
+          if (!contentEl._loaded) {
+            contentEl.innerHTML = '<div class="empty-state" style="padding: var(--space-sm)"><div class="spinner"></div> Loading...</div>';
+            api('/briefs/' + encodeURIComponent(filename)).then(function (data) {
+              contentEl.innerHTML = '<div class="md-viewer" style="max-width: none; border: none; padding: var(--space-md);">' + renderMarkdown(data.content) + '</div>';
+              contentEl._loaded = true;
+            }).catch(function () {
+              contentEl.innerHTML = '<div class="empty-state" style="padding: var(--space-sm)">Failed to load</div>';
+            });
+          }
+        } else {
+          // Collapse
+          item.classList.remove('file-item-expanded');
+          contentEl.style.display = 'none';
+        }
       });
     }).catch(function () {
-      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Daily Briefs</h2>'
-        + '<div class="empty-state">Failed to load briefs</div>';
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCF0</span> Daily Briefs</h2>'
+        + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load briefs</div></div>';
     });
   }
 
-  // Audits viewer: list/detail pattern
+  // Audits viewer: list with inline expand/collapse
   function renderAudits(container) {
-    var selectedFile = container._selectedAudit || null;
-
-    if (selectedFile) {
-      container.innerHTML = '<button class="btn btn-back" data-action="audits-back">Back</button>'
-        + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
-      api('/audits/' + encodeURIComponent(selectedFile)).then(function (data) {
-        container.innerHTML = '<button class="btn btn-back" data-action="audits-back">Back</button>'
-          + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">' + esc(data.filename) + '</h2>'
-          + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
-        container.querySelector('[data-action="audits-back"]').addEventListener('click', function () {
-          container._selectedAudit = null;
-          container.innerHTML = '';
-          renderAudits(container);
-        });
-      }).catch(function () {
-        container.innerHTML = '<button class="btn btn-back" data-action="audits-back">Back</button>'
-          + '<div class="empty-state">Failed to load audit</div>';
-        container.querySelector('[data-action="audits-back"]').addEventListener('click', function () {
-          container._selectedAudit = null;
-          container.innerHTML = '';
-          renderAudits(container);
-        });
-      });
-      return;
-    }
-
-    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Security Audits</h2>'
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDEE1\uFE0F</span> Security Audits</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/audits').then(function (data) {
       var audits = data.audits || [];
-      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Security Audits</h2>';
+      var html = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDEE1\uFE0F</span> Security Audits</h2>';
       if (audits.length === 0) {
-        html += '<div class="empty-state">No audits found</div>';
+        html += '<div class="empty-state">'
+          + '<div class="empty-state-icon">\uD83D\uDEE1\uFE0F</div>'
+          + '<div class="empty-state-title">No audits found</div>'
+          + '<div class="empty-state-desc">Sentinel\'s security audit reports will appear here.</div>'
+          + '</div>';
       } else {
         html += '<div class="file-list">';
         audits.forEach(function (a) {
-          html += '<div class="file-item" data-action="open-audit" data-filename="' + esc(a.filename) + '">'
-            + '<div class="file-item-name">' + esc(a.filename) + '</div></div>';
+          html += '<div class="file-item" data-action="toggle-audit" data-filename="' + esc(a.filename) + '">'
+            + '<div class="file-item-name">\uD83D\uDD12 ' + esc(a.filename) + '</div>'
+            + '<div class="file-item-content" style="display: none;" id="audit-content-' + esc(a.filename).replace(/[^a-zA-Z0-9]/g, '-') + '"></div>'
+            + '</div>';
         });
         html += '</div>';
       }
       container.innerHTML = html;
       container.addEventListener('click', function (e) {
-        var item = e.target.closest('[data-action="open-audit"]');
+        var item = e.target.closest('[data-action="toggle-audit"]');
         if (!item) return;
-        container._selectedAudit = item.getAttribute('data-filename');
-        container.innerHTML = '';
-        renderAudits(container);
+        var filename = item.getAttribute('data-filename');
+        var contentId = 'audit-content-' + filename.replace(/[^a-zA-Z0-9]/g, '-');
+        var contentEl = document.getElementById(contentId);
+        if (!contentEl) return;
+
+        if (contentEl.style.display === 'none') {
+          item.classList.add('file-item-expanded');
+          contentEl.style.display = 'block';
+          if (!contentEl._loaded) {
+            contentEl.innerHTML = '<div class="empty-state" style="padding: var(--space-sm)"><div class="spinner"></div> Loading...</div>';
+            api('/audits/' + encodeURIComponent(filename)).then(function (data) {
+              contentEl.innerHTML = '<div class="md-viewer" style="max-width: none; border: none; padding: var(--space-md);">' + renderMarkdown(data.content) + '</div>';
+              contentEl._loaded = true;
+            }).catch(function () {
+              contentEl.innerHTML = '<div class="empty-state" style="padding: var(--space-sm)">Failed to load</div>';
+            });
+          }
+        } else {
+          item.classList.remove('file-item-expanded');
+          contentEl.style.display = 'none';
+        }
       });
     }).catch(function () {
-      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Security Audits</h2>'
-        + '<div class="empty-state">Failed to load audits</div>';
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDEE1\uFE0F</span> Security Audits</h2>'
+        + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load audits</div></div>';
     });
   }
 
-  // Portfolio viewer: list/detail pattern
+  // Portfolio viewer: list with inline expand/collapse
   function renderPortfolio(container) {
-    var selectedFile = container._selectedPortfolio || null;
-
-    if (selectedFile) {
-      container.innerHTML = '<button class="btn btn-back" data-action="portfolio-back">Back</button>'
-        + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
-      api('/portfolio/' + encodeURIComponent(selectedFile)).then(function (data) {
-        container.innerHTML = '<button class="btn btn-back" data-action="portfolio-back">Back</button>'
-          + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">' + esc(data.filename) + '</h2>'
-          + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
-        container.querySelector('[data-action="portfolio-back"]').addEventListener('click', function () {
-          container._selectedPortfolio = null;
-          container.innerHTML = '';
-          renderPortfolio(container);
-        });
-      }).catch(function () {
-        container.innerHTML = '<button class="btn btn-back" data-action="portfolio-back">Back</button>'
-          + '<div class="empty-state">Failed to load report</div>';
-        container.querySelector('[data-action="portfolio-back"]').addEventListener('click', function () {
-          container._selectedPortfolio = null;
-          container.innerHTML = '';
-          renderPortfolio(container);
-        });
-      });
-      return;
-    }
-
-    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Portfolio Reports</h2>'
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC8</span> Portfolio Reports</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/portfolio').then(function (data) {
       var files = data.portfolio || [];
-      var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Portfolio Reports</h2>';
+      var html = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC8</span> Portfolio Reports</h2>';
       if (files.length === 0) {
-        html += '<div class="empty-state">No portfolio reports found</div>';
+        html += '<div class="empty-state">'
+          + '<div class="empty-state-icon">\uD83D\uDCC8</div>'
+          + '<div class="empty-state-title">No portfolio reports found</div>'
+          + '<div class="empty-state-desc">Broker\'s investment reports will appear here.</div>'
+          + '</div>';
       } else {
         html += '<div class="file-list">';
         files.forEach(function (f) {
-          html += '<div class="file-item" data-action="open-portfolio" data-filename="' + esc(f.filename) + '">'
-            + '<div class="file-item-name">' + esc(f.filename) + '</div></div>';
+          html += '<div class="file-item" data-action="toggle-portfolio" data-filename="' + esc(f.filename) + '">'
+            + '<div class="file-item-name">\uD83D\uDCCA ' + esc(f.filename) + '</div>'
+            + '<div class="file-item-content" style="display: none;" id="portfolio-content-' + esc(f.filename).replace(/[^a-zA-Z0-9]/g, '-') + '"></div>'
+            + '</div>';
         });
         html += '</div>';
       }
       container.innerHTML = html;
       container.addEventListener('click', function (e) {
-        var item = e.target.closest('[data-action="open-portfolio"]');
+        var item = e.target.closest('[data-action="toggle-portfolio"]');
         if (!item) return;
-        container._selectedPortfolio = item.getAttribute('data-filename');
-        container.innerHTML = '';
-        renderPortfolio(container);
+        var filename = item.getAttribute('data-filename');
+        var contentId = 'portfolio-content-' + filename.replace(/[^a-zA-Z0-9]/g, '-');
+        var contentEl = document.getElementById(contentId);
+        if (!contentEl) return;
+
+        if (contentEl.style.display === 'none') {
+          item.classList.add('file-item-expanded');
+          contentEl.style.display = 'block';
+          if (!contentEl._loaded) {
+            contentEl.innerHTML = '<div class="empty-state" style="padding: var(--space-sm)"><div class="spinner"></div> Loading...</div>';
+            api('/portfolio/' + encodeURIComponent(filename)).then(function (data) {
+              contentEl.innerHTML = '<div class="md-viewer" style="max-width: none; border: none; padding: var(--space-md);">' + renderMarkdown(data.content) + '</div>';
+              contentEl._loaded = true;
+            }).catch(function () {
+              contentEl.innerHTML = '<div class="empty-state" style="padding: var(--space-sm)">Failed to load</div>';
+            });
+          }
+        } else {
+          item.classList.remove('file-item-expanded');
+          contentEl.style.display = 'none';
+        }
       });
     }).catch(function () {
-      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Portfolio Reports</h2>'
-        + '<div class="empty-state">Failed to load portfolio</div>';
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC8</span> Portfolio Reports</h2>'
+        + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load portfolio</div></div>';
     });
   }
 
-  // Memory browser: search + file list
+  // Memory browser: search + file list with inline expand
   function renderMemory(container) {
-    var html = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Memory Browser</h2>';
+    var html = '<h2 class="section-header"><span class="section-header-icon">\uD83E\uDDE0</span> Memory Browser</h2>';
     html += '<div class="memory-search">'
       + '<input class="input" type="text" id="memory-query" placeholder="Search Karpathy memory wiki..." />'
       + '<button class="btn btn-primary" data-action="memory-search">Search</button>'
@@ -1003,21 +1125,25 @@
       var fhtml = '';
       if (data.has_memory_md) {
         fhtml += '<div class="file-item" data-action="open-memory" data-filename="MEMORY.md" style="border-left: 3px solid var(--accent-green)">'
-          + '<div class="file-item-name" style="color: var(--accent-green)">MEMORY.md</div>'
+          + '<div class="file-item-name" style="color: var(--accent-green)">\uD83E\uDDE0 MEMORY.md</div>'
           + '<div class="file-item-meta">Top-level memory index</div></div>';
       }
       if (files.length === 0 && !data.has_memory_md) {
-        fhtml = '<div class="empty-state">No memory files found</div>';
+        fhtml = '<div class="empty-state">'
+          + '<div class="empty-state-icon">\uD83E\uDDE0</div>'
+          + '<div class="empty-state-title">No memory files found</div>'
+          + '<div class="empty-state-desc">Karpathy-style memory wiki files will appear here.</div>'
+          + '</div>';
       } else {
         files.forEach(function (f) {
           fhtml += '<div class="file-item" data-action="open-memory" data-filename="' + esc(f) + '">'
-            + '<div class="file-item-name">' + esc(f) + '</div></div>';
+            + '<div class="file-item-name">\uD83D\uDCC4 ' + esc(f) + '</div></div>';
         });
       }
       filesContainer.innerHTML = fhtml;
     }).catch(function () {
       var filesContainer = document.getElementById('memory-files');
-      if (filesContainer) filesContainer.innerHTML = '<div class="empty-state">Failed to load memory files</div>';
+      if (filesContainer) filesContainer.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load memory files</div></div>';
     });
 
     // Event delegation
@@ -1033,9 +1159,9 @@
           var results = data.results || [];
           if (!resultsDiv) return;
           if (results.length === 0) {
-            resultsDiv.innerHTML = '<div class="empty-state">No results found</div>';
+            resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\uD83D\uDD0D</div><div class="empty-state-title">No results found</div></div>';
           } else {
-            var rhtml = '';
+            var rhtml = '<div style="font-size: var(--font-size-xs); color: var(--text-muted); margin-bottom: var(--space-sm);">' + results.length + ' result' + (results.length !== 1 ? 's' : '') + ' found</div>';
             var escapedQuery = esc(query);
             var queryRegex = new RegExp('(' + escapedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
             results.forEach(function (r) {
@@ -1046,7 +1172,7 @@
             resultsDiv.innerHTML = rhtml;
           }
         }).catch(function () {
-          if (resultsDiv) resultsDiv.innerHTML = '<div class="empty-state">Search failed</div>';
+          if (resultsDiv) resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Search failed</div></div>';
         });
         return;
       }
@@ -1058,11 +1184,11 @@
         if (!viewer) return;
         viewer.innerHTML = '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
         api('/memory/' + encodeURIComponent(filename)).then(function (data) {
-          viewer.innerHTML = '<button class="btn btn-back" data-action="close-memory-viewer">Close</button>'
+          viewer.innerHTML = '<button class="btn btn-back" data-action="close-memory-viewer">\u2190 Close</button>'
             + '<h3 style="font-size: var(--font-size-md); margin: var(--space-md) 0;">' + esc(data.filename) + '</h3>'
             + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
         }).catch(function () {
-          viewer.innerHTML = '<div class="empty-state">Failed to load file</div>';
+          viewer.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load file</div></div>';
         });
         return;
       }
@@ -1562,11 +1688,11 @@
     var selectedProject = container._selectedProject || null;
 
     if (selectedProject) {
-      container.innerHTML = '<button class="btn btn-back" data-action="projects-back">Back</button>'
+      container.innerHTML = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
         + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
       api('/projects/' + selectedProject).then(function (data) {
         var p = data.project;
-        var html = '<button class="btn btn-back" data-action="projects-back">Back</button>'
+        var html = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
           + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-sm);">'
           + '<span style="color: ' + esc(p.color || '#00ff41') + '">' + esc(p.name) + '</span>'
           + ' <span class="badge badge-green">' + esc(p.status) + '</span></h2>'
@@ -1585,7 +1711,7 @@
           });
           html += '</div>';
         } else {
-          html += '<div class="empty-state">No tasks in this project</div>';
+          html += '<div class="empty-state" style="padding: var(--space-md)">No tasks in this project</div>';
         }
         html += '</div>';
 
@@ -1604,7 +1730,7 @@
           });
           html += '</div>';
         } else {
-          html += '<div class="empty-state">No runs yet</div>';
+          html += '<div class="empty-state" style="padding: var(--space-md)">No runs yet</div>';
         }
         html += '</div>';
 
@@ -1613,11 +1739,11 @@
         if (data.docs && data.docs.length > 0) {
           html += '<div class="file-list">';
           data.docs.forEach(function (d) {
-            html += '<div class="file-item"><div class="file-item-name">' + esc(d) + '</div></div>';
+            html += '<div class="file-item"><div class="file-item-name">\uD83D\uDCC4 ' + esc(d) + '</div></div>';
           });
           html += '</div>';
         } else {
-          html += '<div class="empty-state">No documents found</div>';
+          html += '<div class="empty-state" style="padding: var(--space-md)">No documents found</div>';
         }
         html += '</div>';
 
@@ -1633,8 +1759,8 @@
           if (editBtn) { showEditProjectForm(editBtn.getAttribute('data-pid')); }
         });
       }).catch(function () {
-        container.innerHTML = '<button class="btn btn-back" data-action="projects-back">Back</button>'
-          + '<div class="empty-state">Failed to load project</div>';
+        container.innerHTML = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
+          + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load project</div></div>';
         container.querySelector('[data-action="projects-back"]').addEventListener('click', function () {
           container._selectedProject = null; container.innerHTML = ''; renderProjects(container);
         });
@@ -1642,17 +1768,21 @@
       return;
     }
 
-    container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Projects</h2>'
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC1</span> Projects</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/projects').then(function (data) {
       var projects = data.projects || [];
       var html = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">'
-        + '<h2 style="font-size: var(--font-size-lg);">Projects</h2>'
+        + '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC1</span> Projects</h2>'
         + '<button class="btn btn-primary" data-action="new-project">+ New Project</button></div>';
 
       if (projects.length === 0) {
-        html += '<div class="empty-state">No projects yet. Create one to get started.</div>';
+        html += '<div class="empty-state">'
+          + '<div class="empty-state-icon">\uD83D\uDCC1</div>'
+          + '<div class="empty-state-title">No projects yet</div>'
+          + '<div class="empty-state-desc">Projects group tasks, runs, and documents together. Create one to organize your agent workflows.</div>'
+          + '</div>';
       } else {
         html += '<div class="project-grid">';
         projects.forEach(function (p) {
@@ -1676,8 +1806,8 @@
         if (card) { container._selectedProject = card.getAttribute('data-pid'); container.innerHTML = ''; renderProjects(container); }
       });
     }).catch(function () {
-      container.innerHTML = '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-lg);">Projects</h2>'
-        + '<div class="empty-state">Failed to load projects</div>';
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC1</span> Projects</h2>'
+        + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load projects</div></div>';
     });
   }
 
@@ -2029,6 +2159,7 @@
 
   // --- State Change Listeners for Re-rendering ---
   onChange('tasks', function () {
+    updateStatusBar();
     if (state.activeTab === 'board') {
       var main = document.getElementById('main-content');
       if (main) {
@@ -2049,6 +2180,7 @@
   });
 
   onChange('agents', function () {
+    updateStatusBar();
     if (state.activeTab === 'agents') {
       var main = document.getElementById('main-content');
       if (main) {
@@ -2095,6 +2227,8 @@
     ]).then(function () {
       // Initial route
       navigate();
+      // Initial status bar update
+      updateStatusBar();
     });
 
     // Connect SSE for real-time updates
@@ -2119,6 +2253,9 @@
     }
     updateClock();
     setInterval(updateClock, 60000);
+
+    // Update status bar "last event" periodically
+    setInterval(updateStatusBar, 10000);
   });
 
 })();
