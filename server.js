@@ -618,6 +618,57 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // POST /api/chat — send message to Jarvis orchestrator, get response
+      if (method === 'POST' && pathname === '/api/chat') {
+        const body = await readBody(req);
+        if (!body || !body.message) {
+          res.json({ error: 'message required' }, 400);
+          return;
+        }
+        const msg = body.message;
+
+        // Log user message to activity
+        stmts.insertActivity.run({
+          event_type: 'chat.user', agent_id: 'user', task_id: null,
+          project_id: null, summary: 'Josh: ' + msg.substring(0, 100),
+          detail_json: JSON.stringify({ message: msg })
+        });
+
+        // Dispatch to Jarvis via OpenClaw
+        const cmd = buildDispatchCommand('main', msg);
+        const env = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
+
+        try {
+          const { execFileSync } = require('node:child_process');
+          const stdout = execFileSync(cmd.bin, cmd.args, {
+            timeout: 120000, maxBuffer: 4 * 1024 * 1024, env
+          }).toString();
+
+          const cleaned = cleanCliOutput(stdout);
+          let responseText = cleaned;
+          try {
+            const parsed = JSON.parse(cleaned);
+            if (parsed.result && parsed.result.payloads) {
+              responseText = parsed.result.payloads.map(function(p) { return p.text; }).join('\n');
+            } else if (parsed.payloads) {
+              responseText = parsed.payloads.map(function(p) { return p.text; }).join('\n');
+            }
+          } catch { /* use raw */ }
+
+          stmts.insertActivity.run({
+            event_type: 'chat.agent', agent_id: 'main', task_id: null,
+            project_id: null, summary: 'Jarvis: ' + responseText.substring(0, 100),
+            detail_json: JSON.stringify({ response: responseText })
+          });
+          bus.emit('activity:new', { event_type: 'chat.agent', agent_id: 'main', summary: 'Jarvis responded' });
+
+          res.json({ agent: 'jarvis', response: responseText });
+        } catch (err) {
+          res.json({ agent: 'jarvis', response: 'Error: ' + (err.message || 'unknown').substring(0, 200) }, 500);
+        }
+        return;
+      }
+
       // POST /api/messages — send inter-agent message
       if (method === 'POST' && pathname === '/api/messages') {
         const body = await readBody(req);
