@@ -92,6 +92,23 @@ function routeToAgent(description) {
 // Map<runId, { process, agentId, taskId, startTime }>
 const activeDispatches = new Map();
 
+// Crons cache (60s TTL — openclaw cron list takes ~8s)
+let cronCache = { data: null, ts: 0 };
+
+// Pre-warm crons cache at startup
+execFile('openclaw', ['cron', 'list', '--json'], {
+  timeout: 15000,
+  env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+}, (error, stdout) => {
+  if (!error && stdout) {
+    try {
+      const cleaned = cleanCliOutput(stdout);
+      const parsed = JSON.parse(cleaned);
+      cronCache = { data: { crons: parsed.crons || parsed, source: 'live' }, ts: Date.now() };
+    } catch {}
+  }
+});
+
 // Track active reviews to prevent concurrent review loops
 const activeReviews = new Set();
 
@@ -885,31 +902,31 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // GET /api/crons -- cron schedule from OpenClaw CLI
+      // GET /api/crons -- cron schedule from OpenClaw CLI (cached 60s)
       if (method === 'GET' && pathname === '/api/crons') {
+        const now = Date.now();
+        if (cronCache.data && (now - cronCache.ts) < 60000) {
+          res.json(cronCache.data);
+          return;
+        }
         execFile('openclaw', ['cron', 'list', '--json'], {
-          timeout: 10000,
+          timeout: 15000,
           env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
         }, (error, stdout) => {
+          let result;
           if (error) {
-            res.json({ crons: [
-              { name: 'Morning Brief', agent: 'scout', schedule: '0 6 * * *', description: 'Daily intelligence brief' },
-              { name: 'Daily Build', agent: 'forge', schedule: '0 9 * * 1-5', description: 'Automated build check' },
-              { name: 'Security Audit AM', agent: 'sentinel', schedule: '0 8 * * *', description: 'Morning security scan' },
-              { name: 'Security Audit PM', agent: 'sentinel', schedule: '0 16 * * *', description: 'Afternoon security scan' },
-              { name: 'Wiki Reindex', agent: 'analyst', schedule: '0 2 * * *', description: 'Karpathy memory wiki reindex' },
-              { name: 'LinkedIn AM', agent: 'hunter', schedule: '0 7 * * 1-5', description: 'Morning LinkedIn scan' },
-              { name: 'LinkedIn PM', agent: 'hunter', schedule: '0 14 * * 1-5', description: 'Afternoon LinkedIn scan' }
-            ], source: 'fallback' });
+            result = { crons: { jobs: [] }, source: 'error' };
           } else {
             try {
               const cleaned = cleanCliOutput(stdout);
               const parsed = JSON.parse(cleaned);
-              res.json({ crons: parsed.crons || parsed, source: 'live' });
+              result = { crons: parsed.crons || parsed, source: 'live' };
             } catch {
-              res.json({ crons: [], source: 'error', error: 'Failed to parse cron output' });
+              result = { crons: { jobs: [] }, source: 'parse-error' };
             }
           }
+          cronCache = { data: result, ts: Date.now() };
+          res.json(result);
         });
         return;
       }

@@ -573,7 +573,6 @@
 
     agents.forEach(function (agent) {
       var agentColor = agent.color || AGENT_COLORS[agent.id] || '#888';
-      var statusClass = agent.status || 'idle';
       // Strip date suffix from model (e.g. "claude-sonnet-4-20250514" -> "claude-sonnet-4")
       var modelDisplay = '';
       if (agent.model) {
@@ -592,6 +591,10 @@
         }
       }
 
+      var hasRunningState = !!activeRun || agent.last_run_status === 'running';
+      var statusClass = hasRunningState ? 'running' : (agent.status || 'idle');
+      var statusLabel = hasRunningState ? 'Running now' : ((agent.status || 'idle').replace(/_/g, ' '));
+
       // Agent card with colored glow border
       html += '<div class="agent-card" style="border-color: color-mix(in srgb, ' + agentColor + ' 30%, var(--border)); box-shadow: 0 0 12px color-mix(in srgb, ' + agentColor + ' 10%, transparent), inset 0 1px 0 color-mix(in srgb, ' + agentColor + ' 8%, transparent);">'
         + '<div class="agent-icon-lg">' + esc(icon) + '</div>'
@@ -601,7 +604,8 @@
         + '</div>'
         + '<div class="agent-role">' + esc(agent.role) + '</div>'
         + '<div class="agent-model">' + esc(modelDisplay) + '</div>'
-        + '<div class="agent-last-activity">' + esc(lastActivity) + '</div>';
+        + '<div class="agent-last-activity">' + esc(lastActivity) + '</div>'
+        + '<div class="agent-status-text ' + esc(statusClass) + '">' + esc(statusLabel) + '</div>';
       if (summary) {
         html += '<div class="agent-summary">' + esc(summary) + '</div>';
       }
@@ -613,6 +617,11 @@
           + '<div class="spinner"></div>'
           + '<span>Running ' + esc(formatElapsed(activeRun.elapsed_ms)) + '</span>'
           + '<button class="btn-kill" data-action="kill-agent" data-run-id="' + esc(activeRun.run_id) + '">Kill</button>'
+          + '</div>';
+      } else if (agent.last_run_status === 'running') {
+        html += '<div class="agent-running inferred">'
+          + '<div class="spinner"></div>'
+          + '<span>Running, waiting for live run telemetry</span>'
           + '</div>';
       }
       // Dispatch button
@@ -736,7 +745,7 @@
       // Agent badge
       var agentBadgeHtml = '';
       if (entry.agent_id) {
-        var bgColor = 'color-mix(in srgb, ' + agentColor + ' 15%, transparent)';
+        var bgColor = 'rgba(255,255,255,0.05)';
         agentBadgeHtml = '<span class="activity-agent-badge" style="background: ' + bgColor + '; color: ' + agentColor + '">' + esc(entry.agent_id) + '</span>';
       }
 
@@ -870,7 +879,7 @@
         var st = (c.state && c.state.lastStatus) || 'idle';
         var stClass = st === 'ok' ? 'badge-success' : st === 'error' ? 'badge-error' : 'badge-default';
         html += '<tr><td>' + esc(c.name || '') + '</td>'
-          + '<td><span class="badge" style="background: color-mix(in srgb, ' + agentColor + ' 15%, transparent); color: ' + agentColor + '">' + esc(aid) + '</span></td>'
+          + '<td><span class="badge" style="background: rgba(255,255,255,0.05); color: ' + agentColor + '">' + esc(aid) + '</span></td>'
           + '<td style="font-family: var(--font-mono); font-size: var(--font-size-xs)">' + esc(sched + tz) + '</td>'
           + '<td>' + esc(nextRun) + '</td>'
           + '<td><span class="badge ' + stClass + '">' + esc(st) + '</span></td></tr>';
@@ -2264,7 +2273,54 @@
     var chatSend = document.getElementById('chat-send');
     var chatToggle = document.getElementById('chat-toggle');
     var chatPanel = document.getElementById('chat-panel');
+    var chatVoiceBtn = document.getElementById('chat-voice-btn');
+    var chatVoiceState = document.getElementById('chat-voice-state');
+    var chatVoiceDetail = document.getElementById('chat-voice-detail');
     var chatBusy = false;
+    var chatVoiceReplyPending = false;
+    var recognition = null;
+    var recognitionRunning = false;
+    var speechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    function setVoiceState(stateName, detail) {
+      if (chatVoiceState) {
+        chatVoiceState.textContent = 'Voice ' + stateName;
+        chatVoiceState.classList.remove('listening', 'thinking', 'speaking', 'error');
+        if (stateName === 'listening' || stateName === 'thinking' || stateName === 'speaking' || stateName === 'error') {
+          chatVoiceState.classList.add(stateName);
+        }
+      }
+      if (chatVoiceDetail) {
+        chatVoiceDetail.textContent = detail || '';
+      }
+      if (chatVoiceBtn) {
+        chatVoiceBtn.classList.toggle('listening', stateName === 'listening');
+        chatVoiceBtn.setAttribute('aria-pressed', stateName === 'listening' ? 'true' : 'false');
+      }
+    }
+
+    function stopRecognition() {
+      if (!recognition || !recognitionRunning) return;
+      recognitionRunning = false;
+      try { recognition.stop(); } catch (e) {}
+    }
+
+    function speakChatReply(text) {
+      if (!text || !window.speechSynthesis) return;
+      stopRecognition();
+      window.speechSynthesis.cancel();
+      var utter = new SpeechSynthesisUtterance(text);
+      utter.onstart = function () {
+        setVoiceState('speaking', 'Jarvis is replying out loud');
+      };
+      utter.onend = function () {
+        setVoiceState('idle', 'Push to talk');
+      };
+      utter.onerror = function () {
+        setVoiceState('error', 'Speech output failed');
+      };
+      window.speechSynthesis.speak(utter);
+    }
 
     function addChatMsg(text, type) {
       var msg = document.createElement('div');
@@ -2285,11 +2341,15 @@
       return msg;
     }
 
-    function sendChat() {
+    function sendChat(overrideText, options) {
       if (chatBusy) return;
-      var text = chatInput.value.trim();
+      var text = typeof overrideText === 'string' ? overrideText.trim() : chatInput.value.trim();
       if (!text) return;
-      chatInput.value = '';
+      if (typeof overrideText !== 'string') {
+        chatInput.value = '';
+      } else {
+        chatInput.value = '';
+      }
       addChatMsg(text, 'user');
 
       var thinking = document.createElement('div');
@@ -2300,6 +2360,12 @@
 
       chatBusy = true;
       chatInput.disabled = true;
+      if (chatSend) chatSend.disabled = true;
+      if (chatVoiceBtn) chatVoiceBtn.disabled = true;
+      if (options && options.fromVoice) {
+        chatVoiceReplyPending = true;
+        setVoiceState('thinking', 'Sending your spoken prompt to Jarvis');
+      }
 
       fetch('/api/chat', {
         method: 'POST',
@@ -2309,23 +2375,114 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         thinking.remove();
-        addChatMsg(data.response || data.error || 'No response', 'agent');
+        var reply = data.response || data.error || 'No response';
+        addChatMsg(reply, 'agent');
+        if (chatVoiceReplyPending) {
+          speakChatReply(reply);
+          chatVoiceReplyPending = false;
+        }
       })
       .catch(function(err) {
         thinking.remove();
         addChatMsg('Error: ' + err.message, 'agent');
+        if (chatVoiceReplyPending) {
+          setVoiceState('error', 'Chat request failed');
+          chatVoiceReplyPending = false;
+        }
       })
       .finally(function() {
         chatBusy = false;
         chatInput.disabled = false;
+        if (chatSend) chatSend.disabled = false;
+        if (chatVoiceBtn) chatVoiceBtn.disabled = false;
         chatInput.focus();
+        if (!window.speechSynthesis || !window.speechSynthesis.speaking) {
+          setVoiceState('idle', speechRecognitionCtor ? 'Push to talk' : 'Voice unavailable in this browser');
+        }
       });
     }
 
-    if (chatSend) chatSend.addEventListener('click', sendChat);
+    function initChatVoice() {
+      if (!chatVoiceBtn || !chatVoiceState || !chatVoiceDetail) return;
+      if (!speechRecognitionCtor) {
+        chatVoiceBtn.disabled = true;
+        setVoiceState('error', 'Voice input needs a Chromium-style browser');
+        return;
+      }
+      recognition = new speechRecognitionCtor();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      var partial = '';
+      var finalText = '';
+
+      recognition.onstart = function () {
+        recognitionRunning = true;
+        partial = '';
+        finalText = '';
+        setVoiceState('listening', 'Speak now, I am listening');
+      };
+
+      recognition.onresult = function (event) {
+        partial = '';
+        for (var i = event.resultIndex; i < event.results.length; i++) {
+          var transcript = event.results[i][0].transcript || '';
+          if (event.results[i].isFinal) {
+            finalText += transcript + ' ';
+          } else {
+            partial += transcript;
+          }
+        }
+        var preview = (finalText || partial).trim();
+        if (preview) {
+          chatInput.value = preview;
+          setVoiceState('listening', preview);
+        }
+      };
+
+      recognition.onerror = function (event) {
+        recognitionRunning = false;
+        var detail = event && event.error ? ('Mic error: ' + event.error) : 'Voice capture failed';
+        setVoiceState('error', detail);
+      };
+
+      recognition.onend = function () {
+        recognitionRunning = false;
+        var spoken = (finalText || partial).trim();
+        if (spoken) {
+          chatInput.value = spoken;
+          sendChat(spoken, { fromVoice: true });
+        } else if (!chatBusy) {
+          setVoiceState('idle', 'Push to talk');
+        }
+      };
+
+      chatVoiceBtn.addEventListener('click', function () {
+        if (chatBusy) return;
+        if (recognitionRunning) {
+          stopRecognition();
+          setVoiceState('idle', 'Voice capture stopped');
+          return;
+        }
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+        try {
+          recognition.start();
+        } catch (err) {
+          setVoiceState('error', err && err.message ? err.message : 'Could not start microphone');
+        }
+      });
+
+      setVoiceState('idle', 'Push to talk');
+    }
+
+    if (chatSend) chatSend.addEventListener('click', function () { sendChat(); });
     if (chatInput) chatInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
     });
+    initChatVoice();
     var chatReopen = document.getElementById('chat-reopen');
 
     function toggleChat(forceOpen) {
