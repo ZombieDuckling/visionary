@@ -26,7 +26,20 @@
         <span id="sse-status" class="badge badge-green">LIVE</span>
       </div>
     </header>
-    <main id="main-content" class="main-content"></main>
+    <div class="content-with-chat">
+      <main id="main-content" class="main-content"></main>
+      <aside id="chat-panel" class="chat-panel">
+        <div class="chat-header">
+          <span class="chat-title">⚙️ Jarvis</span>
+          <button class="chat-toggle" id="chat-toggle" title="Toggle chat">◀</button>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-bar">
+          <input type="text" id="chat-input" class="chat-input" placeholder="Talk to Jarvis..." autocomplete="off">
+          <button class="chat-send" id="chat-send">▶</button>
+        </div>
+      </aside>
+    </div>
     <footer class="status-bar">
       <span id="status-left">Ready</span>
       <div class="status-bar-center">

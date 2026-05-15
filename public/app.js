@@ -2257,6 +2257,85 @@
 
     // Update status bar "last event" periodically
     setInterval(updateStatusBar, 10000);
+
+    // ── Jarvis Chat Panel ──────────────────────────────────
+    var chatMessages = document.getElementById('chat-messages');
+    var chatInput = document.getElementById('chat-input');
+    var chatSend = document.getElementById('chat-send');
+    var chatToggle = document.getElementById('chat-toggle');
+    var chatPanel = document.getElementById('chat-panel');
+    var chatBusy = false;
+
+    function addChatMsg(text, type) {
+      var msg = document.createElement('div');
+      msg.className = 'chat-msg ' + type;
+      if (type === 'agent') {
+        var name = document.createElement('div');
+        name.className = 'chat-agent-name';
+        name.textContent = 'Jarvis';
+        msg.appendChild(name);
+        var body = document.createElement('div');
+        body.textContent = text;
+        msg.appendChild(body);
+      } else {
+        msg.textContent = text;
+      }
+      chatMessages.appendChild(msg);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return msg;
+    }
+
+    function sendChat() {
+      if (chatBusy) return;
+      var text = chatInput.value.trim();
+      if (!text) return;
+      chatInput.value = '';
+      addChatMsg(text, 'user');
+
+      var thinking = document.createElement('div');
+      thinking.className = 'chat-msg thinking';
+      thinking.textContent = 'Jarvis is thinking';
+      chatMessages.appendChild(thinking);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      chatBusy = true;
+      chatInput.disabled = true;
+
+      fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        thinking.remove();
+        addChatMsg(data.response || data.error || 'No response', 'agent');
+      })
+      .catch(function(err) {
+        thinking.remove();
+        addChatMsg('Error: ' + err.message, 'agent');
+      })
+      .finally(function() {
+        chatBusy = false;
+        chatInput.disabled = false;
+        chatInput.focus();
+      });
+    }
+
+    if (chatSend) chatSend.addEventListener('click', sendChat);
+    if (chatInput) chatInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+    });
+    if (chatToggle) chatToggle.addEventListener('click', function() {
+      chatPanel.classList.toggle('collapsed');
+      chatToggle.textContent = chatPanel.classList.contains('collapsed') ? '\u25B6' : '\u25C0';
+    });
+
+    // Welcome message
+    if (chatMessages && chatMessages.children.length === 0) {
+      addChatMsg('Online. What do you need?', 'agent');
+    }
+
   });
 
 })();
