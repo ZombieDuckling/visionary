@@ -643,23 +643,14 @@ const server = http.createServer(async (req, res) => {
         const recentAct = stmts.getRecentActivity.all(5);
         const actSummary = recentAct.map(function(a) { return a.summary; }).join('; ');
 
-        const systemContext = 'You are Jarvis, the orchestrator agent in the Visionary Mission Control dashboard at http://127.0.0.1:3333. '
-          + 'Josh is talking to you from the chat panel on the right side of the dashboard. '
-          + 'Current board: ' + counts.todo + ' todo, ' + counts.in_progress + ' in progress, ' + counts.review + ' in review, ' + counts.done + ' done (total ' + boardTasks.length + ' tasks). '
-          + 'You have 12 agents: Jarvis, Scout, Analyst, Forge, Sentinel, Broker, Ops, Hunter, Reviewer, Coder (Claude), Researcher (Gemini), Designer. '
-          + 'Recent activity: ' + (actSummary || 'none') + '. '
-          + 'You can create tasks, dispatch agents, check status, search memory, and coordinate work. '
-          + 'The dashboard API is at http://127.0.0.1:3333/api/. You can use curl to interact with it. '
-          + 'Read /Users/joshuasack/.openclaw/workspace/VISIONARY.md for full API reference. '
-          + 'Be concise, actionable, and aware of the dashboard context. Reference tabs and agents naturally.\n\n'
-          + 'Josh says: ' + msg;
+        const chatMsg = '[Dashboard] Board: ' + counts.todo + ' todo, ' + counts.in_progress + ' wip, ' + counts.review + ' review, ' + counts.done + ' done. ' + msg;
 
-        // Dispatch to Jarvis via OpenClaw (async to avoid blocking server)
-        const cmd = buildDispatchCommand('main', systemContext);
+        // Dispatch to Jarvis via OpenClaw (async)
         const chatEnv = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
+        const chatArgs = ['agent', '--agent', 'main', '--message', chatMsg, '--json', '--timeout', '120'];
 
-        const chatChild = execFile(cmd.bin, cmd.args, {
-          timeout: 120000, maxBuffer: 4 * 1024 * 1024, env: chatEnv
+        const chatChild = execFile('openclaw', chatArgs, {
+          timeout: 130000, maxBuffer: 4 * 1024 * 1024, env: chatEnv
         }, function(error, stdout, stderr) {
           if (res.writableEnded) return; // response already sent
 
