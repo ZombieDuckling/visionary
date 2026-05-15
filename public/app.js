@@ -2326,10 +2326,24 @@
     if (chatInput) chatInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
     });
-    if (chatToggle) chatToggle.addEventListener('click', function() {
-      chatPanel.classList.toggle('collapsed');
-      chatToggle.textContent = chatPanel.classList.contains('collapsed') ? '\u25B6' : '\u25C0';
-    });
+    var chatReopen = document.getElementById('chat-reopen');
+
+    function toggleChat(forceOpen) {
+      if (forceOpen) {
+        chatPanel.classList.remove('collapsed');
+      } else {
+        chatPanel.classList.toggle('collapsed');
+      }
+      var isCollapsed = chatPanel.classList.contains('collapsed');
+      chatToggle.textContent = isCollapsed ? '\u25B6' : '\u25C0';
+      if (chatReopen) {
+        if (isCollapsed) { chatReopen.classList.add('visible'); }
+        else { chatReopen.classList.remove('visible'); }
+      }
+    }
+
+    if (chatToggle) chatToggle.addEventListener('click', function() { toggleChat(); });
+    if (chatReopen) chatReopen.addEventListener('click', function() { toggleChat(true); chatInput.focus(); });
 
     // Welcome message
     if (chatMessages && chatMessages.children.length === 0) {
