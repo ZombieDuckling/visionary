@@ -1,12 +1,17 @@
 {
   "name": "visionary",
   "version": "0.1.0",
-  "main": "server.js",
+  "main": "electron.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "app": "electron .",
+    "build": "electron-builder --mac"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "electron": "^42.1.0"
   }
 }
