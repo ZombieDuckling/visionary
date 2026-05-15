@@ -634,38 +634,59 @@ const server = http.createServer(async (req, res) => {
           detail_json: JSON.stringify({ message: msg })
         });
 
-        // Dispatch to Jarvis via OpenClaw
-        const cmd = buildDispatchCommand('main', msg);
-        const env = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
+        // Build context-aware prompt for Jarvis
+        // Read current dashboard state to give Jarvis awareness
+        const boardTasks = stmts.getAllTasks.all();
+        const counts = { todo: 0, in_progress: 0, review: 0, done: 0 };
+        boardTasks.forEach(function(t) { counts[t.status] = (counts[t.status] || 0) + 1; });
 
-        try {
-          const { execFileSync } = require('node:child_process');
-          const stdout = execFileSync(cmd.bin, cmd.args, {
-            timeout: 120000, maxBuffer: 4 * 1024 * 1024, env
-          }).toString();
+        const recentAct = stmts.getRecentActivity.all(5);
+        const actSummary = recentAct.map(function(a) { return a.summary; }).join('; ');
 
-          const cleaned = cleanCliOutput(stdout);
-          let responseText = cleaned;
-          try {
-            const parsed = JSON.parse(cleaned);
-            if (parsed.result && parsed.result.payloads) {
-              responseText = parsed.result.payloads.map(function(p) { return p.text; }).join('\n');
-            } else if (parsed.payloads) {
-              responseText = parsed.payloads.map(function(p) { return p.text; }).join('\n');
-            }
-          } catch { /* use raw */ }
+        const systemContext = 'You are Jarvis, the orchestrator agent in the Visionary Mission Control dashboard at http://127.0.0.1:3333. '
+          + 'Josh is talking to you from the chat panel on the right side of the dashboard. '
+          + 'Current board: ' + counts.todo + ' todo, ' + counts.in_progress + ' in progress, ' + counts.review + ' in review, ' + counts.done + ' done (total ' + boardTasks.length + ' tasks). '
+          + 'You have 12 agents: Jarvis, Scout, Analyst, Forge, Sentinel, Broker, Ops, Hunter, Reviewer, Coder (Claude), Researcher (Gemini), Designer. '
+          + 'Recent activity: ' + (actSummary || 'none') + '. '
+          + 'You can create tasks, dispatch agents, check status, search memory, and coordinate work. '
+          + 'The dashboard API is at http://127.0.0.1:3333/api/. You can use curl to interact with it. '
+          + 'Read /Users/joshuasack/.openclaw/workspace/VISIONARY.md for full API reference. '
+          + 'Be concise, actionable, and aware of the dashboard context. Reference tabs and agents naturally.\n\n'
+          + 'Josh says: ' + msg;
 
-          stmts.insertActivity.run({
-            event_type: 'chat.agent', agent_id: 'main', task_id: null,
-            project_id: null, summary: 'Jarvis: ' + responseText.substring(0, 100),
-            detail_json: JSON.stringify({ response: responseText })
-          });
-          bus.emit('activity:new', { event_type: 'chat.agent', agent_id: 'main', summary: 'Jarvis responded' });
+        // Dispatch to Jarvis via OpenClaw (async to avoid blocking server)
+        const cmd = buildDispatchCommand('main', systemContext);
+        const chatEnv = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
 
-          res.json({ agent: 'jarvis', response: responseText });
-        } catch (err) {
-          res.json({ agent: 'jarvis', response: 'Error: ' + (err.message || 'unknown').substring(0, 200) }, 500);
-        }
+        const chatChild = execFile(cmd.bin, cmd.args, {
+          timeout: 120000, maxBuffer: 4 * 1024 * 1024, env: chatEnv
+        }, function(error, stdout, stderr) {
+          if (res.writableEnded) return; // response already sent
+
+          if (!error && stdout) {
+            const cleaned = cleanCliOutput(stdout);
+            let responseText = cleaned;
+            try {
+              const parsed = JSON.parse(cleaned);
+              if (parsed.result && parsed.result.payloads) {
+                responseText = parsed.result.payloads.map(function(p) { return p.text; }).join('\n');
+              } else if (parsed.payloads) {
+                responseText = parsed.payloads.map(function(p) { return p.text; }).join('\n');
+              }
+            } catch { /* use raw */ }
+
+            stmts.insertActivity.run({
+              event_type: 'chat.agent', agent_id: 'main', task_id: null,
+              project_id: null, summary: 'Jarvis: ' + responseText.substring(0, 100),
+              detail_json: JSON.stringify({ response: responseText })
+            });
+            bus.emit('activity:new', { event_type: 'chat.agent', agent_id: 'main', summary: 'Jarvis responded' });
+
+            res.json({ agent: 'jarvis', response: responseText });
+          } else {
+            res.json({ agent: 'jarvis', response: 'Error: ' + ((error || {}).message || 'unknown').substring(0, 200) }, 500);
+          }
+        });
         return;
       }
 
