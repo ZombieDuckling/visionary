@@ -1371,3 +1371,31 @@ textarea {
   transition: 0.15s;
 }
 .chat-send:hover { background: #5a9fff; }
+
+/* Chat reopen button */
+.chat-reopen-btn {
+  position: fixed;
+  right: 16px;
+  bottom: 48px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #3b8bff;
+  border: 2px solid rgba(59, 139, 255, 0.4);
+  box-shadow: 0 0 20px rgba(59, 139, 255, 0.3);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: 0.2s;
+}
+.chat-reopen-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(59, 139, 255, 0.5);
+}
+.chat-reopen-btn.visible {
+  display: flex;
+}
