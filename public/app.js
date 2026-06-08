@@ -399,7 +399,7 @@
     var html = '<div class="board-card ' + priorityClass + '" draggable="true" data-action="view-task" data-task-id="' + esc(task.id) + '" style="border-left: 3px solid ' + borderColor + '">'
       + '<div class="board-card-title">' + esc(task.title) + '</div>'
       + '<div class="board-card-meta">'
-      + priorityBadge(task.priority)
+      + '<span class="badge ' + priorityClass(task.priority) + '">' + esc(task.priority || 'medium') + '</span>'
       + agentBadge(task.agent_id)
       + '<span class="text-muted">' + timeAgo(task.created_at) + '</span>'
       + '</div>';
@@ -452,7 +452,7 @@
           html += '<div class="mission-card">'
             + '<div class="mission-rank">#' + esc(m.rank || '') + '</div>'
             + '<div class="mission-body"><div class="mission-title">' + esc(m.title) + '</div><div class="overview-meta">' + esc(m.detail || '') + '</div></div>'
-            + '<span class="badge ' + priorityBadge(m.priority) + '">' + esc(m.priority || 'medium') + '</span>'
+            + '<span class="badge ' + priorityClass(m.priority) + '">' + esc(m.priority || 'medium') + '</span>'
             + '<button class="btn btn-small" data-action="mission-action" data-mission-action="' + esc(m.action_type || '') + '" data-target="' + esc(m.target || '') + '" data-task-id="' + esc(m.task_id || '') + '" data-agent-id="' + esc(m.agent_id || '') + '">' + esc(m.action_label || 'Open') + '</button>'
             + '</div>';
         });
@@ -485,7 +485,7 @@
         openTasks.forEach(function (t) {
           html += '<div class="overview-list-item">'
             + '<div><strong>' + esc(t.title) + '</strong><div class="overview-meta">' + esc(t.project_name || 'No project') + ' · ' + esc(t.agent_id || 'unassigned') + '</div></div>'
-            + '<span class="badge ' + priorityBadge(t.priority) + '">' + esc(t.priority || 'medium') + '</span>'
+            + '<span class="badge ' + priorityClass(t.priority) + '">' + esc(t.priority || 'medium') + '</span>'
             + '</div>';
         });
         html += '</div>';
@@ -545,7 +545,7 @@
     return '<div class="card overview-metric"><div class="overview-metric-label">' + esc(label) + '</div><div class="overview-metric-value">' + esc(value) + '</div><div class="overview-metric-detail">' + esc(detail) + '</div></div>';
   }
 
-  function priorityBadge(priority) {
+  function priorityClass(priority) {
     if (priority === 'critical') return 'badge-red';
     if (priority === 'high') return 'badge-orange';
     if (priority === 'low') return 'badge-blue';
