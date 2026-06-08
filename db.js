@@ -243,6 +243,34 @@ const stmts = {
   `),
   getLastRunCost: db.prepare(`
     SELECT estimated_cost_usd FROM agent_runs WHERE agent_id = ? AND estimated_cost_usd IS NOT NULL ORDER BY id DESC LIMIT 1
+  `),
+
+  // Export/import statements
+  exportProjects: db.prepare('SELECT * FROM projects ORDER BY id'),
+  exportTasks: db.prepare('SELECT * FROM tasks ORDER BY id'),
+  exportAgentRuns: db.prepare('SELECT * FROM agent_runs ORDER BY id'),
+  exportNotifications: db.prepare('SELECT * FROM notifications ORDER BY id'),
+  exportActivityLog: db.prepare('SELECT * FROM activity_log ORDER BY id'),
+
+  importProject: db.prepare(`
+    INSERT OR REPLACE INTO projects (id, name, slug, description, color, status, created_at, updated_at)
+    VALUES (@id, @name, @slug, @description, @color, @status, @created_at, @updated_at)
+  `),
+  importTask: db.prepare(`
+    INSERT OR REPLACE INTO tasks (id, project_id, title, description, status, priority, agent_id, created_at, updated_at, completed_at, sort_order)
+    VALUES (@id, @project_id, @title, @description, @status, @priority, @agent_id, @created_at, @updated_at, @completed_at, @sort_order)
+  `),
+  importAgentRun: db.prepare(`
+    INSERT OR REPLACE INTO agent_runs (id, task_id, agent_id, session_id, message, status, result_json, result_text, error, delivery_status, duration_ms, started_at, completed_at, created_at, input_tokens, output_tokens, estimated_cost_usd)
+    VALUES (@id, @task_id, @agent_id, @session_id, @message, @status, @result_json, @result_text, @error, @delivery_status, @duration_ms, @started_at, @completed_at, @created_at, @input_tokens, @output_tokens, @estimated_cost_usd)
+  `),
+  importNotification: db.prepare(`
+    INSERT OR REPLACE INTO notifications (id, agent_run_id, type, title, body, action_type, action_data, read, dismissed, created_at)
+    VALUES (@id, @agent_run_id, @type, @title, @body, @action_type, @action_data, @read, @dismissed, @created_at)
+  `),
+  importActivityLog: db.prepare(`
+    INSERT OR REPLACE INTO activity_log (id, event_type, agent_id, task_id, project_id, summary, detail_json, created_at)
+    VALUES (@id, @event_type, @agent_id, @task_id, @project_id, @summary, @detail_json, @created_at)
   `)
 };
 

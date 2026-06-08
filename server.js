@@ -1762,6 +1762,60 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // GET /api/export — full DB dump as JSON attachment
+      if (method === 'GET' && pathname === '/api/export') {
+        const exportedAt = new Date().toISOString();
+        const timestamp = exportedAt.replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+        const payload = {
+          schema_version: 1,
+          exported_at: exportedAt,
+          tables: {
+            projects: stmts.exportProjects.all(),
+            tasks: stmts.exportTasks.all(),
+            agent_runs: stmts.exportAgentRuns.all(),
+            notifications: stmts.exportNotifications.all(),
+            activity_log: stmts.exportActivityLog.all()
+          }
+        };
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Disposition': `attachment; filename="visionary-backup-${timestamp}.json"`
+        });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+
+      // POST /api/import — restore from JSON export, idempotent via INSERT OR REPLACE
+      if (method === 'POST' && pathname === '/api/import') {
+        const body = await readBody(req);
+        if (!body) { res.json({ error: 'Request body required' }, 400); return; }
+        if (body.schema_version !== 1) {
+          res.json({ error: 'Unsupported schema_version: ' + body.schema_version }, 422);
+          return;
+        }
+        const tables = body.tables;
+        if (!tables || typeof tables !== 'object') {
+          res.json({ error: 'Missing tables in import payload' }, 400);
+          return;
+        }
+        const counts = { projects: 0, tasks: 0, agent_runs: 0, notifications: 0, activity_log: 0 };
+        const doImport = db.transaction(() => {
+          const projects = Array.isArray(tables.projects) ? tables.projects : [];
+          for (const row of projects) { stmts.importProject.run(row); counts.projects++; }
+          const tasks = Array.isArray(tables.tasks) ? tables.tasks : [];
+          for (const row of tasks) { stmts.importTask.run(row); counts.tasks++; }
+          const agentRuns = Array.isArray(tables.agent_runs) ? tables.agent_runs : [];
+          for (const row of agentRuns) { stmts.importAgentRun.run(row); counts.agent_runs++; }
+          const notifications = Array.isArray(tables.notifications) ? tables.notifications : [];
+          for (const row of notifications) { stmts.importNotification.run(row); counts.notifications++; }
+          const activityLog = Array.isArray(tables.activity_log) ? tables.activity_log : [];
+          for (const row of activityLog) { stmts.importActivityLog.run(row); counts.activity_log++; }
+        });
+        doImport();
+        res.json({ imported: counts });
+        return;
+      }
+
       // Default for /api/* -> 404
       res.json({ error: 'Not found' }, 404);
       return;
