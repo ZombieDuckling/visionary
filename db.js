@@ -190,6 +190,25 @@ const migrations = [
     created_at TEXT DEFAULT (datetime('now'))
   );
   CREATE INDEX idx_agent_health_agent ON agent_health_log(agent_id, created_at DESC);
+  `,
+
+  // Migration 5 -> 6: Scheduler — cron-style scheduled agent runs
+  `
+  CREATE TABLE IF NOT EXISTS schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    cron TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    last_run_at TEXT,
+    last_status TEXT,
+    last_detail TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_schedules_enabled ON schedules(enabled);
+  CREATE INDEX idx_schedules_agent ON schedules(agent_id);
   `
 ];
 
@@ -446,6 +465,29 @@ const stmts = {
     INSERT INTO agent_health_log (agent_id, harness, status, detail)
     VALUES (@agent_id, @harness, @status, @detail)
   `),
+
+  // Scheduler statements
+  getAllSchedules: db.prepare('SELECT * FROM schedules ORDER BY id'),
+  getEnabledSchedules: db.prepare('SELECT * FROM schedules WHERE enabled = 1 ORDER BY id'),
+  getScheduleById: db.prepare('SELECT * FROM schedules WHERE id = ?'),
+  insertSchedule: db.prepare(`
+    INSERT INTO schedules (agent_id, name, cron, prompt, enabled)
+    VALUES (@agent_id, @name, @cron, @prompt, @enabled)
+  `),
+  updateSchedule: db.prepare(`
+    UPDATE schedules SET agent_id = @agent_id, name = @name, cron = @cron,
+      prompt = @prompt, enabled = @enabled, updated_at = datetime('now') WHERE id = @id
+  `),
+  deleteSchedule: db.prepare('DELETE FROM schedules WHERE id = ?'),
+  markScheduleRun: db.prepare(`
+    UPDATE schedules SET last_run_at = datetime('now'), last_status = ?, last_detail = ? WHERE id = ?
+  `),
+
+  // Cleanup statements
+  pruneAgentMessages: db.prepare(`DELETE FROM agent_messages WHERE created_at < datetime('now', ?)`),
+  pruneHealthLog: db.prepare(`DELETE FROM agent_health_log WHERE created_at < datetime('now', ?)`),
+  pruneActivityLog: db.prepare(`DELETE FROM activity_log WHERE created_at < datetime('now', ?)`),
+  pruneAgentRuns: db.prepare(`DELETE FROM agent_runs WHERE created_at < datetime('now', ?) AND status IN ('completed','failed','timeout')`),
   getSettings: db.prepare('SELECT value_json, updated_at FROM settings WHERE key = ?'),
   upsertSettings: db.prepare(`
     INSERT INTO settings (key, value_json, updated_at) VALUES (@key, @value_json, datetime('now'))
