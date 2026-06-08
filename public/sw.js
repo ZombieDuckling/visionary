@@ -1,7 +1,7 @@
 // Visionary Service Worker — PWA shell caching
 // Network-first for /api/* (except SSE), cache-first for static shell.
 
-const CACHE_NAME = 'visionary-shell-v4';
+const CACHE_NAME = 'visionary-shell-v5';
 const SHELL_ASSETS = [
   '/',
   '/app.js',
