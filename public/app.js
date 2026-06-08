@@ -387,16 +387,15 @@
   // --- Task Card Helper ---
   // Returns safe HTML string. All dynamic text goes through esc().
   function taskCard(task) {
-    var priorityClass = task.priority ? 'priority-' + esc(task.priority) : '';
+    var priorityModifier = task.priority ? 'priority-' + esc(task.priority) : '';
     var borderColor = STATUS_BORDER_COLOR[task.status] || 'var(--text-muted)';
 
-    // Check if task has an active dispatch running
     var isRunning = false;
     for (var r = 0; r < state.activeRuns.length; r++) {
       if (state.activeRuns[r].task_id === task.id) { isRunning = true; break; }
     }
 
-    var html = '<div class="board-card ' + priorityClass + '" draggable="true" data-action="view-task" data-task-id="' + esc(task.id) + '" style="border-left: 3px solid ' + borderColor + '">'
+    var html = '<div class="board-card ' + priorityModifier + '" draggable="true" data-action="view-task" data-task-id="' + esc(task.id) + '" style="border-left: 3px solid ' + esc(borderColor) + '">'
       + '<div class="board-card-title">' + esc(task.title) + '</div>'
       + '<div class="board-card-meta">'
       + '<span class="badge ' + priorityClass(task.priority) + '">' + esc(task.priority || 'medium') + '</span>'
@@ -527,10 +526,20 @@
 
   function renderOrchestratorPanel(orchestrator) {
     var workers = orchestrator.workers || [];
+    var gateway = orchestrator.gateway || {};
+    var cron = orchestrator.cron || {};
     var running = workers.filter(function (w) { return w.tmux === 'running'; }).length;
+    var gatewayBadge = gateway.running ? 'badge-green' : 'badge-red';
+    var gatewayLabel = gateway.running ? ('gateway live' + (gateway.pid ? ' #' + gateway.pid : '')) : 'gateway off';
+    var cronLabel = cron.state || 'scheduled';
     var html = '<section class="card overview-panel overview-orchestrator">'
-      + '<div class="overview-panel-header"><h3>Hermes persistent orchestrator</h3><span class="badge badge-green">wired</span></div>'
-      + '<div class="overview-meta">Cron ' + esc((orchestrator.cron && orchestrator.cron.schedule) || 'every 30m') + ' · workers ' + running + '/' + workers.length + ' running · updated ' + esc(timeAgo(orchestrator.updated_at)) + '</div>'
+      + '<div class="overview-panel-header"><h3>Hermes persistent orchestrator</h3><span class="badge ' + gatewayBadge + '">' + esc(gatewayLabel) + '</span></div>'
+      + '<div class="overview-meta">Cron ' + esc(cron.schedule || 'every 30m') + ' · ' + esc(cronLabel) + ' · workers ' + running + '/' + workers.length + ' running · updated ' + esc(timeAgo(orchestrator.updated_at)) + '</div>'
+      + '<div class="orchestrator-health">'
+      + '<div><span class="overview-metric-label">Gateway</span><strong>' + esc(gateway.status || 'unknown') + '</strong></div>'
+      + '<div><span class="overview-metric-label">Cron job</span><strong>' + esc(cron.job_id || 'unknown') + '</strong></div>'
+      + '<div><span class="overview-metric-label">Watchdog</span><strong>' + esc(orchestrator.watchdog_path ? 'installed' : 'missing') + '</strong></div>'
+      + '</div>'
       + '<div class="orchestrator-workers">';
     workers.forEach(function (w) {
       html += '<div class="orchestrator-worker"><div><strong>' + esc(w.lane) + '</strong><div class="overview-meta">' + esc(w.status) + ' · tmux ' + esc(w.tmux) + '</div></div><span class="badge ' + (w.tmux === 'running' ? 'badge-green' : 'badge-orange') + '">' + esc(w.tmux) + '</span></div>';

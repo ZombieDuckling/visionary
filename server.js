@@ -622,8 +622,23 @@ function getOrchestratorStatus() {
   try {
     const output = execFileSync('hermes', ['cron', 'list'], { timeout: 5000, encoding: 'utf8' });
     cron.raw = output.slice(0, 2000);
+    if (/Gateway is not running/i.test(output)) cron.state = 'gateway-off';
+    else if (/\[active\]/i.test(output)) cron.state = 'active';
   } catch (err) {
     cron.error = err.message;
+  }
+
+  let gateway = { running: false, status: 'unknown' };
+  try {
+    const output = execFileSync('hermes', ['gateway', 'status'], { timeout: 5000, encoding: 'utf8' });
+    gateway.raw = output.slice(0, 1500);
+    gateway.running = /Gateway service is loaded|Gateway is running|PID\s*=|\"PID\"\s*=/.test(output);
+    const pidMatch = output.match(/\"PID\"\s*=\s*(\d+)|PID:\s*(\d+)/);
+    if (pidMatch) gateway.pid = Number(pidMatch[1] || pidMatch[2]);
+    gateway.status = gateway.running ? 'running' : 'stopped';
+  } catch (err) {
+    gateway.status = 'error';
+    gateway.error = err.message;
   }
 
   let harnesses = { claude: 'unknown', opencode: 'unknown', cursor: 'unknown' };
@@ -635,6 +650,7 @@ function getOrchestratorStatus() {
     role: 'Hermes persistent orchestrator',
     live: true,
     cron,
+    gateway,
     workers,
     harnesses,
     plan_path: path.join(orchDir, 'PRODUCTION_READY_BY_TOMORROW.md'),

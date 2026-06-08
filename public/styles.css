@@ -1609,6 +1609,29 @@ textarea {
   background: linear-gradient(135deg, rgba(0, 255, 136, 0.08), rgba(59, 139, 255, 0.05));
 }
 
+.orchestrator-health {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.orchestrator-health > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.orchestrator-health strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
 .orchestrator-workers {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
