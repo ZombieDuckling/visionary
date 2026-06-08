@@ -17,9 +17,13 @@
   /* Bevel ink */
   --hi: #FFFFFF;         /* top/left highlight */
   --hi-2: #DFDFDF;       /* inner highlight */
-  --lo-2: #808080;       /* inner shadow */
-  --lo: #404040;         /* outer shadow / true black for the 2px bevel */
+  --lo-2: #808080;       /* inner shadow (bevels only — too low contrast for text) */
+  --lo: #404040;         /* outer shadow / dark bevel */
   --black: #000000;
+
+  /* Text-only grays — darker than bevel grays so body text stays readable */
+  --ink-muted: #3A3A3A;
+  --ink-faint: #5C5C5C;
 
   /* Title bar */
   --title-active-start: #000080;   /* navy */
@@ -38,16 +42,16 @@
   --err:   #800000;
   --info:  #000080;
 
-  /* Type */
-  --font-ui: 'Tahoma', 'MS Sans Serif', 'Microsoft Sans Serif', Geneva, sans-serif;
+  /* Type — Verdana first; Microsoft designed it specifically for small-screen legibility */
+  --font-ui: 'Verdana', 'Tahoma', 'Geneva', 'MS Sans Serif', sans-serif;
   --font-mono: 'Consolas', 'Lucida Console', 'Courier New', monospace;
 
-  --fs-xs: 10px;
-  --fs-sm: 11px;
-  --fs-base: 12px;
-  --fs-md: 13px;
-  --fs-lg: 16px;
-  --fs-xl: 20px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 17px;
+  --fs-xl: 22px;
 
   --s-1: 2px;
   --s-2: 4px;
@@ -109,9 +113,10 @@ html, body {
   color: var(--black);
   font-family: var(--font-ui);
   font-size: var(--fs-base);
-  line-height: 1.3;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 body {
   min-height: 100vh;
@@ -358,7 +363,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   margin: 2px;
 }
 .chat-voice-state { font-weight: 700; }
-.chat-voice-detail { color: var(--lo-2); }
+.chat-voice-detail { color: var(--ink-muted); }
 
 .chat-messages {
   flex: 1;
@@ -487,7 +492,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   padding: 4px 11px 2px 13px;
 }
 .btn:disabled {
-  color: var(--lo-2);
+  color: var(--ink-muted);
   text-shadow: 1px 1px 0 var(--hi);
   cursor: not-allowed;
 }
@@ -651,7 +656,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   place-items: center;
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
-  color: var(--lo-2);
+  color: var(--ink-muted);
   padding: var(--s-5);
   margin: var(--s-3);
   background: var(--face-input);
@@ -764,7 +769,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .agent-model {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  color: var(--lo-2);
+  color: var(--ink-muted);
 }
 .agent-status-text {
   display: inline-block;
@@ -776,7 +781,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   color: var(--black);
   box-shadow: var(--bevel-in-thin);
 }
-.agent-status-text.idle    { color: var(--lo-2); }
+.agent-status-text.idle    { color: var(--ink-muted); }
 .agent-status-text.running { background: var(--ok); color: #FFFFFF; }
 .agent-status-text.error   { background: var(--err); color: #FFFFFF; }
 
@@ -811,7 +816,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   font-size: var(--fs-sm);
 }
 .activity-item:nth-of-type(even) { background: var(--face-2); }
-.activity-time { color: var(--lo-2); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.activity-time { color: var(--ink-muted); font-family: var(--font-mono); font-size: var(--fs-xs); }
 .activity-agent-badge {
   font-family: var(--font-ui);
   font-size: var(--fs-xs);
@@ -910,7 +915,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .file-item-meta {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  color: var(--lo-2);
+  color: var(--ink-muted);
 }
 .file-item-expanded {
   padding: var(--s-4);
@@ -1032,7 +1037,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 }
 .command-hint {
   font-size: var(--fs-xs);
-  color: var(--lo-2);
+  color: var(--ink-muted);
 }
 
 /* ============================================
@@ -1104,7 +1109,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .hidden { display: none !important; }
 .compact { padding: var(--s-2); font-size: var(--fs-xs); }
 .fade-out { opacity: 0; transition: opacity 0.3s; }
-.inferred { color: var(--lo-2); font-style: italic; }
+.inferred { color: var(--ink-muted); font-style: italic; }
 .error { color: var(--err); font-weight: 700; }
 
 /* Section titles that show up in page bodies (h2 etc) */
