@@ -1261,10 +1261,14 @@ const server = http.createServer(async (req, res) => {
         if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
         const body = await readBody(req);
         if (!body || !body.message) { res.json({ error: 'message is required' }, 400); return; }
+        const ctx = { message: String(body.message) };
+        if (Array.isArray(body.allowed_tools)) ctx.allowedTools = body.allowed_tools;
+        if (typeof body.max_turns === 'number') ctx.maxTurns = body.max_turns;
+        if (body.dangerously_skip_permissions === true) ctx.dangerouslySkipPermissions = true;
         const result = await runtimes.executeWithFailover(
           { getRuntime: runtimes.getRuntime, stmts, db },
           agent,
-          { message: String(body.message) },
+          ctx,
           { timeout: body.timeout || 120000, replayTurns: body.replay_turns || 10 }
         );
         stmts.insertActivity.run({
