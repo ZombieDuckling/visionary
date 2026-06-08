@@ -11,6 +11,10 @@ const guardrails = require('./src/guardrails');
 const deepResearch = require('./src/deep-research');
 const scheduler = require('./src/scheduler');
 const cleanup = require('./src/cleanup');
+const rateLimiter = require('./src/rate-limiter');
+
+// Wire DB statements into the rate limiter so config persists across restarts.
+rateLimiter.init(stmts);
 
 // Read HTML file once at startup
 const indexHTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
@@ -1366,11 +1370,13 @@ const server = http.createServer(async (req, res) => {
         if (Array.isArray(body.allowed_tools)) ctx.allowedTools = body.allowed_tools;
         if (typeof body.max_turns === 'number') ctx.maxTurns = body.max_turns;
         if (body.dangerously_skip_permissions === true) ctx.dangerouslySkipPermissions = true;
+        const failoverOpts = { timeout: body.timeout || 120000, replayTurns: body.replay_turns || 10 };
+        if (typeof body.replay_budget === 'number') failoverOpts.replayBudget = body.replay_budget;
         const result = await runtimes.executeWithFailover(
           { getRuntime: runtimes.getRuntime, stmts, db },
           agent,
           ctx,
-          { timeout: body.timeout || 120000, replayTurns: body.replay_turns || 10 }
+          failoverOpts
         );
         stmts.insertActivity.run({
           event_type: result.status === 'ok' ? 'agent.dispatched' : 'agent.failed',
@@ -1380,6 +1386,29 @@ const server = http.createServer(async (req, res) => {
         });
         bus.emit('activity:new', { event_type: 'agent.dispatched', summary: agent.name + ' → ' + result.status });
         res.json(result);
+        return;
+      }
+
+      // GET /api/agents/:id/throttle — return current bucket state
+      if (method === 'GET' && /^\/api\/agents\/[\w-]+\/throttle$/.test(pathname)) {
+        const id = pathname.match(/^\/api\/agents\/([\w-]+)\/throttle$/)[1];
+        const agent = stmts.getAgentById.get(id);
+        if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
+        res.json({ agent_id: id, throttle: rateLimiter.status(id) });
+        return;
+      }
+
+      // PUT /api/agents/:id/throttle — reconfigure per-agent bucket
+      if (method === 'PUT' && /^\/api\/agents\/[\w-]+\/throttle$/.test(pathname)) {
+        const id = pathname.match(/^\/api\/agents\/([\w-]+)\/throttle$/)[1];
+        const agent = stmts.getAgentById.get(id);
+        if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
+        const body = await readBody(req);
+        const capacity = Number(body && body.capacity) || 0;
+        const refillPerSecond = Number(body && body.refill_per_second) || 0;
+        if (!capacity || !refillPerSecond) { res.json({ error: 'capacity and refill_per_second are required' }, 400); return; }
+        rateLimiter.configure(id, capacity, refillPerSecond);
+        res.json({ agent_id: id, throttle: rateLimiter.status(id) });
         return;
       }
 

@@ -92,4 +92,20 @@ async function inventory(runtimes) {
   return result;
 }
 
-module.exports = { discover, inventory, STATIC_MODELS };
+/**
+ * Return the context window size (in tokens) for a given harness and optional
+ * model id. Falls back to the first model in the harness list, then to null if
+ * the harness is unknown.
+ */
+function contextWindow(harnessName, modelId) {
+  const name = String(harnessName || '').toLowerCase();
+  const models = STATIC_MODELS[name];
+  if (!models || models.length === 0) return null;
+  if (modelId) {
+    const match = models.find((m) => m.id === modelId);
+    if (match && match.context) return match.context;
+  }
+  return models[0].context || null;
+}
+
+module.exports = { discover, inventory, contextWindow, STATIC_MODELS };

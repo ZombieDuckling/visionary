@@ -3,9 +3,12 @@
 // `executeWithFailover` runs the given prompt on an agent's current harness.
 // If the harness fails with a known rate-limit / quota / token-exhausted error,
 // it walks the agent's harness_chain and retries on the next harness, replaying
-// the last N conversation turns so the new harness inherits context.
+// recent conversation turns so the new harness inherits context.
 
 const { execFile } = require('node:child_process');
+const rateLimiter = require('../rate-limiter');
+const guardrails = require('../guardrails');
+const { contextWindow } = require('../cookbook');
 
 // Patterns we treat as "this harness is exhausted, try the next one".
 const EXHAUSTION_PATTERNS = [
@@ -60,18 +63,70 @@ function runOnce(runtime, ctx, options) {
   });
 }
 
+const FALLBACK_REPLAY_TURNS = 10;
+
+/**
+ * Build the replay context block for a failover attempt.
+ *
+ * Uses guardrails.selectForReplay with the target harness's context window as
+ * the ceiling. Falls back to a fixed slice of FALLBACK_REPLAY_TURNS if no
+ * ceiling is known. The caller may supply an explicit `replayBudget` override
+ * (token ceiling) via options.
+ *
+ * Returns { text, turnCount, estimatedTokens } so the caller can annotate the
+ * attempt log.
+ */
+function buildReplayContext(messages, targetHarness, targetModel, options) {
+  // messages come back newest-first from getRecentAgentMessages.
+  if (!messages || messages.length === 0) return { text: '', turnCount: 0, estimatedTokens: 0 };
+
+  let selected;
+  let ceiling;
+
+  if (typeof options.replayBudget === 'number' && options.replayBudget > 0) {
+    // Explicit budget from dispatch body overrides everything.
+    ceiling = options.replayBudget;
+  } else {
+    ceiling = contextWindow(targetHarness, targetModel);
+  }
+
+  if (ceiling) {
+    // Leave ~20 % headroom for the new message + system prompt overhead.
+    const safeceiling = Math.floor(ceiling * 0.8);
+    selected = guardrails.selectForReplay(messages, safeceiling, true);
+  } else {
+    // Unknown harness — fall back to fixed-N newest turns, then reverse to chronological.
+    const turns = typeof options.replayTurns === 'number' ? options.replayTurns : FALLBACK_REPLAY_TURNS;
+    selected = messages.slice(0, turns).reverse();
+  }
+
+  if (selected.length === 0) return { text: '', turnCount: 0, estimatedTokens: 0 };
+
+  const estimatedTokens = selected.reduce((s, m) => s + guardrails.estimateTokens(m.content), 0);
+  const text = '\n\n[CONTEXT — last ' + selected.length + ' turns (' + estimatedTokens + ' est. tokens) from prior harness]\n'
+    + selected.map((m) => '<' + m.role + '> ' + m.content).join('\n');
+
+  return { text, turnCount: selected.length, estimatedTokens };
+}
+
 /**
  * Execute with automatic failover across the agent's harness_chain.
  *
  * @param {Object} deps - { getRuntime, stmts, db }
  * @param {Object} agent - row from `agents` table
  * @param {Object} ctx - { message, model? } passed to runtime.buildCommand
- * @param {Object} options - { timeout?, replayTurns? }
+ * @param {Object} options - { timeout?, replayTurns?, replayBudget? }
  * @returns {Promise<{ status, harness, stdout, stderr, attempts, replayed }>}
  */
 async function executeWithFailover(deps, agent, ctx, options) {
   options = options || {};
   const { getRuntime, stmts } = deps;
+
+  // --- Rate limit check (before any harness attempt) ---
+  if (!rateLimiter.acquire(agent.id)) {
+    return { status: 'rate-limited', harness: null, stdout: '', stderr: 'Rate limit exceeded for agent ' + agent.id, attempts: [], replayed: 0 };
+  }
+
   let chain;
   try { chain = JSON.parse(agent.harness_chain || '["openclaw"]'); }
   catch { chain = [agent.current_harness || 'openclaw']; }
@@ -81,12 +136,12 @@ async function executeWithFailover(deps, agent, ctx, options) {
   const startIdx = Math.max(0, chain.indexOf(agent.current_harness));
   const ordered = chain.slice(startIdx).concat(chain.slice(0, startIdx));
 
-  const replayTurns = typeof options.replayTurns === 'number' ? options.replayTurns : 10;
-  const recent = stmts.getRecentAgentMessages.all(agent.id, replayTurns).reverse();
-  const replayContext = recent.length
-    ? '\n\n[CONTEXT — last ' + recent.length + ' turns from prior harness]\n'
-      + recent.map((m) => '<' + m.role + '> ' + m.content).join('\n')
-    : '';
+  // Fetch the replay buffer once — newest-first, large enough for selectForReplay to work with.
+  const fetchLimit = Math.max(
+    typeof options.replayTurns === 'number' ? options.replayTurns : FALLBACK_REPLAY_TURNS,
+    100
+  );
+  const recentMessages = stmts.getRecentAgentMessages.all(agent.id, fetchLimit);
 
   const attempts = [];
   for (let i = 0; i < ordered.length; i++) {
@@ -95,7 +150,15 @@ async function executeWithFailover(deps, agent, ctx, options) {
     try { runtime = getRuntime(harness); }
     catch { attempts.push({ harness, status: 'unknown-harness' }); continue; }
 
-    const fullMessage = i === 0 ? ctx.message : ctx.message + replayContext;
+    let fullMessage = ctx.message;
+    let replayMeta = { turnCount: 0, estimatedTokens: 0 };
+
+    if (i > 0) {
+      const replay = buildReplayContext(recentMessages, harness, ctx.model, options);
+      fullMessage = ctx.message + replay.text;
+      replayMeta = { turnCount: replay.turnCount, estimatedTokens: replay.estimatedTokens };
+    }
+
     const result = await runOnce(runtime, Object.assign({}, ctx, { message: fullMessage }), options);
     attempts.push({ harness, status: result.status });
 
@@ -116,7 +179,7 @@ async function executeWithFailover(deps, agent, ctx, options) {
           detail: i > 0 ? 'recovered after failover from ' + chain[startIdx] : null
         });
       } catch (e) { /* DB write failure should not mask success */ }
-      return Object.assign({}, result, { attempts, replayed: i > 0 ? replayTurns : 0 });
+      return Object.assign({}, result, { attempts, replayed: replayMeta.turnCount });
     }
 
     // Log the failure and move on
