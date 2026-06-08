@@ -300,15 +300,15 @@ code, pre, kbd { font-family: var(--font-mono); }
   text-shadow: none;
 }
 
-/* Main + chat layout */
+/* Main + chat layout — now with a left sidebar (Space → Project tree) */
 .content-with-chat {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 240px 1fr 340px;
   min-height: 0;
   gap: var(--bw);
   padding: var(--bw);
 }
-.content-with-chat.chat-collapsed { grid-template-columns: 1fr 0; }
+.content-with-chat.chat-collapsed { grid-template-columns: 240px 1fr 0; }
 
 .main-content {
   overflow-y: auto;
@@ -344,6 +344,187 @@ code, pre, kbd { font-family: var(--font-mono); }
   text-shadow: var(--glow-g);
   letter-spacing: 0.05em;
 }
+
+/* ============================================
+   LEFT SIDEBAR — Space → Project tree
+   ============================================ */
+
+.app-sidebar {
+  background: rgba(10, 0, 24, 0.85);
+  border: 1px solid rgba(255, 46, 196, 0.3);
+  box-shadow: inset 0 0 30px rgba(255, 46, 196, 0.05);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  font-family: var(--font-display);
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: linear-gradient(90deg, rgba(255, 46, 196, 0.18), rgba(0, 240, 255, 0.1));
+  border-bottom: 1px solid var(--neon-m);
+}
+.sidebar-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--neon-y);
+  text-shadow: var(--glow-y);
+}
+.sidebar-add {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  background: transparent;
+  border: 1px solid var(--neon-c);
+  color: var(--neon-c);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+.sidebar-add:hover { background: var(--neon-c); color: var(--bg-deep); box-shadow: var(--glow-c); }
+.sidebar-add-sm { width: 18px; height: 18px; font-size: 11px; opacity: 0; transition: opacity 0.12s, background 0.12s, box-shadow 0.12s; }
+.sidebar-space-header:hover .sidebar-add-sm { opacity: 1; }
+
+.sidebar-empty {
+  padding: var(--s-5);
+  font-family: var(--font-pixel);
+  font-size: var(--fs-base);
+  color: var(--ink-faint);
+  text-align: center;
+  font-style: italic;
+}
+
+.sidebar-space {
+  --space-color: var(--neon-m);
+  display: flex;
+  flex-direction: column;
+  border-left: 3px solid var(--space-color);
+}
+.sidebar-space-header {
+  display: grid;
+  grid-template-columns: 14px 10px 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: rgba(31, 4, 56, 0.6);
+  transition: background 0.1s;
+}
+.sidebar-space-header:hover { background: rgba(31, 4, 56, 0.95); }
+.sidebar-space-chev {
+  font-size: 8px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+}
+.sidebar-space-dot {
+  width: 10px; height: 10px;
+  background: var(--space-color);
+  box-shadow: 0 0 6px var(--space-color);
+  border-radius: 50%;
+}
+.sidebar-space-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-space-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  padding: 1px 6px;
+  border: 1px solid var(--ink-faint);
+}
+
+.sidebar-projects {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0 6px 0;
+}
+.sidebar-project {
+  --project-color: var(--neon-c);
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 24px;
+  text-decoration: none;
+  color: var(--ink-muted);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: background 0.1s, color 0.1s;
+}
+.sidebar-project:hover {
+  background: rgba(0, 240, 255, 0.06);
+  color: var(--ink-bright);
+  text-decoration: none;
+  text-shadow: none;
+}
+.sidebar-project.active {
+  background: rgba(255, 46, 196, 0.12);
+  color: var(--ink-bright);
+  text-shadow: 0 0 6px var(--project-color);
+  box-shadow: inset 3px 0 0 var(--project-color);
+}
+.sidebar-project-dot {
+  width: 6px; height: 6px;
+  background: var(--project-color);
+  box-shadow: 0 0 4px var(--project-color);
+  border-radius: 50%;
+}
+.sidebar-project-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.sidebar-project-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--project-color);
+  padding: 1px 5px;
+  border: 1px solid var(--project-color);
+}
+.sidebar-project-empty {
+  padding: 4px 12px 4px 28px;
+  font-family: var(--font-pixel);
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+/* Board breadcrumb — appears under the header when a project is selected */
+.board-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+.board-crumb-space { color: var(--space-color, var(--neon-m)); text-shadow: 0 0 5px var(--space-color, var(--neon-m)); }
+.board-crumb-project { color: var(--project-color, var(--neon-c)); text-shadow: 0 0 5px var(--project-color, var(--neon-c)); font-weight: 700; }
+.board-crumb-sep { color: var(--ink-faint); }
+.board-crumb-all { color: var(--ink-faint); font-style: italic; }
 
 /* ============================================
    CHAT PANEL — comms console
@@ -1633,8 +1814,16 @@ code, pre, kbd { font-family: var(--font-mono); }
   .overview-grid { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 1024px) {
+  .content-with-chat { grid-template-columns: 200px 1fr 320px; }
+}
+@media (max-width: 900px) {
+  .content-with-chat { grid-template-columns: 1fr 320px; }
+  .app-sidebar { display: none; }
+}
 @media (max-width: 768px) {
   .content-with-chat { grid-template-columns: 1fr; }
+  .app-sidebar { display: none; }
   .chat-panel {
     position: fixed;
     top: 0; right: 0; bottom: 0;
