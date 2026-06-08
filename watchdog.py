@@ -32,6 +32,7 @@ import urllib.request
 BASE = os.environ.get("WATCHDOG_BASE", "http://127.0.0.1:3333")
 INTERVAL = int(os.environ.get("WATCHDOG_INTERVAL", "60"))
 HTTP_TIMEOUT = int(os.environ.get("WATCHDOG_HTTP_TIMEOUT", "15"))
+NUDGE_COOLDOWN_DEFAULT = 900  # 15 minutes
 
 
 def _http(method: str, path: str, payload: dict | None = None) -> dict:
@@ -72,6 +73,20 @@ def fetch_org() -> list[dict]:
     return org.get("all", [])
 
 
+def fetch_watchdog_settings() -> dict:
+    """Return watchdog settings from /api/settings/watchdog.  Never raises."""
+    try:
+        data = _http("GET", "/api/settings/watchdog")
+        return data.get("watchdog", {})
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def nudge_agent(agent_id: str, prompt: str) -> dict:
+    """POST watchdog_role prompt to /api/agents/:id/dispatch. Returns result dict."""
+    return _http("POST", f"/api/agents/{agent_id}/dispatch", {"message": prompt})
+
+
 def health_check(agent_id: str) -> dict:
     return _http("POST", f"/api/agents/{agent_id}/health-check")
 
@@ -104,6 +119,19 @@ def evaluate(agent: dict) -> tuple[str, str]:
     return ("ok", "fresh and healthy")
 
 
+def _cooldown_remaining(agent: dict, cooldown_seconds: int) -> float:
+    """
+    Return seconds remaining in the nudge cooldown, or 0 if cooldown has elapsed.
+    Uses last_nudge_at from the agent record (populated by the server after each nudge).
+    """
+    last_nudge = _parse_sqlite_ts(agent.get("last_nudge_at"))
+    if last_nudge is None:
+        return 0.0
+    elapsed = (_now_utc() - last_nudge).total_seconds()
+    remaining = cooldown_seconds - elapsed
+    return max(remaining, 0.0)
+
+
 def cycle() -> None:
     try:
         agents = fetch_org()
@@ -111,7 +139,13 @@ def cycle() -> None:
         print(f"[watchdog] cannot reach server at {BASE}: {err}", file=sys.stderr)
         return
 
-    print(f"[watchdog] cycle @ {_now_utc().isoformat(timespec='seconds')} ({len(agents)} agents)")
+    # Re-read kill switch + cooldown on every cycle so the operator can toggle
+    # auto_nudge_enabled without restarting the watchdog.
+    wd_settings = fetch_watchdog_settings()
+    auto_nudge_enabled = bool(wd_settings.get("auto_nudge_enabled", False))
+    nudge_cooldown = int(wd_settings.get("nudge_cooldown_seconds", NUDGE_COOLDOWN_DEFAULT))
+
+    print(f"[watchdog] cycle @ {_now_utc().isoformat(timespec='seconds')} ({len(agents)} agents, auto_nudge={auto_nudge_enabled})")
 
     for agent in sorted(agents, key=lambda a: (a.get("role") or "", a.get("id") or "")):
         action, reason = evaluate(agent)
@@ -130,9 +164,29 @@ def cycle() -> None:
                 f"[watchdog] {name:>22} via {harness:<12} → STALE: {reason}",
                 file=sys.stderr,
             )
-            # Future hook: enqueue a 'nudge' dispatch with the agent's
-            # watchdog_role so it picks back up. For now we only log so
-            # the operator can decide whether to intervene.
+            if not auto_nudge_enabled:
+                continue
+            watchdog_prompt = agent.get("watchdog_role")
+            if not watchdog_prompt:
+                print(
+                    f"[watchdog-nudge] {name}: skipping nudge — no watchdog_role configured",
+                    file=sys.stderr,
+                )
+                continue
+            remaining = _cooldown_remaining(agent, nudge_cooldown)
+            if remaining > 0:
+                print(
+                    f"[watchdog-nudge] {name}: cooldown active ({int(remaining)}s remaining), skipping",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                result = nudge_agent(agent["id"], watchdog_prompt)
+                print(
+                    f"[watchdog-nudge] {name:>22} via {harness:<12} → dispatched: {result.get('status')} (prompt: {watchdog_prompt!r})"
+                )
+            except (urllib.error.URLError, json.JSONDecodeError, KeyError) as err:
+                print(f"[watchdog-nudge] {name}: dispatch failed: {err}", file=sys.stderr)
 
 
 def main() -> int:

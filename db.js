@@ -209,6 +209,12 @@ const migrations = [
   );
   CREATE INDEX idx_schedules_enabled ON schedules(enabled);
   CREATE INDEX idx_schedules_agent ON schedules(agent_id);
+  `,
+
+  // Migration 6 -> 7: Watchdog nudge — persist last_nudge_at so cooldown survives restart
+  `
+  ALTER TABLE agents ADD COLUMN last_nudge_at TEXT;
+  INSERT OR IGNORE INTO settings (key, value_json) VALUES ('watchdog', '{"auto_nudge_enabled":false,"nudge_cooldown_seconds":900}');
   `
 ];
 
@@ -464,6 +470,14 @@ const stmts = {
   insertHealthLog: db.prepare(`
     INSERT INTO agent_health_log (agent_id, harness, status, detail)
     VALUES (@agent_id, @harness, @status, @detail)
+  `),
+  setAgentNudgeAt: db.prepare(`
+    UPDATE agents SET last_nudge_at = datetime('now') WHERE id = ?
+  `),
+  getWatchdogSettings: db.prepare(`SELECT value_json FROM settings WHERE key = 'watchdog'`),
+  upsertWatchdogSettings: db.prepare(`
+    INSERT INTO settings (key, value_json, updated_at) VALUES ('watchdog', @value_json, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = datetime('now')
   `),
 
   // Scheduler statements

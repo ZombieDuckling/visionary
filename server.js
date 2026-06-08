@@ -1173,6 +1173,15 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // GET /api/settings/watchdog — watchdog kill-switch + cooldown config (read by watchdog.py)
+      if (method === 'GET' && pathname === '/api/settings/watchdog') {
+        const row = stmts.getWatchdogSettings.get();
+        const defaults = { auto_nudge_enabled: false, nudge_cooldown_seconds: 900 };
+        const saved = row ? safeJsonParse(row.value_json, {}) : {};
+        res.json({ watchdog: { ...defaults, ...saved } });
+        return;
+      }
+
       // GET /api/settings + PUT /api/settings
       if (method === 'GET' && pathname === '/api/settings') {
         res.json({ settings: getAppSettings(), runtimes: runtimes.listRuntimes() });
@@ -1318,6 +1327,7 @@ const server = http.createServer(async (req, res) => {
             last_activity_at: a.last_activity_at,
             watchdog_role: a.watchdog_role,
             expected_activity_within_seconds: a.expected_activity_within_seconds,
+            last_nudge_at: a.last_nudge_at || null,
             reports: []
           };
         });
@@ -1378,6 +1388,8 @@ const server = http.createServer(async (req, res) => {
           summary: agent.name + ' dispatch via ' + (result.harness || 'none') + ' (' + result.status + ')',
           detail_json: JSON.stringify({ attempts: result.attempts, replayed: result.replayed })
         });
+        // Update last_nudge_at so watchdog cooldown resets on any successful agent dispatch.
+        if (result.status === 'ok') stmts.setAgentNudgeAt.run(agent.id);
         bus.emit('activity:new', { event_type: 'agent.dispatched', summary: agent.name + ' → ' + result.status });
         res.json(result);
         return;
