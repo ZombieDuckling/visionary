@@ -161,6 +161,20 @@
   // --- Last SSE Event Time ---
   var _lastSSEEventTime = null;
 
+  // --- Module-level SSE source (shared so drawer can attach listeners) ---
+  var _sseSource = null;
+
+  // --- Agent Drawer State ---
+  // Tracks SSE listener references so they can be removed on close.
+  var _drawer = {
+    agentId: null,
+    listeners: []   // [{eventType, fn}, …] registered on _sseSource
+  };
+
+  // --- Org node data cache (id → node data from /api/org) ---
+  // Populated each time the org chart renders so the drawer can read harness/watchdog data.
+  var _orgNodeDataMap = {};
+
   // --- Navigation generation counter (stale-async guard) ---
   var _navGeneration = 0;
 
@@ -358,6 +372,7 @@
       loadNotifications().catch(function () {});
     });
 
+    _sseSource = source;
     return source;
   }
 
@@ -760,11 +775,265 @@
   }
 
   // Agents view: grid of 8 agent cards with live status + kill switch
+  // ============================================================
+  //  Agent Drawer \u2014 slide-out panel for per-agent detail + SSE
+  // ============================================================
+
+  // Close the drawer and release all SSE listeners registered for it.
+  function closeAgentDrawer() {
+    // Remove SSE listeners added for this drawer session
+    _drawer.listeners.forEach(function (entry) {
+      if (entry.eventType === '_keydown_cleanup') {
+        // synthetic entry: call fn directly to remove the document keydown handler
+        entry.fn();
+      } else if (_sseSource) {
+        _sseSource.removeEventListener(entry.eventType, entry.fn);
+      }
+    });
+    _drawer.listeners = [];
+    _drawer.agentId = null;
+
+    var el = document.getElementById('agent-drawer');
+    if (el) el.remove();
+    var backdrop = document.getElementById('agent-drawer-backdrop');
+    if (backdrop) backdrop.remove();
+  }
+
+  // Register a drawer SSE listener that will be cleaned up on close.
+  function drawerSSEListen(eventType, fn) {
+    if (!_sseSource) return;
+    _sseSource.addEventListener(eventType, fn);
+    _drawer.listeners.push({ eventType: eventType, fn: fn });
+  }
+
+  // Append a message bubble to the drawer stream area.
+  function drawerAppendMessage(streamEl, role, content, harness, ts) {
+    var bubble = document.createElement('div');
+    bubble.className = 'drawer-msg drawer-msg-' + (role === 'user' ? 'user' : role === 'assistant' ? 'assistant' : 'system');
+    var meta = '';
+    if (harness) meta += '<span class="drawer-msg-harness">' + esc(harness) + '</span>';
+    if (ts) meta += '<span class="drawer-msg-ts">' + timeAgo(ts) + '</span>';
+    bubble.innerHTML = (meta ? '<div class="drawer-msg-meta">' + meta + '</div>' : '')
+      + '<div class="drawer-msg-body">' + renderMarkdown(content) + '</div>';
+    streamEl.insertBefore(bubble, streamEl.firstChild);
+  }
+
+  // Open the drawer for a given agent node.
+  function openAgentDrawer(agentId, nodeData) {
+    // Close any existing drawer first (handles switching agents)
+    closeAgentDrawer();
+
+    _drawer.agentId = agentId;
+
+    // --- Backdrop ---
+    var backdrop = document.createElement('div');
+    backdrop.id = 'agent-drawer-backdrop';
+    backdrop.className = 'agent-drawer-backdrop';
+    backdrop.addEventListener('click', closeAgentDrawer);
+    document.body.appendChild(backdrop);
+
+    // --- Drawer shell ---
+    var drawer = document.createElement('div');
+    drawer.id = 'agent-drawer';
+    drawer.className = 'agent-drawer';
+    drawer.setAttribute('role', 'complementary');
+    drawer.setAttribute('aria-label', 'Agent detail panel');
+
+    // Resolve display info
+    var agentObj = (state.agents || []).find(function (a) { return a.id === agentId; })
+      || AGENTS.find(function (a) { return a.id === agentId; })
+      || { id: agentId, name: agentId };
+    var agentColor = agentObj.color || AGENT_COLORS[agentId] || '#00F0FF';
+    var icon = agentObj.icon || AGENT_ICONS[agentId] || '';
+    var agentName = agentObj.name || agentId;
+    var nd = nodeData || {};
+    var healthStatus = nd.health_status || agentObj.health_status || 'unknown';
+    var healthCls = 'health-' + healthStatus;
+    var model = (agentObj.model || '').replace(/-\d{8}$/, '');
+    var runtime = agentObj.runtime || '';
+    var chain = (nd.harness_chain || []).map(function (h) {
+      var active = h === nd.current_harness;
+      return '<span class="org-harness' + (active ? ' active' : '') + '">' + esc(h) + '</span>';
+    }).join('');
+    var watchdogInfo = nd.watchdog_config
+      ? '<span class="drawer-meta-val">' + esc(JSON.stringify(nd.watchdog_config)) + '</span>'
+      : '<span class="drawer-meta-val drawer-meta-none">none</span>';
+
+    drawer.innerHTML = ''
+      + '<div class="drawer-header" style="--drawer-color: ' + esc(agentColor) + '">'
+      +   '<div class="drawer-title-row">'
+      +     '<span class="org-led ' + esc(healthCls) + '"></span>'
+      +     (icon ? '<span class="drawer-icon">' + esc(icon) + '</span>' : '')
+      +     '<span class="drawer-agent-name">' + esc(agentName) + '</span>'
+      +     '<button class="drawer-close" id="drawer-close-btn" aria-label="Close drawer">\u2715</button>'
+      +   '</div>'
+      +   '<div class="drawer-meta-grid">'
+      +     (model    ? '<span class="drawer-meta-key">Model</span><span class="drawer-meta-val">' + esc(model) + '</span>' : '')
+      +     (runtime  ? '<span class="drawer-meta-key">Runtime</span><span class="drawer-meta-val">' + esc(runtime) + '</span>' : '')
+      +     '<span class="drawer-meta-key">Health</span><span class="drawer-meta-val drawer-health-' + esc(healthStatus) + '">' + esc(healthStatus) + '</span>'
+      +     (chain    ? '<span class="drawer-meta-key">Harness</span><div class="org-harness-chain drawer-harness-chain">' + chain + '</div>' : '')
+      +     '<span class="drawer-meta-key">Watchdog</span>' + watchdogInfo
+      +   '</div>'
+      + '</div>'
+      + '<div class="drawer-section-label">DISPATCH</div>'
+      + '<div class="drawer-dispatch-area">'
+      +   '<textarea class="drawer-dispatch-input" id="drawer-dispatch-input" rows="3" placeholder="Message ' + esc(agentName) + '\u2026"></textarea>'
+      +   '<div class="drawer-dispatch-row">'
+      +     '<div id="drawer-dispatch-error" class="drawer-dispatch-error hidden"></div>'
+      +     '<button class="btn btn-primary drawer-dispatch-btn" id="drawer-dispatch-btn">\u25B6 Dispatch</button>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="drawer-section-label">LIVE STREAM <span id="drawer-stream-indicator" class="drawer-stream-dot hidden"></span></div>'
+      + '<div class="drawer-stream" id="drawer-stream"><div class="drawer-stream-empty">Dispatch to see live output here.</div></div>'
+      + '<div class="drawer-section-label">RECENT MESSAGES</div>'
+      + '<div class="drawer-messages" id="drawer-messages"><div class="overview-loading">Loading\u2026</div></div>';
+
+    document.body.appendChild(drawer);
+
+    // Trigger CSS transition on next frame
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        drawer.classList.add('open');
+        backdrop.classList.add('open');
+      });
+    });
+
+    // --- Close button ---
+    drawer.querySelector('#drawer-close-btn').addEventListener('click', closeAgentDrawer);
+
+    // --- Keyboard ESC ---
+    function onKeydown(e) {
+      if (e.key === 'Escape') { closeAgentDrawer(); document.removeEventListener('keydown', onKeydown); }
+    }
+    document.addEventListener('keydown', onKeydown);
+    // Store cleanup ref for keydown
+    _drawer.listeners.push({ eventType: '_keydown_cleanup', fn: function () { document.removeEventListener('keydown', onKeydown); } });
+
+    // --- Load recent messages ---
+    var messagesEl = drawer.querySelector('#drawer-messages');
+    api('/agents/' + encodeURIComponent(agentId) + '/messages?limit=20').then(function (data) {
+      var msgs = data.messages || [];
+      if (!messagesEl.isConnected) return;
+      if (!msgs.length) {
+        messagesEl.innerHTML = '<div class="drawer-stream-empty">No messages yet.</div>';
+        return;
+      }
+      messagesEl.innerHTML = '';
+      msgs.forEach(function (m) {
+        drawerAppendMessage(messagesEl, m.role, m.content, m.harness, m.created_at);
+      });
+    }).catch(function () {
+      if (messagesEl.isConnected) messagesEl.innerHTML = '<div class="drawer-stream-empty">Failed to load messages.</div>';
+    });
+
+    // --- Dispatch handler ---
+    var dispatchBtn = drawer.querySelector('#drawer-dispatch-btn');
+    var dispatchInput = drawer.querySelector('#drawer-dispatch-input');
+    var dispatchError = drawer.querySelector('#drawer-dispatch-error');
+    var streamEl = drawer.querySelector('#drawer-stream');
+    var streamIndicator = drawer.querySelector('#drawer-stream-indicator');
+
+    // SSE filter strategy: CLIENT-SIDE filtering.
+    // We listen to the existing /api/events stream (_sseSource) and filter events
+    // where d.agent_id === _drawer.agentId. This avoids any server changes and
+    // works because every agent:started/completed/failed/progress event carries agent_id.
+    function attachDrawerSSE() {
+      function handleAgentEvent(e) {
+        var d;
+        try { d = JSON.parse(e.data); } catch (err) { return; }
+        if (d.agent_id !== _drawer.agentId) return;
+
+        streamIndicator.classList.remove('hidden');
+
+        var eventType = e.type;
+        if (eventType === 'agent:started') {
+          var startBubble = document.createElement('div');
+          startBubble.className = 'drawer-stream-event drawer-stream-started';
+          startBubble.textContent = '\u25CF Run started \u00B7 ' + timeAgo(new Date().toISOString());
+          streamEl.innerHTML = '';
+          streamEl.appendChild(startBubble);
+        } else if (eventType === 'agent:progress') {
+          // Update elapsed time display in a progress bubble
+          var existing = streamEl.querySelector('.drawer-stream-progress');
+          if (!existing) {
+            existing = document.createElement('div');
+            existing.className = 'drawer-stream-event drawer-stream-progress';
+            streamEl.appendChild(existing);
+          }
+          existing.textContent = '\u25B6 Running \u00B7 ' + formatElapsed(d.elapsed_ms || 0);
+        } else if (eventType === 'agent:completed') {
+          streamIndicator.classList.add('hidden');
+          var doneBubble = document.createElement('div');
+          doneBubble.className = 'drawer-stream-event drawer-stream-done';
+          doneBubble.textContent = '\u2713 Completed';
+          streamEl.appendChild(doneBubble);
+          // Reload messages to show the new assistant turn
+          api('/agents/' + encodeURIComponent(_drawer.agentId) + '/messages?limit=20').then(function (data) {
+            var msgs = data.messages || [];
+            if (!messagesEl.isConnected) return;
+            messagesEl.innerHTML = '';
+            msgs.forEach(function (m) {
+              drawerAppendMessage(messagesEl, m.role, m.content, m.harness, m.created_at);
+            });
+          }).catch(function () {});
+        } else if (eventType === 'agent:failed') {
+          streamIndicator.classList.add('hidden');
+          var failBubble = document.createElement('div');
+          failBubble.className = 'drawer-stream-event drawer-stream-fail';
+          failBubble.textContent = '\u2715 Failed' + (d.error ? ': ' + d.error : '');
+          streamEl.appendChild(failBubble);
+        }
+      }
+
+      drawerSSEListen('agent:started',   handleAgentEvent);
+      drawerSSEListen('agent:progress',  handleAgentEvent);
+      drawerSSEListen('agent:completed', handleAgentEvent);
+      drawerSSEListen('agent:failed',    handleAgentEvent);
+    }
+
+    attachDrawerSSE();
+
+    dispatchBtn.addEventListener('click', function () {
+      var message = dispatchInput.value.trim();
+      if (!message) {
+        dispatchError.textContent = 'Message is required';
+        dispatchError.classList.remove('hidden');
+        return;
+      }
+      dispatchError.classList.add('hidden');
+      dispatchBtn.disabled = true;
+      dispatchBtn.textContent = 'Dispatching\u2026';
+
+      streamEl.innerHTML = '<div class="drawer-stream-event drawer-stream-queued">\u23F3 Queuing dispatch\u2026</div>';
+      streamIndicator.classList.remove('hidden');
+
+      api('/dispatch', { method: 'POST', body: { agent_id: agentId, message: message } })
+        .then(function () {
+          dispatchInput.value = '';
+          dispatchBtn.disabled = false;
+          dispatchBtn.textContent = '\u25B6 Dispatch';
+          showToast('Dispatched to ' + agentName);
+        })
+        .catch(function (err) {
+          dispatchBtn.disabled = false;
+          dispatchBtn.textContent = '\u25B6 Dispatch';
+          streamIndicator.classList.add('hidden');
+          var msg = (err.data && err.data.error) ? err.data.error : 'Dispatch failed';
+          dispatchError.textContent = msg;
+          dispatchError.classList.remove('hidden');
+          streamEl.innerHTML = '<div class="drawer-stream-event drawer-stream-fail">\u2715 ' + esc(msg) + '</div>';
+        });
+    });
+
+    // Focus textarea for quick typing
+    dispatchInput.focus();
+  }
+
   function renderAgents(container) {
     container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83C\uDFD9</span> Org Chart</h2>'
       + '<div id="org-chart-mount" class="org-chart"><div class="overview-loading">Loading org chart...</div></div>';
 
-    // Event delegation for dispatch + kill on the org tree
+    // Event delegation for dispatch + kill + drawer on the org tree
     container.addEventListener('click', function (e) {
       var killBtn = e.target.closest('[data-action="kill-agent"]');
       if (killBtn) {
@@ -778,7 +1047,16 @@
       var dispatchBtn = e.target.closest('[data-action="dispatch-agent"]');
       if (dispatchBtn) {
         var agentId = dispatchBtn.getAttribute('data-agent-id');
-        showAgentDispatchForm(agentId);
+        // Open drawer instead of the old overlay form — drawer has inline dispatch
+        var node = dispatchBtn.closest('.org-node');
+        openAgentDrawer(agentId, node ? _orgNodeDataMap[agentId] : null);
+        return;
+      }
+      // Clicking any part of a node (except action buttons) opens the drawer
+      var orgNode = e.target.closest('.org-node');
+      if (orgNode && !e.target.closest('.org-node-actions')) {
+        var nodeAgentId = orgNode.getAttribute('data-agent-id');
+        if (nodeAgentId) openAgentDrawer(nodeAgentId, _orgNodeDataMap[nodeAgentId] || null);
       }
     });
 
@@ -798,10 +1076,23 @@
     });
   }
 
+  function indexOrgNodes(node) {
+    if (!node || !node.id) return;
+    _orgNodeDataMap[node.id] = node;
+    if (node.reports && node.reports.length) {
+      node.reports.forEach(indexOrgNodes);
+    }
+  }
+
   function renderOrgChartHTML(data) {
     if (!data || !data.ceo) {
       return '<div class="empty-state"><div class="empty-state-title">No org chart configured</div><div class="empty-state-desc">Edit personalities/org-chart.json and restart the server.</div></div>';
     }
+    // Rebuild node data cache for the drawer
+    _orgNodeDataMap = {};
+    indexOrgNodes(data.ceo);
+    (data.orphans || []).forEach(indexOrgNodes);
+
     // Build an index of agent operational state by id (status, model, icon, etc.)
     var agentsById = {};
     var sourceAgents = (state.agents && state.agents.length) ? state.agents : AGENTS;
@@ -826,7 +1117,7 @@
       return '<span class="org-harness' + (active ? ' active' : '') + '">' + esc(h) + '</span>';
     }).join('');
 
-    var html = '<div class="org-node org-role-' + esc(node.role || 'ic') + ' ' + statusClass + '" data-depth="' + depth + '" style="--node-color: ' + esc(color) + '">'
+    var html = '<div class="org-node org-role-' + esc(node.role || 'ic') + ' ' + statusClass + '" data-depth="' + depth + '" data-agent-id="' + esc(node.id) + '" style="--node-color: ' + esc(color) + '; cursor: pointer;">'
       + '<div class="org-node-head">'
       + '<span class="org-led"></span>'
       + (icon ? '<span class="org-icon">' + esc(icon) + '</span>' : '')
