@@ -5,6 +5,7 @@ const { URL } = require('node:url');
 const { execFile, execFileSync } = require('node:child_process');
 const { db, stmts } = require('./db');
 const { bus, handleSSE } = require('./sse');
+const runtimes = require('./src/runtimes');
 
 // Read HTML file once at startup
 const indexHTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
@@ -48,27 +49,67 @@ const agentConfigs = [
 ];
 const agentAliases = { jarvis: 'main' };
 const validAgentIds = agentConfigs.map(a => a.id).concat(['jarvis']);
+const DEFAULT_SETTINGS = {
+  port: Number(process.env.VISIONARY_PORT || 3333),
+  workspace_path: process.env.VISIONARY_WORKSPACE || path.join(process.env.HOME || '', '.openclaw', 'workspace'),
+  theme: 'dark',
+  default_runtime: 'openclaw'
+};
 
-// Build CLI command per runtime
-function buildDispatchCommand(agentId, message) {
-  const cfg = agentConfigs.find(a => a.id === agentId);
-  const runtime = cfg ? cfg.runtime : 'openclaw';
+function safeJsonParse(text, fallback) {
+  try { return JSON.parse(text); } catch { return fallback; }
+}
 
-  switch (runtime) {
-    case 'claude':
-      return { bin: 'claude', args: ['-p', message, '--max-turns', '5'] };
-    case 'codex':
-      return { bin: 'codex', args: ['exec', message, '--skip-git-repo-check'] };
-    case 'gemini':
-      return { bin: 'gemini', args: ['-p', message] };
-    case 'ollama':
-      return { bin: 'ollama', args: ['run', 'llama3.2:3b', message] };
-    case 'hermes':
-      return { bin: 'hermes', args: ['--yolo', 'chat', '-q', message, '--toolsets', 'terminal,file,web,browser,cronjob', '--source', 'visionary'] };
-    case 'openclaw':
-    default:
-      return { bin: 'openclaw', args: ['agent', '--local', '--agent', agentId, '--message', message, '--json', '--timeout', '600'] };
+function getAppSettings() {
+  const row = stmts.getSettings.get('app');
+  const saved = row ? safeJsonParse(row.value_json, {}) : {};
+  return { ...DEFAULT_SETTINGS, ...saved, updated_at: row ? row.updated_at : null };
+}
+
+function saveAppSettings(input) {
+  const current = getAppSettings();
+  const runtimeIds = runtimes.listRuntimes().map(r => r.id);
+  const next = {
+    port: Number(input.port || current.port || DEFAULT_SETTINGS.port),
+    workspace_path: String(input.workspace_path || current.workspace_path || DEFAULT_SETTINGS.workspace_path),
+    theme: ['dark', 'light', 'system'].includes(input.theme) ? input.theme : current.theme,
+    default_runtime: runtimeIds.includes(input.default_runtime) ? input.default_runtime : current.default_runtime
+  };
+  if (!Number.isInteger(next.port) || next.port < 1 || next.port > 65535) {
+    throw new Error('port must be an integer from 1 to 65535');
   }
+  stmts.upsertSettings.run({ key: 'app', value_json: JSON.stringify(next) });
+  return getAppSettings();
+}
+
+agentConfigs.forEach(function (agent) {
+  stmts.upsertAgentRuntime.run({
+    id: agent.id,
+    name: agent.name,
+    runtime: agent.runtime || 'openclaw',
+    config_json: JSON.stringify({ model: agent.model, role: agent.role })
+  });
+});
+
+function resolveAgentConfig(agentId) {
+  const canonical = agentAliases[agentId] || agentId;
+  const cfg = agentConfigs.find(a => a.id === canonical);
+  if (!cfg) return null;
+  const dbRuntime = stmts.getAgentRuntime.get(canonical);
+  const settings = getAppSettings();
+  return {
+    ...cfg,
+    id: canonical,
+    runtime: (dbRuntime && dbRuntime.runtime) || cfg.runtime || settings.default_runtime || 'openclaw'
+  };
+}
+
+// Build CLI command per runtime through the adapter registry.
+function buildDispatchCommand(agentId, message) {
+  const cfg = resolveAgentConfig(agentId);
+  const runtimeName = cfg ? cfg.runtime : 'openclaw';
+  const runtime = runtimes.getRuntime(runtimeName);
+  return runtime.buildCommand({ agentId: cfg ? cfg.id : agentId, message, model: cfg && cfg.model, agent: cfg });
 }
 
 // INTEL-02: Jarvis auto-routing — keyword matching to select best agent
@@ -366,7 +407,7 @@ function dispatchAgent(taskId, agentId, message) {
 
   // Spawn CLI process via runtime-specific command (execFile -- no shell, prevents injection)
   const cmd = buildDispatchCommand(agentId, message);
-  const cfg = agentConfigs.find(a => a.id === agentId);
+  const cfg = resolveAgentConfig(agentId);
   const runtimeLabel = cfg ? cfg.runtime : 'openclaw';
   stmts.insertActivity.run({
     event_type: 'dispatch.runtime', agent_id: agentId, task_id: taskId,
@@ -1127,13 +1168,42 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // GET /api/settings + PUT /api/settings
+      if (method === 'GET' && pathname === '/api/settings') {
+        res.json({ settings: getAppSettings(), runtimes: runtimes.listRuntimes() });
+        return;
+      }
+      if (method === 'PUT' && pathname === '/api/settings') {
+        const body = await readBody(req);
+        try {
+          const settings = saveAppSettings(body || {});
+          stmts.insertActivity.run({
+            event_type: 'settings.updated', agent_id: 'system', task_id: null,
+            project_id: null, summary: 'Operator settings updated',
+            detail_json: JSON.stringify({ settings })
+          });
+          bus.emit('activity:new', { event_type: 'settings.updated', agent_id: 'system', summary: 'Operator settings updated' });
+          res.json({ settings, restart_required: true, restart_fields: ['port', 'workspace_path'] });
+        } catch (err) {
+          res.json({ error: err.message }, 400);
+        }
+        return;
+      }
+
+      // GET /api/runtimes
+      if (method === 'GET' && pathname === '/api/runtimes') {
+        res.json({ runtimes: runtimes.listRuntimes() });
+        return;
+      }
+
       // GET /api/agents
       if (method === 'GET' && pathname === '/api/agents') {
         const latestRuns = stmts.getLatestRunPerAgent.all();
         const runningAgents = stmts.getRunningAgents.all().map(r => r.agent_id);
         const runMap = {};
         latestRuns.forEach(function (r) { runMap[r.agent_id] = r; });
-        const agents = agentConfigs.map(function (cfg) {
+        const agents = agentConfigs.map(function (baseCfg) {
+          const cfg = resolveAgentConfig(baseCfg.id) || baseCfg;
           const run = runMap[cfg.id];
           let status = 'idle';
           if (runningAgents.indexOf(cfg.id) !== -1) {
@@ -1149,6 +1219,7 @@ const server = http.createServer(async (req, res) => {
             icon: cfg.icon,
             role: cfg.role,
             model: cfg.model,
+            runtime: cfg.runtime,
             color: cfg.color,
             status: status,
             last_activity: run ? (run.completed_at || run.started_at) : null,

@@ -48,6 +48,10 @@ All paths are overridable via env vars — no hardcoded user directories:
 | `VISIONARY_NODE` | `process.execPath` (current node) | Node binary used by the Electron shell to spawn the server |
 | `PORT` | `3333` | HTTP port |
 
+The dashboard also has a Settings tab for operator-owned defaults. It persists port, workspace path, theme, and default runtime in SQLite via `GET /api/settings` and `PUT /api/settings`. Theme changes apply immediately; port and workspace changes require a server restart.
+
+Agent dispatch is routed through `src/runtimes/`. Add a new runtime by exporting `{ buildCommand, dispatch, kill, healthcheck }`, registering it in `src/runtimes/index.js`, and assigning an agent/default runtime in the settings/agents registry. OpenClaw remains the default runtime and its CLI arguments are unchanged.
+
 ## Project layout
 
 ```

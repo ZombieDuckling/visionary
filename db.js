@@ -112,6 +112,26 @@ const migrations = [
 
   CREATE INDEX idx_interview_task ON interview_sessions(task_id);
   CREATE INDEX idx_projects_status ON projects(status);
+  `,
+
+  // Migration 2 -> 3: Runtime registry metadata + operator settings
+  `
+  CREATE TABLE IF NOT EXISTS agents (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    runtime TEXT DEFAULT 'openclaw' NOT NULL,
+    config_json TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  INSERT OR IGNORE INTO settings (key, value_json) VALUES ('app', '{}');
   `
 ];
 
@@ -243,6 +263,21 @@ const stmts = {
   `),
   getLastRunCost: db.prepare(`
     SELECT estimated_cost_usd FROM agent_runs WHERE agent_id = ? AND estimated_cost_usd IS NOT NULL ORDER BY id DESC LIMIT 1
+  `),
+
+  // Agent/runtime + settings statements
+  upsertAgentRuntime: db.prepare(`
+    INSERT INTO agents (id, name, runtime, config_json, updated_at)
+    VALUES (@id, @name, @runtime, @config_json, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, runtime = excluded.runtime,
+      config_json = excluded.config_json, updated_at = datetime('now')
+  `),
+  getAgentRuntime: db.prepare('SELECT * FROM agents WHERE id = ?'),
+  getAllAgentRuntimes: db.prepare('SELECT * FROM agents ORDER BY id'),
+  getSettings: db.prepare('SELECT value_json, updated_at FROM settings WHERE key = ?'),
+  upsertSettings: db.prepare(`
+    INSERT INTO settings (key, value_json, updated_at) VALUES (@key, @value_json, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = datetime('now')
   `),
 
   // Export/import statements

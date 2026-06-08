@@ -2144,6 +2144,66 @@
     state.projects = data.projects || [];
   }
 
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme || 'dark');
+  }
+
+  function renderSettings(container) {
+    var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
+    container._viewRequestId = requestId;
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">⚙️</span> Settings</h2>'
+      + '<div class="empty-state"><div class="spinner"></div> Loading settings...</div>';
+
+    api('/settings').then(function (data) {
+      if (container._viewRequestId !== requestId || state.activeTab !== 'settings') return;
+      var settings = data.settings || {};
+      var runtimes = data.runtimes || [];
+      var runtimeOptions = runtimes.map(function (rt) {
+        var id = rt.id || rt.name;
+        return '<option value="' + esc(id) + '"' + (id === settings.default_runtime ? ' selected' : '') + '>' + esc(id) + '</option>';
+      }).join('');
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">⚙️</span> Settings</h2>'
+        + '<section class="card settings-panel">'
+        + '<form id="settings-form" class="settings-form">'
+        + '<label><span>Port</span><input class="input" name="port" type="number" min="1" max="65535" value="' + esc(settings.port || 3333) + '"></label>'
+        + '<label><span>Workspace path</span><input class="input" name="workspace_path" type="text" value="' + esc(settings.workspace_path || '') + '"></label>'
+        + '<label><span>Theme</span><select class="input" name="theme">'
+        + '<option value="dark"' + (settings.theme === 'dark' ? ' selected' : '') + '>Dark</option>'
+        + '<option value="light"' + (settings.theme === 'light' ? ' selected' : '') + '>Light</option>'
+        + '<option value="system"' + (settings.theme === 'system' ? ' selected' : '') + '>System</option>'
+        + '</select></label>'
+        + '<label><span>Default runtime</span><select class="input" name="default_runtime">' + runtimeOptions + '</select></label>'
+        + '<div class="settings-actions"><button class="btn btn-primary" type="submit">Save settings</button><a class="btn" href="/api/export">Export data</a></div>'
+        + '<div class="settings-note">Theme applies immediately. Port and workspace path are saved, but require a server restart.</div>'
+        + '<div id="settings-status" class="overview-meta"></div>'
+        + '</form></section>';
+      applyTheme(settings.theme || 'dark');
+      var form = container.querySelector('#settings-form');
+      var status = container.querySelector('#settings-status');
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var body = {
+          port: Number(form.port.value),
+          workspace_path: form.workspace_path.value,
+          theme: form.theme.value,
+          default_runtime: form.default_runtime.value
+        };
+        api('/settings', { method: 'PUT', body: JSON.stringify(body) }).then(function (saved) {
+          applyTheme(saved.settings.theme || 'dark');
+          status.textContent = 'Saved. Restart required for port/workspace changes.';
+        }).catch(function (err) {
+          status.textContent = 'Error: ' + (((err || {}).data || {}).error || err.message || 'failed to save');
+        });
+      });
+      form.theme.addEventListener('change', function () { applyTheme(form.theme.value); });
+    }).catch(function (err) {
+      if (container._viewRequestId !== requestId || state.activeTab !== 'settings') return;
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">⚙️</span> Settings</h2>'
+        + '<div class="card overview-alert"><span class="badge badge-red">Error</span><span>' + esc((((err || {}).data || {}).error) || err.message || 'Failed to load settings') + '</span></div>';
+    });
+  }
+
   // --- Tab Router (hash-based) ---
   var tabs = {
     '#/overview': { render: renderOverview, label: 'Overview' },
@@ -2156,7 +2216,8 @@
     '#/audits': { render: renderAudits, label: 'Audits' },
     '#/portfolio': { render: renderPortfolio, label: 'Portfolio' },
     '#/memory': { render: renderMemory, label: 'Memory' },
-    '#/projects': { render: renderProjects, label: 'Projects' }
+    '#/projects': { render: renderProjects, label: 'Projects' },
+    '#/settings': { render: renderSettings, label: 'Settings' }
   };
 
   function navigate() {
