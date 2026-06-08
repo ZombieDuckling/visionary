@@ -53,13 +53,27 @@
   --fs-lg: 17px;
   --fs-xl: 22px;
 
+  /* Spacing — bumped one notch for modern breathing room inside Win95 chrome */
   --s-1: 2px;
   --s-2: 4px;
-  --s-3: 6px;
-  --s-4: 8px;
-  --s-5: 12px;
-  --s-6: 16px;
-  --s-8: 20px;
+  --s-3: 8px;
+  --s-4: 12px;
+  --s-5: 16px;
+  --s-6: 20px;
+  --s-8: 28px;
+
+  /* Bright separation accents — used to chunk sections + status by color */
+  --accent-board:    #1084D0;
+  --accent-agents:   #800080;
+  --accent-activity: #008000;
+  --accent-inbox:    #C06000;
+  --accent-crons:    #008080;
+  --accent-briefs:   #806000;
+  --accent-audits:   #800000;
+  --accent-portfolio:#006000;
+  --accent-memory:   #5C0080;
+  --accent-projects: #000080;
+  --accent-settings: #404040;
 
   /* Bevel patterns */
   --bevel-out:
@@ -287,7 +301,7 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
 .main-content {
   overflow-y: auto;
-  padding: var(--s-5);
+  padding: var(--s-6);
   background: var(--face);
   box-shadow: var(--bevel-in);
 }
@@ -310,9 +324,24 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   background: var(--face);
   box-shadow: var(--bevel-in-thin);
 }
-.status-bar-center { display: flex; gap: var(--s-5); justify-content: center; }
-.status-metric { color: var(--black); }
-.status-metric-value { font-weight: 700; margin-left: 4px; color: var(--info); }
+.status-bar-center { display: flex; gap: var(--s-3); justify-content: center; }
+.status-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 8px;
+  color: var(--ink-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.status-metric-value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--fs-md);
+  color: var(--info);
+  margin: 0;
+}
 
 /* ============================================
    CHAT PANEL — looks like an MSN/AIM window
@@ -670,27 +699,44 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .board-card {
   background: var(--face);
   box-shadow: var(--bevel-out);
-  padding: var(--s-3);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-5);
   cursor: grab;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
+.board-card::before {
+  /* modern priority strip on the left edge */
+  content: '';
+  position: absolute;
+  top: 4px; bottom: 4px; left: 4px;
+  width: 4px;
+  background: var(--priority-medium);
+  box-shadow: var(--bevel-out-thin);
+}
+.board-card:has(.badge:is([class*="critical"])):before,
+.board-card:has(.badge-red)::before    { background: var(--priority-critical); }
+.board-card:has(.badge-orange)::before  { background: var(--priority-high); }
+.board-card:has(.badge-green)::before   { background: var(--ok); }
+.board-card:has(.badge-cyan)::before    { background: var(--info); }
 .board-card:active { cursor: grabbing; }
 .board-card.dragging { opacity: 0.6; }
 .board-card-title {
   font-family: var(--font-ui);
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   color: var(--black);
-  line-height: 1.25;
+  line-height: 1.3;
 }
 .board-card-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-size: var(--fs-xs);
-  color: var(--black);
+  color: var(--ink-muted);
 }
 
 .task-running-indicator {
@@ -728,23 +774,33 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   padding: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 .agent-card::before {
+  /* the title bar — but with the agent's own color */
   content: attr(data-agent-id);
   text-transform: capitalize;
   display: block;
-  padding: 2px 6px;
+  padding: 3px 8px;
   background: linear-gradient(90deg, var(--title-inactive), #B5B5B5);
   color: var(--title-text);
   font-size: var(--fs-sm);
   font-weight: 700;
-  letter-spacing: 0;
 }
 .agent-card.agent-running::before {
   background: linear-gradient(90deg, var(--title-active-start), var(--title-active-end));
 }
-.agent-card > * { margin: var(--s-3); }
-.agent-card > *:first-child:not(:empty) { margin-top: var(--s-3); }
+.agent-card[data-agent-id="jarvis"]::before   { background: linear-gradient(90deg, #000080, #1084D0); }
+.agent-card[data-agent-id="scout"]::before    { background: linear-gradient(90deg, #004848, #00A8A8); }
+.agent-card[data-agent-id="analyst"]::before  { background: linear-gradient(90deg, #400060, #800080); }
+.agent-card[data-agent-id="forge"]::before    { background: linear-gradient(90deg, #804000, #FF8000); }
+.agent-card[data-agent-id="sentinel"]::before { background: linear-gradient(90deg, #600000, #C00000); }
+.agent-card[data-agent-id="broker"]::before   { background: linear-gradient(90deg, #004000, #008000); }
+.agent-card[data-agent-id="ops"]::before      { background: linear-gradient(90deg, #400060, #800080); }
+.agent-card[data-agent-id="hunter"]::before   { background: linear-gradient(90deg, #600040, #C00080); }
+.agent-card > * { margin: 8px 12px; }
+.agent-card > *:first-of-type:not(:empty) { margin-top: 10px; }
+.agent-card > *:last-child { margin-bottom: 10px; }
 
 .agent-icon-lg {
   width: 32px; height: 32px;
@@ -794,39 +850,78 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .agent-dispatch-btn { align-self: flex-start; margin-top: var(--s-2); }
 
 /* ============================================
-   ACTIVITY FEED
+   ACTIVITY FEED — modern timeline in Win95 chrome
    ============================================ */
 
 .activity-list {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  background: var(--face);
+  gap: 2px;
+  background: var(--face-input);
   box-shadow: var(--bevel-in);
-  padding: 2px;
+  padding: var(--s-4) var(--s-4) var(--s-4) 32px;
+}
+.activity-list::before {
+  /* vertical timeline rail */
+  content: '';
+  position: absolute;
+  top: var(--s-4);
+  bottom: var(--s-4);
+  left: 20px;
+  width: 2px;
+  background: var(--face-dim);
+  box-shadow: inset 0 0 0 1px var(--lo-2);
 }
 .activity-item {
   display: grid;
-  grid-template-columns: 80px auto 1fr;
-  gap: var(--s-3);
+  grid-template-columns: 84px auto 1fr;
+  gap: var(--s-4);
   align-items: center;
-  padding: 3px 6px;
-  background: var(--face-input);
-  font-family: var(--font-mono);
+  padding: 6px 8px;
+  background: var(--face);
+  box-shadow: var(--bevel-out-thin);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
+  position: relative;
 }
-.activity-item:nth-of-type(even) { background: var(--face-2); }
-.activity-time { color: var(--ink-muted); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.activity-item::before {
+  /* the timeline dot */
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  width: 8px; height: 8px;
+  background: var(--info);
+  box-shadow: var(--bevel-out-thin);
+  transform: translateY(-50%);
+}
+.activity-item:has(.activity-agent-badge[data-agent-id="jarvis"])::before { background: var(--agent-jarvis); }
+.activity-item:has(.activity-agent-badge[data-agent-id="scout"])::before  { background: var(--agent-scout); }
+.activity-item:has(.activity-agent-badge[data-agent-id="forge"])::before  { background: var(--agent-forge); }
+.activity-item:has(.activity-agent-badge[data-agent-id="sentinel"])::before { background: var(--agent-sentinel); }
+.activity-item:has(.activity-agent-badge[data-agent-id="broker"])::before { background: var(--agent-broker); }
+.activity-item:has(.activity-agent-badge[data-agent-id="ops"])::before    { background: var(--agent-ops); }
+.activity-item:has(.activity-agent-badge[data-agent-id="hunter"])::before { background: var(--agent-hunter); }
+.activity-item:has(.activity-agent-badge[data-agent-id="analyst"])::before { background: var(--agent-analyst); }
+.activity-time {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.03em;
+}
 .activity-agent-badge {
   font-family: var(--font-ui);
   font-size: var(--fs-xs);
   font-weight: 700;
-  padding: 1px 5px;
+  padding: 1px 6px;
   background: var(--info);
   color: var(--title-text);
   box-shadow: var(--bevel-out-thin);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.activity-summary { color: var(--black); font-family: var(--font-ui); }
+.activity-summary { color: var(--black); font-family: var(--font-ui); font-size: var(--fs-sm); }
 
 /* ============================================
    INBOX
@@ -1112,14 +1207,30 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .inferred { color: var(--ink-muted); font-style: italic; }
 .error { color: var(--err); font-weight: 700; }
 
-/* Section titles that show up in page bodies (h2 etc) */
-.main-content h2 {
-  margin: 0 0 var(--s-3) 0;
+/* Section titles inside page bodies — modern hierarchy with Win95 accent underline */
+.main-content h1,
+.main-content > h2,
+.main-content > section > h2 {
+  margin: 0 0 var(--s-5) 0;
+  padding-bottom: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--black);
+  letter-spacing: -0.01em;
+  border-bottom: 2px solid var(--info);
+  box-shadow: 0 3px 0 var(--hi-2);
+}
+.main-content h3 {
+  margin: var(--s-5) 0 var(--s-3) 0;
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   font-weight: 700;
-  color: var(--black);
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
+.main-content p { color: var(--ink-muted); font-size: var(--fs-sm); }
 
 /* ============================================
    RESPONSIVE
