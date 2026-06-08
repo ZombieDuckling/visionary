@@ -7,17 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- CI workflow (`.github/workflows/test.yml`) — runs `npm run verify` on every push to `main` and every pull request, against Node 20.x and 22.x.
-- `VERSION` file as the canonical version source.
-- `CHANGELOG.md` (this file).
+## [2.0.0] — 2026-06-08
 
-### Coming in v2.0.0 (in progress)
-- PWA support — installable, offline-capable shell (#1)
-- Mobile-responsive layout (#2)
-- SQLite export / import endpoints for backup + portability (#3)
-- Agent runtime adapter interface (#4)
-- Settings panel — port, workspace, theme, default runtime (#5)
+### Major release: extensibility, portability, mobile, and a full visual overhaul
+
+Visionary v2 is a five-feature release plus a complete UI redesign. The dashboard is now installable as a PWA, usable on a phone, backup-portable, plug-in friendly for non-OpenClaw runtimes, and configurable from a settings tab — all under a new Memphis-pop brutalist look.
+
+### Added
+- **PWA support** (#1, #7) — `public/manifest.json` + `public/sw.js`. Installable from Chrome desktop and iOS Safari "Add to Home Screen". Network-first for `/api/*`, cache-first for the static shell, SSE bypassed so real-time updates keep working. Apple-touch-icon + theme-color meta wired up.
+- **Mobile-responsive layout** (#2) — breakpoints at 480px and 768px. Kanban collapses to 1-column on phones and 2×2 on small tablets. Chat panel docks to a bottom sheet on phones and slides over content as an overlay on tablets. All tap targets ≥44px in the phone breakpoint.
+- **SQLite export / import endpoints** (#3) — `GET /api/export` dumps all five tables as a timestamped JSON file; `POST /api/import` restores from the same shape inside a single transaction (idempotent INSERT OR REPLACE). New "Export Data" link in the header. Round-trip smoke test included.
+- **Agent runtime adapter interface** (#4) — dispatch is no longer hardcoded to `openclaw`. New `src/runtimes/` registry with adapters for `openclaw`, `claude-code`, and `hermes`. Agents gain a `runtime` column via forward migration. OpenClaw behaviour is unchanged.
+- **Settings panel** (#5) — new Settings tab. Configure port, workspace path, theme, and default runtime from the UI. Persisted in SQLite via `GET /api/settings` / `PUT /api/settings`. Theme changes apply immediately; port/workspace changes require a restart.
+- **Hermes gateway monitoring** (#6) — overview now surfaces the Hermes agent gateway's health when an orchestrator is configured.
+- **Memphis-pop brutalist redesign** (#13) — full `public/styles.css` rewrite. Deep-black base with electric pink / cyan / lime / orange / violet accents. Hard 4px-offset shadows (no blur), 3px white borders, Archivo Black UPPERCASE labels, Inter for body, IBM Plex Mono for data. Status-colored kanban column headers (butter / cyan / orange / lime), agent cards rotate shadow color by `nth-of-type`, lime-green pulse on the LIVE SSE badge.
+
+### Infrastructure
+- CI workflow (`.github/workflows/test.yml`) — `npm run verify` on every push and PR, against Node 20.x and 22.x.
+- Dependabot config — weekly npm and monthly GitHub Actions updates.
+- `SECURITY.md` — threat model and private vulnerability reporting workflow.
+- `VERSION` file and `CHANGELOG.md` as canonical sources.
+
+### Changed
+- Electron major: `32.3.3` → kept on 32 with builder updated to `26.15.2` (`#11`, `#12`, `9a35892`).
+- `actions/checkout` bumped to v6 (`#10`).
+- README "Configuration" section now documents the runtime adapter system and Settings tab.
+
+### Fixed
+- Board card priority badges render as styled spans instead of literal "badge-red" text (`30257ce`).
+- Slop cleanup — removed dead `priorityBadge` hoisting collision, unified `bridgePublishMessage` / `bridgePublish` onto one `bridgePost` helper, dropped three inner `require('node:http')` shadows, removed unused `aid_removed` local in `bridge.py` (`402d8b5`).
 
 ## [0.1.0] — 2026-06-08
 
@@ -46,5 +64,6 @@ First public cut of Visionary — a local-first desktop mission control for mult
 - `VISIONARY_NODE` (default: current node binary)
 - `PORT` (default: `3333`)
 
-[Unreleased]: https://github.com/ZombieDuckling/visionary/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ZombieDuckling/visionary/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/ZombieDuckling/visionary/releases/tag/v2.0.0
 [0.1.0]: https://github.com/ZombieDuckling/visionary/releases/tag/v0.1.0
