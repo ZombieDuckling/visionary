@@ -6,11 +6,11 @@ Copy everything below this line into a new Claude Code session to resume work.
 
 ## Context
 
-I've been building **Visionary Mission Control** — a custom project management + agent orchestration dashboard for my OpenClaw multi-agent system. It's a standalone Electron + Node.js app at `/Users/joshuasack/visionary/`.
+I've been building **Visionary Mission Control** — a custom project management + agent orchestration dashboard for my OpenClaw multi-agent system. It's a standalone Electron + Node.js app at `./`.
 
 ## What Exists
 
-### Dashboard App (`/Users/joshuasack/visionary/`)
+### Dashboard App (`./`)
 - **server.js** — Node.js HTTP server on port 3333 with REST API, SSE, agent dispatch
 - **db.js** — SQLite (better-sqlite3) with WAL mode, 5+ tables (tasks, agent_runs, notifications, activity_log, projects)
 - **sse.js** — Server-Sent Events for real-time push
@@ -65,7 +65,7 @@ Morning brief (Scout 06:00), Daily build (Forge 02:00), Security audits 2x (Sent
 
 ## How to Run
 ```bash
-cd /Users/joshuasack/visionary
+cd ./
 
 # Browser mode
 ~/.nvm/versions/node/v22.22.0/bin/node server.js

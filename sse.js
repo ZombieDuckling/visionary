@@ -26,9 +26,20 @@ function handleSSE(req, res) {
   clients.add(res);
 
   // Keepalive every 30 seconds to prevent connection timeout
-  const keepAlive = setInterval(() => res.write(': keepalive\n\n'), 30000);
+  const keepAlive = setInterval(() => {
+    if (res.destroyed) {
+      clearInterval(keepAlive);
+      clients.delete(res);
+      return;
+    }
+    try { res.write(': keepalive\n\n'); } catch { clients.delete(res); }
+  }, 30000);
 
   req.on('close', () => {
+    clients.delete(res);
+    clearInterval(keepAlive);
+  });
+  res.on('error', () => {
     clients.delete(res);
     clearInterval(keepAlive);
   });
@@ -42,14 +53,16 @@ function broadcast(eventType, data) {
   eventId++;
   const message = `id: ${eventId}\nevent: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
 
+  const dead = [];
   for (const client of clients) {
-    try {
-      client.write(message);
-    } catch {
-      // Dead connection -- remove from set
-      clients.delete(client);
+    if (client.destroyed) { dead.push(client); continue; }
+    const canWrite = client.write(message, 'utf8', () => {});
+    if (canWrite === false) {
+      // Client buffer is full (backpressure) — skip but don't disconnect
+      continue;
     }
   }
+  for (const dc of dead) clients.delete(dc);
 }
 
 // Wire bus events to broadcast

@@ -55,7 +55,7 @@
 
 - Drag-and-drop workflow builder (duplicates OpenClaw config, months of work)
 - Chat-based interaction (WhatsApp already exists for this)
-- Multi-user/team features (single user: Josh)
+- Multi-user/team features (single user: the user)
 - Custom LLM provider management (OpenClaw handles this)
 
 ## Traceability

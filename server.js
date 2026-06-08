@@ -2,12 +2,14 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
-const { execFile } = require('node:child_process');
+const { execFile, execFileSync } = require('node:child_process');
 const { db, stmts } = require('./db');
 const { bus, handleSSE } = require('./sse');
 
 // Read HTML file once at startup
 const indexHTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+const MAX_CHATS = 3;
+let activeChats = 0;
 
 // MIME type map
 const MIME_TYPES = {
@@ -25,6 +27,7 @@ const MIME_TYPES = {
 //   codex    = codex exec "<message>" --skip-git-repo-check
 //   gemini   = gemini -p "<message>"
 //   ollama   = ollama run <model> "<message>"
+//   hermes   = hermes --yolo chat -q "<message>"
 const agentConfigs = [
   { id: 'main',       name: 'Jarvis',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'GPT-5.4',            runtime: 'openclaw', color: '#3b8bff' },
   { id: 'scout',      name: 'Scout',      icon: '\uD83D\uDD2D',       role: 'Morning Intelligence — news, signals',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#06b6d4' },
@@ -38,6 +41,7 @@ const agentConfigs = [
   { id: 'coder',      name: 'Coder',      icon: '\uD83E\uDDD1\u200D\uD83D\uDCBB', role: 'Deep coding — debug, refactor, architecture', model: 'Claude Opus 4.6',  runtime: 'claude',   color: '#d97706' },
   { id: 'researcher', name: 'Researcher', icon: '\uD83C\uDF10',       role: 'Multi-source research — long context',          model: 'Gemini 2.5 Pro',     runtime: 'gemini',   color: '#4285f4' },
   { id: 'designer',   name: 'Designer',   icon: '\uD83C\uDFA8',       role: 'UI/UX — design systems, visual polish',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#e879f9' },
+  { id: 'hermes',     name: 'Hermes',     icon: '\uD83E\uDDED',       role: 'Persistent orchestrator — overnight build loop', model: 'Hermes Agent',       runtime: 'hermes',   color: '#00ff88' },
 ];
 const agentAliases = { jarvis: 'main' };
 const validAgentIds = agentConfigs.map(a => a.id).concat(['jarvis']);
@@ -56,9 +60,11 @@ function buildDispatchCommand(agentId, message) {
       return { bin: 'gemini', args: ['-p', message] };
     case 'ollama':
       return { bin: 'ollama', args: ['run', 'llama3.2:3b', message] };
+    case 'hermes':
+      return { bin: 'hermes', args: ['--yolo', 'chat', '-q', message, '--toolsets', 'terminal,file,web,browser,cronjob', '--source', 'visionary'] };
     case 'openclaw':
     default:
-      return { bin: 'openclaw', args: ['agent', '--agent', agentId, '--message', message, '--json', '--timeout', '600'] };
+      return { bin: 'openclaw', args: ['agent', '--local', '--agent', agentId, '--message', message, '--json', '--timeout', '600'] };
   }
 }
 
@@ -111,6 +117,8 @@ execFile('openclaw', ['cron', 'list', '--json'], {
 
 // Track active reviews to prevent concurrent review loops
 const activeReviews = new Set();
+const reviewRetries = new Map();
+const MAX_REVIEW_RETRIES = 3;
 
 // Auto-review: dispatch Reviewer agent to evaluate completed work
 function triggerReview(taskId, runId, originalAgent, resultText) {
@@ -128,9 +136,9 @@ function triggerReview(taskId, runId, originalAgent, resultText) {
     + 'Respond with EXACTLY one of these formats:\n'
     + 'APPROVE: [one-line summary of what was delivered]\n'
     + 'REJECT: [specific issues that need fixing]\n\n'
-    + 'Be strict. Only approve work that Josh can use immediately.';
+    + 'Be strict. Only approve work that the user can use immediately.';
 
-  const args = ['agent', '--agent', 'reviewer', '--message', reviewPrompt, '--json', '--timeout', '120'];
+  const args = ['agent', '--local', '--agent', 'reviewer', '--message', reviewPrompt, '--json', '--timeout', '120'];
   const env = Object.assign({}, process.env, { PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' });
 
   const reviewRun = stmts.insertRun.run({
@@ -192,10 +200,18 @@ function triggerReview(taskId, runId, originalAgent, resultText) {
         bus.emit('activity:new', { event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, summary: 'Rejected: ' + feedback });
         activeReviews.delete(taskId);
 
-        // Redeploy original agent with review feedback
+        // Redeploy original agent with review feedback (with retry limit)
+        const retries = reviewRetries.get(taskId) || 0;
+        if (retries >= MAX_REVIEW_RETRIES) {
+          stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'error', title: 'Review max retries reached for task #' + taskId, body: 'Task rejected ' + retries + ' times. Manual intervention needed.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+          reviewRetries.delete(taskId);
+          return;
+        }
+        reviewRetries.set(taskId, retries + 1);
+
         setTimeout(function () {
-          const redeployMsg = 'Your previous work on task "' + task.title + '" was reviewed and rejected. Feedback: ' + feedback + '\n\nOriginal task: ' + (task.description || task.title) + '\n\nPlease fix the issues and redo the work.';
-          const redeployArgs = ['agent', '--agent', originalAgent, '--message', redeployMsg, '--json', '--timeout', '600'];
+          const redeployMsg = 'Your previous work on task "' + task.title + '" was reviewed and rejected. Feedback: ' + feedback + '\n\nOriginal task: ' + (task.description || task.title) + '\n\nThis is attempt ' + (retries + 1) + ' of ' + MAX_REVIEW_RETRIES + '. Please fix the issues and redo the work.';
+          const redeployArgs = ['agent', '--local', '--agent', originalAgent, '--message', redeployMsg, '--json', '--timeout', '600'];
 
           const redeployRun = stmts.insertRun.run({ task_id: taskId, agent_id: originalAgent, session_id: null, message: 'Redeploy after review rejection', status: 'running' });
           const redeployRunId = Number(redeployRun.lastInsertRowid);
@@ -243,6 +259,59 @@ function postAgentMessage(fromAgent, toAgent, subject, body, taskId) {
     event_type: 'agent.message', agent_id: fromAgent, task_id: taskId,
     summary: '[' + fromAgent + ' → ' + toAgent + '] ' + subject
   });
+  bridgePublishMessage(fromAgent, toAgent, subject, body, taskId);
+}
+
+// Bridge integration: route inter-agent messages through the Python bridge
+const BRIDGE_HTTP = 'http://127.0.0.1:3335';
+let bridgeProcess = null;
+
+function bridgePublishMessage(fromAgent, toAgent, subject, body, taskId) {
+  const https = require('node:http');
+  const payload = JSON.stringify({
+    from: fromAgent, to: toAgent, subject: subject, body: body || '', task_id: taskId || null
+  });
+  const req = https.request(`${BRIDGE_HTTP}/message`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    timeout: 2000
+  }, () => {});
+  req.on('error', () => { /* bridge may not be running */ });
+  req.write(payload);
+  req.end();
+}
+
+function bridgePublish(topic, payload, fromAgent) {
+  const https = require('node:http');
+  const data = JSON.stringify({ topic, payload, from: fromAgent || 'node-server' });
+  const req = https.request(`${BRIDGE_HTTP}/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+    timeout: 2000
+  }, () => {});
+  req.on('error', () => {});
+  req.write(data);
+  req.end();
+}
+
+function spawnBridge() {
+  const bridgePath = path.join(__dirname, 'bridge.py');
+  if (!fs.existsSync(bridgePath)) return;
+  const pythonBin = fs.existsSync(path.join(__dirname, '.venv', 'bin', 'python3'))
+    ? path.join(__dirname, '.venv', 'bin', 'python3')
+    : 'python3';
+  bridgeProcess = execFile(pythonBin, [bridgePath], {
+    cwd: __dirname,
+    timeout: 0,
+    env: { ...process.env, VISIONARY_DB: path.join(__dirname, 'visionary.sqlite') }
+  }, (err) => {
+    if (err && err.code !== 1 && err.signal !== 'SIGTERM') {
+      console.error('[bridge] exited:', err.message);
+    }
+  });
+  bridgeProcess.stdout.on('data', (d) => process.stdout.write('[bridge] ' + d.toString()));
+  bridgeProcess.stderr.on('data', (d) => process.stderr.write('[bridge] ' + d.toString()));
+  console.log('[server] Agent bridge spawned (pid ' + bridgeProcess.pid + ')');
 }
 
 // Strip ANSI escape codes from CLI output
@@ -310,9 +379,16 @@ function dispatchAgent(taskId, agentId, message) {
   const child = execFile(cmd.bin, cmd.args, {
     timeout: 660000,
     maxBuffer: 10 * 1024 * 1024,
-    env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+    env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' },
+    cwd: __dirname
   }, (error, stdout, stderr) => {
     const durationMs = Date.now() - startTime;
+    const runInfo = activeDispatches.get(runId);
+
+    if (runInfo && runInfo.cancelled) {
+      activeDispatches.delete(runId);
+      return;
+    }
 
     if (!error) {
       // Success
@@ -419,7 +495,17 @@ function dispatchAgent(taskId, agentId, message) {
         title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' ' + status + ' on task #' + taskId
       });
 
-      // Do NOT change task status -- leave in_progress for retry
+      // Return failed/timeout dispatches to todo so the board does not get stuck in_progress.
+      const failedTask = stmts.getTaskById.get(taskId);
+      if (failedTask && failedTask.status === 'in_progress') {
+        stmts.updateTask.run({
+          id: taskId, title: failedTask.title, description: failedTask.description,
+          status: 'todo', priority: failedTask.priority,
+          agent_id: failedTask.agent_id, sort_order: failedTask.sort_order
+        });
+        bus.emit('task:updated', stmts.getTaskById.get(taskId));
+      }
+
       const errSummary = agentId + ' ' + status + ' on task #' + taskId + ': ' + error.message.substring(0, 100);
       stmts.insertActivity.run({
         event_type: 'agent.' + status, agent_id: agentId, task_id: taskId,
@@ -440,15 +526,25 @@ function dispatchAgent(taskId, agentId, message) {
     activeDispatches.delete(runId);
   });
 
-  activeDispatches.set(runId, { process: child, agentId, taskId, startTime });
+  activeDispatches.set(runId, { process: child, agentId, taskId, startTime, cancelled: false });
   return runId;
 }
 
 // Helper: read request body and JSON.parse it
+const MAX_BODY_BYTES = 65536;
 function readBody(req) {
   return new Promise((resolve) => {
+    let size = 0;
     const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => {
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString()));
@@ -456,11 +552,15 @@ function readBody(req) {
         resolve(null);
       }
     });
+    req.on('error', () => resolve(null));
+    req.on('aborted', () => resolve(null));
   });
 }
 
-// Workspace path for briefs, audits, portfolio, memory
-const WORKSPACE = path.join(process.env.HOME || '/Users/joshuasack', '.openclaw', 'workspace');
+// Workspace path for briefs, audits, portfolio, memory.
+// Override with VISIONARY_WORKSPACE; defaults to ~/.openclaw/workspace.
+const WORKSPACE = process.env.VISIONARY_WORKSPACE
+  || path.join(process.env.HOME || process.env.USERPROFILE || '.', '.openclaw', 'workspace');
 
 // Static file server
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -486,6 +586,68 @@ function serveStatic(pathname, res) {
   }
 }
 
+
+function readTextIfExists(filePath, maxChars = 4000) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const text = fs.readFileSync(filePath, 'utf8');
+    return text.length > maxChars ? text.slice(-maxChars) : text;
+  } catch (err) {
+    return 'read error: ' + err.message;
+  }
+}
+
+function getOrchestratorStatus() {
+  const root = __dirname;
+  const orchDir = path.join(root, '.orchestration');
+  const workerRoot = path.join(path.dirname(root), '_visionary_agents');
+  const lanes = ['hardening', 'packaging', 'qa-security'];
+  const workers = lanes.map(function (lane) {
+    const statusText = (readTextIfExists(path.join(orchDir, 'status', lane + '.status'), 200) || 'unknown').trim();
+    const logTail = readTextIfExists(path.join(orchDir, 'logs', lane + '.log'), 2000) || '';
+    let tmux = 'unknown';
+    try {
+      execFileSync('tmux', ['has-session', '-t', 'visionary-' + lane], { stdio: 'ignore' });
+      tmux = 'running';
+    } catch {
+      tmux = 'not-running';
+    }
+    let diffStat = '';
+    try {
+      diffStat = execFileSync('git', ['diff', '--stat'], {
+        cwd: path.join(workerRoot, lane), timeout: 2000, encoding: 'utf8'
+      }).trim();
+    } catch (err) {
+      diffStat = 'diff unavailable: ' + err.message;
+    }
+    return { lane, status: statusText, tmux, log_tail: logTail.split('\n').slice(-8).join('\n'), diff_stat: diffStat };
+  });
+
+  let cron = { job_id: '7559594abe69', schedule: 'every 30m', state: 'scheduled' };
+  try {
+    const output = execFileSync('hermes', ['cron', 'list'], { timeout: 5000, encoding: 'utf8' });
+    cron.raw = output.slice(0, 2000);
+  } catch (err) {
+    cron.error = err.message;
+  }
+
+  let harnesses = { claude: 'unknown', opencode: 'unknown', cursor: 'unknown' };
+  try { harnesses.claude = execFileSync('claude', ['--version'], { timeout: 2000, encoding: 'utf8' }).trim(); } catch (err) { harnesses.claude = 'error: ' + err.message; }
+  try { harnesses.opencode = execFileSync('opencode', ['auth', 'list'], { timeout: 3000, encoding: 'utf8' }).trim().slice(0, 300) || 'no credentials output'; } catch (err) { harnesses.opencode = 'error: ' + err.message; }
+  try { harnesses.cursor = execFileSync('agent', ['models'], { timeout: 3000, encoding: 'utf8' }).trim().slice(0, 300) || 'no models output'; } catch (err) { harnesses.cursor = 'error: ' + err.message; }
+
+  return {
+    role: 'Hermes persistent orchestrator',
+    live: true,
+    cron,
+    workers,
+    harnesses,
+    plan_path: path.join(orchDir, 'PRODUCTION_READY_BY_TOMORROW.md'),
+    watchdog_path: path.join(orchDir, 'watchdog-status.sh'),
+    updated_at: new Date().toISOString()
+  };
+}
+
 // Router
 const server = http.createServer(async (req, res) => {
   try {
@@ -508,6 +670,189 @@ const server = http.createServer(async (req, res) => {
 
     // API routes
     if (pathname.startsWith('/api/')) {
+      // GET /api/overview — one-glance mission control snapshot
+      if (method === 'GET' && pathname === '/api/overview') {
+        const taskCounts = db.prepare('SELECT status, COUNT(*) AS count FROM tasks GROUP BY status').all();
+        const priorityCounts = db.prepare('SELECT priority, COUNT(*) AS count FROM tasks GROUP BY priority').all();
+        const runCounts = db.prepare('SELECT status, COUNT(*) AS count FROM agent_runs GROUP BY status').all();
+        const projectCounts = db.prepare('SELECT status, COUNT(*) AS count FROM projects GROUP BY status').all();
+        const openTasks = db.prepare(`
+          SELECT t.*, p.name AS project_name, p.color AS project_color
+          FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+          WHERE t.status != 'done'
+          ORDER BY CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, t.updated_at DESC
+          LIMIT 8
+        `).all();
+        const staleRunningRuns = db.prepare(`
+          SELECT ar.*, t.title AS task_title
+          FROM agent_runs ar LEFT JOIN tasks t ON ar.task_id = t.id
+          WHERE ar.status = 'running' AND datetime(ar.started_at) < datetime('now', '-2 hours')
+          ORDER BY ar.started_at ASC
+          LIMIT 8
+        `).all();
+        const recentRuns = db.prepare(`
+          SELECT ar.*, t.title AS task_title
+          FROM agent_runs ar LEFT JOIN tasks t ON ar.task_id = t.id
+          ORDER BY ar.created_at DESC
+          LIMIT 6
+        `).all();
+        const recentActivity = stmts.getRecentActivity.all(6);
+        const unread = stmts.getUnreadCount.get();
+        const latestByAgent = stmts.getLatestRunPerAgent.all();
+        const activeAgentIds = Array.from(activeDispatches.values()).map(function (d) { return d.agentId; });
+
+        const missions = [];
+        if (staleRunningRuns.length) {
+          missions.push({
+            rank: missions.length + 1,
+            type: 'system_hygiene',
+            priority: 'critical',
+            title: 'Clean stale agent run rows',
+            detail: staleRunningRuns.length + ' run(s) have been marked running for more than 2 hours while no live dispatch is attached.',
+            action_label: 'Clean stale runs',
+            action_type: 'clean_stale_runs',
+            target: '#/overview',
+            score: 100
+          });
+        }
+        openTasks.slice(0, 3).forEach(function (task) {
+          const priorityScore = { critical: 90, high: 75, medium: 55, low: 35 }[task.priority] || 45;
+          missions.push({
+            rank: missions.length + 1,
+            type: 'task',
+            priority: task.priority || 'medium',
+            title: task.title,
+            detail: (task.project_name || 'No project') + ' · ' + (task.agent_id || 'unassigned') + ' · ' + task.status,
+            action_label: task.agent_id ? 'Dispatch ' + task.agent_id : 'Open board',
+            action_type: task.agent_id ? 'dispatch_task' : 'open_board',
+            task_id: task.id,
+            agent_id: task.agent_id,
+            target: '#/board',
+            score: priorityScore
+          });
+        });
+        const unreadCount = unread ? unread.count : 0;
+        if (unreadCount > 0) {
+          missions.push({
+            rank: missions.length + 1,
+            type: 'inbox',
+            priority: unreadCount > 50 ? 'high' : 'medium',
+            title: 'Triage notification backlog',
+            detail: unreadCount + ' unread notification(s) are waiting for review.',
+            action_label: 'Open inbox',
+            action_type: 'open_inbox',
+            target: '#/inbox',
+            score: unreadCount > 50 ? 70 : 45
+          });
+        }
+        if (!missions.length) {
+          missions.push({
+            rank: 1,
+            type: 'strategy',
+            priority: 'medium',
+            title: 'Choose the next build mission',
+            detail: 'No urgent dashboard work is open. Use Cmd+K to create or auto-route the next mission.',
+            action_label: 'Dispatch Cmd+K',
+            action_type: 'open_command_bar',
+            target: '#/overview',
+            score: 40
+          });
+        }
+        missions.sort(function (a, b) { return b.score - a.score; });
+        missions.slice(0, 3).forEach(function (mission, index) { mission.rank = index + 1; });
+
+        const orchestrator = getOrchestratorStatus();
+
+        res.json({
+          generated_at: new Date().toISOString(),
+          counts: {
+            tasks: Object.fromEntries(taskCounts.map(function (r) { return [r.status, r.count]; })),
+            priorities: Object.fromEntries(priorityCounts.map(function (r) { return [r.priority, r.count]; })),
+            runs: Object.fromEntries(runCounts.map(function (r) { return [r.status, r.count]; })),
+            projects: Object.fromEntries(projectCounts.map(function (r) { return [r.status, r.count]; })),
+            unread_notifications: unreadCount,
+            active_dispatches: activeDispatches.size
+          },
+          missions: missions.slice(0, 3),
+          open_tasks: openTasks,
+          stale_running_runs: staleRunningRuns,
+          recent_runs: recentRuns,
+          recent_activity: recentActivity,
+          latest_by_agent: latestByAgent,
+          active_agent_ids: activeAgentIds,
+          orchestrator
+        });
+        return;
+      }
+
+      // POST /api/overview/clean-stale-runs — mark old orphaned running rows as timeout.
+      // Skips run_ids that still own a live child process in activeDispatches so the
+      // in-memory dispatch map and its callbacks are never invalidated by cleanup.
+      if (method === 'POST' && pathname === '/api/overview/clean-stale-runs') {
+        const candidates = db.prepare(`
+          SELECT ar.*, t.title AS task_title, t.project_id AS project_id
+          FROM agent_runs ar LEFT JOIN tasks t ON ar.task_id = t.id
+          WHERE ar.status = 'running' AND datetime(ar.started_at) < datetime('now', '-2 hours')
+          ORDER BY ar.started_at ASC
+        `).all();
+        const staleRuns = candidates.filter(function (r) { return !activeDispatches.has(r.id); });
+        if (!staleRuns.length) {
+          res.json({ cleaned: 0, runs: [], skipped_live: candidates.length });
+          return;
+        }
+        const markRun = db.prepare(`
+          UPDATE agent_runs SET status = 'timeout', error = @error,
+          duration_ms = CASE
+            WHEN started_at IS NOT NULL THEN CAST((julianday('now') - julianday(started_at)) * 86400000 AS INTEGER)
+            ELSE duration_ms
+          END,
+          completed_at = datetime('now')
+          WHERE id = @id AND status = 'running'
+        `);
+        const cleanTx = db.transaction(function (runs) {
+          runs.forEach(function (run) {
+            markRun.run({ id: run.id, error: 'Marked timeout by Overview stale-run cleanup' });
+            stmts.insertActivity.run({
+              event_type: 'agent.timeout.cleaned',
+              agent_id: run.agent_id,
+              task_id: run.task_id,
+              project_id: run.project_id || null,
+              summary: 'Cleaned stale running row #' + run.id + ' (' + run.agent_id + ')',
+              detail_json: JSON.stringify({ run_id: run.id, task_title: run.task_title || null, started_at: run.started_at })
+            });
+          });
+        });
+        cleanTx(staleRuns);
+        bus.emit('activity:new', { event_type: 'agent.timeout.cleaned', summary: 'Cleaned ' + staleRuns.length + ' stale running row(s)' });
+        res.json({ cleaned: staleRuns.length, runs: staleRuns.map(function (r) { return { id: r.id, agent_id: r.agent_id, task_id: r.task_id, task_title: r.task_title }; }) });
+        return;
+      }
+
+      // GET /api/orchestrator — Hermes persistent orchestrator status
+      if (method === 'GET' && pathname === '/api/orchestrator') {
+        res.json({ orchestrator: getOrchestratorStatus() });
+        return;
+      }
+
+      // GET /api/bridge — health check for agent bridge
+      if (method === 'GET' && pathname === '/api/bridge') {
+        const https = require('node:http');
+        const bReq = https.get('http://127.0.0.1:3335/health', { timeout: 1000 }, (bRes) => {
+          let data = '';
+          bRes.on('data', (c) => data += c);
+          bRes.on('end', () => {
+            try {
+              const info = JSON.parse(data);
+              res.json({ bridge: 'connected', ...info });
+            } catch {
+              res.json({ bridge: 'error', detail: 'invalid response' });
+            }
+          });
+        });
+        bReq.on('error', (e) => res.json({ bridge: 'disconnected', detail: e.message }));
+        return;
+      }
+
       // GET /api/tasks
       if (method === 'GET' && pathname === '/api/tasks') {
         const tasks = stmts.getAllTasks.all();
@@ -642,12 +987,18 @@ const server = http.createServer(async (req, res) => {
           res.json({ error: 'message required' }, 400);
           return;
         }
+        if (activeChats >= MAX_CHATS) {
+          res.json({ error: 'too many concurrent chats, try again soon' }, 429);
+          return;
+        }
+        activeChats++;
+
         const msg = body.message;
 
         // Log user message to activity
         stmts.insertActivity.run({
           event_type: 'chat.user', agent_id: 'user', task_id: null,
-          project_id: null, summary: 'Josh: ' + msg.substring(0, 100),
+          project_id: null, summary: 'User: ' + msg.substring(0, 100),
           detail_json: JSON.stringify({ message: msg })
         });
 
@@ -660,15 +1011,21 @@ const server = http.createServer(async (req, res) => {
         const recentAct = stmts.getRecentActivity.all(5);
         const actSummary = recentAct.map(function(a) { return a.summary; }).join('; ');
 
-        const chatMsg = '[Dashboard] Board: ' + counts.todo + ' todo, ' + counts.in_progress + ' wip, ' + counts.review + ' review, ' + counts.done + ' done. ' + msg;
+        const chatMsg = '[Dashboard] Board: ' + counts.todo + ' todo, ' + counts.in_progress + ' wip, ' + counts.review + ' review, ' + counts.done + ' done. '
+          + 'You can create tasks on the kanban board. To create a task, include CREATE_TASK: title | description | agent_id | priority in your response. '
+          + 'To move a task, include MOVE_TASK: task_id | new_status. '
+          + 'Current tasks: ' + boardTasks.map(function(t) { return '#' + t.id + ' "' + t.title + '" [' + t.status + ']'; }).join(', ') + '. '
+          + msg;
 
         // Dispatch to Jarvis via OpenClaw (async)
+        // Use --local here so the dashboard chat is not blocked by gateway/config drift.
         const chatEnv = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
-        const chatArgs = ['agent', '--agent', 'main', '--message', chatMsg, '--json', '--timeout', '120'];
+        const chatArgs = ['agent', '--local', '--agent', 'main', '--message', chatMsg, '--json', '--timeout', '120'];
 
         const chatChild = execFile('openclaw', chatArgs, {
           timeout: 130000, maxBuffer: 4 * 1024 * 1024, env: chatEnv
         }, function(error, stdout, stderr) {
+          activeChats = Math.max(0, activeChats - 1);
           if (res.writableEnded) return; // response already sent
 
           if (!error && stdout) {
@@ -683,14 +1040,61 @@ const server = http.createServer(async (req, res) => {
               }
             } catch { /* use raw */ }
 
+            // Parse task actions from Jarvis response
+            const createdTasks = [];
+            const createMatch = responseText.match(/CREATE_TASK:\s*(.+?)\s*\|\s*(.+?)(?:\s*\|\s*(.+?))?(?:\s*\|\s*(.+?))?(?:\n|$)/i);
+            if (createMatch) {
+              const title = createMatch[1].trim();
+              const desc = createMatch[2].trim();
+              const agent = (createMatch[3] || '').trim() || null;
+              const priority = (createMatch[4] || 'medium').trim().toLowerCase();
+              const validPriorities = ['critical', 'high', 'medium', 'low'];
+              const finalPriority = validPriorities.includes(priority) ? priority : 'medium';
+              const validAgent = agent && validAgentIds.includes(agent) ? agent : null;
+
+              const result = stmts.insertTask.run({
+                title: title, description: desc === '-' ? null : desc, status: 'todo',
+                priority: finalPriority, agent_id: validAgent, project_id: null, sort_order: 0
+              });
+              const task = stmts.getTaskById.get(result.lastInsertRowid);
+              stmts.insertActivity.run({
+                event_type: 'task.created', agent_id: 'main', task_id: task.id,
+                summary: 'Jarvis created task: ' + task.title,
+                detail_json: JSON.stringify(task)
+              });
+              bus.emit('task:created', task);
+              bus.emit('activity:new', { event_type: 'task.created', summary: 'Jarvis created task: ' + task.title, task_id: task.id });
+              bridgePublish('task.created', { task: task }, 'jarvis');
+              createdTasks.push(task);
+            }
+
+            const movedTasks = [];
+            const moveMatch = responseText.match(/MOVE_TASK:\s*(\d+)\s*\|\s*(todo|in_progress|review|done)(?:\n|$)/i);
+            if (moveMatch) {
+              const moveId = parseInt(moveMatch[1], 10);
+              const newStatus = moveMatch[2].toLowerCase();
+              const existing = stmts.getTaskById.get(moveId);
+              if (existing) {
+                stmts.updateTask.run({
+                  id: moveId, title: existing.title, description: existing.description,
+                  status: newStatus, priority: existing.priority,
+                  agent_id: existing.agent_id, sort_order: existing.sort_order
+                });
+                const moved = stmts.getTaskById.get(moveId);
+                bus.emit('task:updated', moved);
+                bridgePublish('task.updated', { task: moved, previous_status: existing.status }, 'jarvis');
+                movedTasks.push(moved);
+              }
+            }
+
             stmts.insertActivity.run({
-              event_type: 'chat.agent', agent_id: 'main', task_id: null,
+              event_type: 'chat.agent', agent_id: 'main', task_id: createdTasks.length ? createdTasks[0].id : null,
               project_id: null, summary: 'Jarvis: ' + responseText.substring(0, 100),
-              detail_json: JSON.stringify({ response: responseText })
+              detail_json: JSON.stringify({ response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks })
             });
             bus.emit('activity:new', { event_type: 'chat.agent', agent_id: 'main', summary: 'Jarvis responded' });
 
-            res.json({ agent: 'jarvis', response: responseText });
+            res.json({ agent: 'jarvis', response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks });
           } else {
             res.json({ agent: 'jarvis', response: 'Error: ' + ((error || {}).message || 'unknown').substring(0, 200) }, 500);
           }
@@ -815,6 +1219,9 @@ const server = http.createServer(async (req, res) => {
           res.json({ error: 'No active dispatch with run_id ' + runId }, 404);
           return;
         }
+
+        // Mark cancelled first so the callback won't apply completion state
+        info.cancelled = true;
 
         // SIGTERM first, SIGKILL fallback after 5s
         try { info.process.kill('SIGTERM'); } catch {}
@@ -1043,7 +1450,12 @@ const server = http.createServer(async (req, res) => {
           try {
             content = fs.readFileSync(path.join(WORKSPACE, 'memory', filename), 'utf8');
           } catch {
-            content = fs.readFileSync(path.join(WORKSPACE, filename), 'utf8');
+            // Explicit single-file fallback for the top-level memory index only.
+            if (filename === 'MEMORY.md') {
+              content = fs.readFileSync(path.join(WORKSPACE, 'MEMORY.md'), 'utf8');
+            } else {
+              throw new Error('not found');
+            }
           }
           res.json({ filename, content });
         } catch { res.json({ error: 'File not found' }, 404); }
@@ -1074,7 +1486,7 @@ const server = http.createServer(async (req, res) => {
         // Call Jarvis for first question
         const cliMessage = systemPrompt + '\n\nPlease ask your first clarifying question about this task.';
         execFile('openclaw', [
-          'agent', '--agent', 'jarvis', '--message', cliMessage, '--json', '--timeout', '30'
+          'agent', '--local', '--agent', 'main', '--message', cliMessage, '--json', '--timeout', '30'
         ], {
           timeout: 35000, maxBuffer: 5 * 1024 * 1024,
           env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
@@ -1138,7 +1550,7 @@ const server = http.createServer(async (req, res) => {
         }).join('\n\n');
 
         execFile('openclaw', [
-          'agent', '--agent', 'jarvis', '--message', convoContext, '--json', '--timeout', '30'
+          'agent', '--local', '--agent', 'main', '--message', convoContext, '--json', '--timeout', '30'
         ], {
           timeout: 35000, maxBuffer: 5 * 1024 * 1024,
           env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
@@ -1370,8 +1782,11 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(3333, '127.0.0.1', () => {
-  console.log('Visionary Mission Control running at http://127.0.0.1:3333');
+spawnBridge();
+
+const PORT = parseInt(process.env.VISIONARY_PORT, 10) || 3333;
+server.listen(PORT, '127.0.0.1', () => {
+  console.log('Visionary Mission Control running at http://127.0.0.1:' + PORT);
 });
 
 // Heartbeat: broadcast progress for active dispatches every 5 seconds
@@ -1385,10 +1800,18 @@ setInterval(() => {
 }, 5000);
 
 // Graceful shutdown -- kill active dispatches first
+function shutdownBridge() {
+  if (bridgeProcess) {
+    try { bridgeProcess.kill('SIGTERM'); } catch {}
+    bridgeProcess = null;
+  }
+}
+
 process.on('SIGINT', () => {
   for (const [, info] of activeDispatches) {
     try { info.process.kill('SIGTERM'); } catch {}
   }
+  shutdownBridge();
   db.close();
   server.close();
   process.exit(0);
@@ -1398,6 +1821,7 @@ process.on('SIGTERM', () => {
   for (const [, info] of activeDispatches) {
     try { info.process.kill('SIGTERM'); } catch {}
   }
+  shutdownBridge();
   db.close();
   server.close();
   process.exit(0);

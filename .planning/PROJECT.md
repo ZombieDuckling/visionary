@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A custom web-based project management and agent orchestration platform for Josh's OpenClaw multi-agent system. Upgrades the current static Node.js dashboard into a full interactive operations center — inspired by Benoît's "Visionary" platform but adapted for Josh's 8-agent cybersecurity/builder/investment setup.
+A custom web-based project management and agent orchestration platform for the user's OpenClaw multi-agent system. Upgrades the current static Node.js dashboard into a full interactive operations center — inspired by Benoît's "Visionary" platform but adapted for the user's 8-agent cybersecurity/builder/investment setup.
 
 ## Core Value
 
@@ -39,7 +39,7 @@ An operations center with:
 - **Design:** Dark ops-center aesthetic, monospace, Bloomberg Terminal meets sci-fi command center
 
 ### User
-- Josh — builder/developer/cybersecurity expert in South Africa (Africa/Johannesburg timezone)
+- the user — builder/developer/cybersecurity expert in South Africa (Africa/Johannesburg timezone)
 - Wants high autonomy, speed, practical execution
 - Uses this daily to manage agents, projects, investments, job hunting, security
 
@@ -74,7 +74,7 @@ An operations center with:
 - Phone push notifications (Burr/webhook) — later milestone
 - Linear/Jira external tool integrations (Composio) — later milestone
 - Tailscale/VPN secure remote access — later milestone
-- Multi-user auth — single user (Josh) only
+- Multi-user auth — single user (the user) only
 - Mobile native app — responsive web is sufficient
 - Voice commands — later milestone
 

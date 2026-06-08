@@ -412,7 +412,7 @@ node --test test/
 | Concern | Approach |
 |---------|----------|
 | SQLite write contention | WAL mode + `busy_timeout = 5000`. Single writer is fine for single-user app. |
-| SSE memory per client | Each client holds one `res` object in `sseClients` Set. Josh is the only user, so 1-3 connections max. |
+| SSE memory per client | Each client holds one `res` object in `sseClients` Set. the user is the only user, so 1-3 connections max. |
 | Large SPA HTML | Template literal is served from memory (no disk read). Gzip not needed for single user on localhost. |
 | OpenClaw CLI latency | `execFile` is non-blocking (spawns child process). Use `spawn` for streaming long tasks. |
 | Event table growth | Prune events older than 24h daily. `DELETE FROM events WHERE created_at < ?` in a scheduled interval. |

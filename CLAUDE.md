@@ -3,7 +3,7 @@
 
 **Visionary Mission Control**
 
-A custom web-based project management and agent orchestration platform for Josh's OpenClaw multi-agent system. Upgrades the current static Node.js dashboard into a full interactive operations center — inspired by Benoît's "Visionary" platform but adapted for Josh's 8-agent cybersecurity/builder/investment setup.
+A custom web-based project management and agent orchestration platform for the user's OpenClaw multi-agent system. Upgrades the current static Node.js dashboard into a full interactive operations center — inspired by Benoît's "Visionary" platform but adapted for the user's 8-agent cybersecurity/builder/investment setup.
 
 **Core Value:** **One place to see everything your agents are doing, dispatch work, and manage projects — without juggling Telegram/WhatsApp/terminal.**
 <!-- GSD:project-end -->
@@ -87,7 +87,7 @@ A custom web-based project management and agent orchestration platform for Josh'
 | Concern | Approach |
 |---------|----------|
 | SQLite write contention | WAL mode + `busy_timeout = 5000`. Single writer is fine for single-user app. |
-| SSE memory per client | Each client holds one `res` object in `sseClients` Set. Josh is the only user, so 1-3 connections max. |
+| SSE memory per client | Each client holds one `res` object in `sseClients` Set. the user is the only user, so 1-3 connections max. |
 | Large SPA HTML | Template literal is served from memory (no disk read). Gzip not needed for single user on localhost. |
 | OpenClaw CLI latency | `execFile` is non-blocking (spawns child process). Use `spawn` for streaming long tasks. |
 | Event table growth | Prune events older than 24h daily. `DELETE FROM events WHERE created_at < ?` in a scheduled interval. |
