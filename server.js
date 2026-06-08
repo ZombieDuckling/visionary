@@ -16,7 +16,10 @@ const MIME_TYPES = {
   '.html': 'text/html',
   '.css': 'text/css',
   '.js': 'text/javascript',
-  '.json': 'application/json'
+  '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png'
 };
 
 // Agent configurations (module-level for dispatch validation + GET /api/agents)

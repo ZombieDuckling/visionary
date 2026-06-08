@@ -1,0 +1,23 @@
+{
+  "name": "Visionary Mission Control",
+  "short_name": "Visionary",
+  "description": "One pane of glass for your multi-agent AI system.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0a0e14",
+  "background_color": "#0a0e14",
+  "icons": [
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
