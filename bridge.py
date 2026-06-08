@@ -113,7 +113,6 @@ class PubSub:
         self.subscriptions.pop(conn, None)
         for aid, info in list(self.presence.items()):
             if info.get("conn") is conn:
-                aid_removed = aid
                 del self.presence[aid]
                 self.publish_system("agent.status." + aid, {
                     "agent_id": aid, "status": "offline",
