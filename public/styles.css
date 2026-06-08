@@ -1233,6 +1233,328 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .main-content p { color: var(--ink-muted); font-size: var(--fs-sm); }
 
 /* ============================================
+   OVERVIEW DASHBOARD — operational dashboard rules:
+   - 5-second story above the fold
+   - Big Bold Numbers for KPIs
+   - Top-left hierarchy (hero → metrics → missions → drill-down)
+   - Status-color coding, no clutter
+   ============================================ */
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 var(--s-5) 0;
+  padding: 4px 8px;
+  background: linear-gradient(90deg, var(--title-active-start), var(--title-active-end));
+  color: var(--title-text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  box-shadow: var(--bevel-out);
+  border-bottom: 0;
+}
+.section-header-icon {
+  font-size: var(--fs-md);
+}
+
+/* HERO — answers the 5-second question: "is the system OK?" */
+.overview-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--s-5);
+  padding: var(--s-5) var(--s-6);
+  background: var(--face);
+  box-shadow: var(--bevel-out);
+  margin-bottom: var(--s-5);
+  position: relative;
+  overflow: hidden;
+}
+.overview-hero::before {
+  /* status accent rail on the left */
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 6px;
+  background: var(--ok);
+}
+.overview-hero:has(.overview-title:is(:contains("attention")))::before { background: var(--err); }
+.overview-kicker {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+.overview-title {
+  font-family: var(--font-ui);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--black);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+.overview-subtitle {
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  color: var(--ink-muted);
+  max-width: 56ch;
+}
+.overview-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.overview-actions .btn { min-width: 140px; }
+
+/* METRICS ROW — Big Bold Numbers */
+.overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-4);
+  margin-bottom: var(--s-5);
+}
+.overview-metric {
+  background: var(--face);
+  box-shadow: var(--bevel-out);
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+.overview-metric::after {
+  /* status LED in the top-right */
+  content: '';
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 8px; height: 8px;
+  background: var(--ok);
+  box-shadow: var(--bevel-out-thin);
+}
+.overview-metric-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  font-weight: 700;
+}
+.overview-metric-value {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--black);
+  letter-spacing: -0.02em;
+}
+.overview-metric-detail {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+}
+
+/* PANELS — beveled windows with clear title bars */
+.overview-panel {
+  background: var(--face);
+  box-shadow: var(--bevel-out);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.overview-panel > h3 {
+  margin: 0;
+  padding: 3px 8px;
+  background: linear-gradient(90deg, var(--title-active-start), var(--title-active-end));
+  color: var(--title-text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.overview-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 6px 3px 8px;
+  background: linear-gradient(90deg, var(--title-active-start), var(--title-active-end));
+  color: var(--title-text);
+}
+.overview-panel-header h3 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--title-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.overview-panel > *:not(h3):not(.overview-panel-header):not(.mission-list):not(.overview-list):not(.overview-activity):not(.empty-state) {
+  margin: var(--s-4);
+}
+.overview-panel .mission-list,
+.overview-panel .overview-list,
+.overview-panel .overview-activity {
+  margin: var(--s-4);
+}
+.overview-panel .empty-state {
+  margin: var(--s-4);
+}
+
+/* MISSIONS — top-3 ranked work list */
+.mission-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--face-input);
+  box-shadow: var(--bevel-in);
+  padding: 2px;
+}
+.mission-card {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  background: var(--face);
+  box-shadow: var(--bevel-out-thin);
+}
+.mission-rank {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--info);
+  text-align: center;
+}
+.mission-body { min-width: 0; }
+.mission-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--black);
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* META — small comparison-period / context text */
+.overview-meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+}
+
+/* OVERVIEW LISTS — Next tasks, Recent runs */
+.overview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--face-input);
+  box-shadow: var(--bevel-in);
+  padding: 2px;
+}
+.overview-list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-3);
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--face);
+}
+.overview-list-item:nth-of-type(even) { background: var(--face-2); }
+.overview-list-item strong {
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--black);
+}
+
+/* OVERVIEW ACTIVITY — recent event log */
+.overview-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--face-input);
+  box-shadow: var(--bevel-in);
+  padding: 2px;
+}
+.overview-activity-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s-3);
+  align-items: start;
+  padding: 6px 8px;
+  background: var(--face);
+}
+.overview-activity-row:nth-of-type(even) { background: var(--face-2); }
+.overview-activity-row strong {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--info);
+  font-weight: 700;
+}
+.overview-activity-row small {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-faint);
+}
+.overview-dot {
+  width: 8px; height: 8px;
+  background: var(--info);
+  box-shadow: var(--bevel-out-thin);
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+/* OVERVIEW GRID — 2-column drill-down */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--s-4);
+}
+.overview-grid .overview-panel.wide { grid-column: 1 / -1; }
+
+/* ALERTS — Stale runs, errors */
+.overview-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  background: #FFF4D0;
+  box-shadow: var(--bevel-out), inset 0 0 0 1px var(--warn);
+  margin-bottom: var(--s-5);
+}
+.overview-alert .badge { flex-shrink: 0; }
+.overview-alert span { flex: 1; font-family: var(--font-ui); font-size: var(--fs-sm); color: var(--black); }
+.overview-alert .btn { flex-shrink: 0; }
+
+/* ORCHESTRATOR PANEL */
+.overview-orchestrator { margin-bottom: var(--s-5); }
+.overview-orchestrator h3 { margin-top: 0; }
+.overview-metric-label { line-height: 1.4; }
+
+/* Loading state */
+.overview-loading {
+  padding: var(--s-6);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+
+/* ============================================
    RESPONSIVE
    ============================================ */
 
