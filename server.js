@@ -9,6 +9,8 @@ const runtimes = require('./src/runtimes');
 const cookbook = require('./src/cookbook');
 const guardrails = require('./src/guardrails');
 const deepResearch = require('./src/deep-research');
+const scheduler = require('./src/scheduler');
+const cleanup = require('./src/cleanup');
 
 // Read HTML file once at startup
 const indexHTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
@@ -1238,6 +1240,51 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Schedules CRUD (cron-style scheduled agent runs)
+      if (method === 'GET' && pathname === '/api/schedules') {
+        res.json({ schedules: stmts.getAllSchedules.all() }); return;
+      }
+      if (method === 'POST' && pathname === '/api/schedules') {
+        const body = await readBody(req);
+        if (!body || !body.agent_id || !body.name || !body.cron || !body.prompt) {
+          res.json({ error: 'agent_id, name, cron, prompt required' }, 400); return;
+        }
+        try { scheduler.parseCron(body.cron); }
+        catch (err) { res.json({ error: 'Invalid cron: ' + err.message }, 400); return; }
+        const result = stmts.insertSchedule.run({
+          agent_id: body.agent_id, name: body.name, cron: body.cron,
+          prompt: body.prompt, enabled: body.enabled === false ? 0 : 1
+        });
+        res.json({ schedule: stmts.getScheduleById.get(result.lastInsertRowid) }, 201);
+        return;
+      }
+      if (method === 'PATCH' && /^\/api\/schedules\/(\d+)$/.test(pathname)) {
+        const id = parseInt(pathname.match(/^\/api\/schedules\/(\d+)$/)[1], 10);
+        const existing = stmts.getScheduleById.get(id);
+        if (!existing) { res.json({ error: 'Schedule not found' }, 404); return; }
+        const body = await readBody(req) || {};
+        stmts.updateSchedule.run({
+          id,
+          agent_id: body.agent_id !== undefined ? body.agent_id : existing.agent_id,
+          name:     body.name     !== undefined ? body.name     : existing.name,
+          cron:     body.cron     !== undefined ? body.cron     : existing.cron,
+          prompt:   body.prompt   !== undefined ? body.prompt   : existing.prompt,
+          enabled:  body.enabled  !== undefined ? (body.enabled ? 1 : 0) : existing.enabled
+        });
+        res.json({ schedule: stmts.getScheduleById.get(id) }); return;
+      }
+      if (method === 'DELETE' && /^\/api\/schedules\/(\d+)$/.test(pathname)) {
+        const id = parseInt(pathname.match(/^\/api\/schedules\/(\d+)$/)[1], 10);
+        stmts.deleteSchedule.run(id);
+        res.json({ deleted: true }); return;
+      }
+
+      // POST /api/cleanup — manual prune of audit tables
+      if (method === 'POST' && pathname === '/api/cleanup') {
+        const body = await readBody(req) || {};
+        res.json(cleanup.runPrune(stmts, body)); return;
+      }
+
       // POST /api/guardrails/scan — scan arbitrary text for jailbreak patterns
       if (method === 'POST' && pathname === '/api/guardrails/scan') {
         const body = await readBody(req);
@@ -2176,6 +2223,40 @@ const server = http.createServer(async (req, res) => {
 });
 
 spawnBridge();
+
+// Scheduler tick — every minute, fire any matching schedules.
+// fireSchedule routes through executeWithFailover so each scheduled run
+// gets the full failover chain.
+async function fireSchedule(schedule) {
+  const agent = stmts.getAgentById.get(schedule.agent_id);
+  if (!agent) return { status: 'error', detail: 'agent not found: ' + schedule.agent_id };
+  const result = await runtimes.executeWithFailover(
+    { getRuntime: runtimes.getRuntime, stmts, db },
+    agent,
+    { message: schedule.prompt },
+    { timeout: 600000, replayTurns: 0 }
+  );
+  bus.emit('activity:new', {
+    event_type: 'schedule.fired',
+    summary: 'Schedule "' + schedule.name + '" → ' + agent.name + ' (' + result.status + ')'
+  });
+  return { status: result.status, detail: (result.harness || '') + ': ' + (result.stdout || '').slice(0, 200) };
+}
+setInterval(() => {
+  scheduler.tick({ stmts, fireSchedule }).catch((err) => {
+    console.error('[scheduler] tick error:', err.message);
+  });
+}, 60000);
+
+// Cleanup tick — once on boot, then daily. Idempotent.
+function bootAndDailyCleanup() {
+  try {
+    const result = cleanup.runPrune(stmts);
+    console.log('[cleanup] pruned:', JSON.stringify(result));
+  } catch (err) { console.error('[cleanup] error:', err.message); }
+}
+setTimeout(bootAndDailyCleanup, 10000);
+setInterval(bootAndDailyCleanup, 24 * 60 * 60 * 1000);
 
 const PORT = parseInt(process.env.VISIONARY_PORT, 10) || 3333;
 server.listen(PORT, '127.0.0.1', () => {
