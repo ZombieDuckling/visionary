@@ -132,6 +132,29 @@ const migrations = [
   );
 
   INSERT OR IGNORE INTO settings (key, value_json) VALUES ('app', '{}');
+  `,
+
+  // Migration 3 -> 4: Spaces (workspaces) for grouping projects
+  `
+  CREATE TABLE IF NOT EXISTS spaces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT,
+    color TEXT DEFAULT '#FF2EC4',
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  INSERT OR IGNORE INTO spaces (id, name, slug, description, color, sort_order)
+  VALUES (1, 'Personal', 'personal', 'Default space for solo work.', '#FF2EC4', 0);
+
+  ALTER TABLE projects ADD COLUMN space_id INTEGER REFERENCES spaces(id);
+
+  UPDATE projects SET space_id = 1 WHERE space_id IS NULL;
+
+  CREATE INDEX idx_projects_space ON projects(space_id);
   `
 ];
 
@@ -243,14 +266,40 @@ const stmts = {
   // Project CRUD statements
   getAllProjects: db.prepare(`SELECT * FROM projects ORDER BY name`),
   getProjectById: db.prepare(`SELECT * FROM projects WHERE id = ?`),
+  getProjectsBySpace: db.prepare(`SELECT * FROM projects WHERE space_id = ? ORDER BY name`),
   insertProject: db.prepare(`
-    INSERT INTO projects (name, slug, description, color) VALUES (@name, @slug, @description, @color)
+    INSERT INTO projects (name, slug, description, color, space_id)
+    VALUES (@name, @slug, @description, @color, @space_id)
   `),
   updateProject: db.prepare(`
     UPDATE projects SET name = @name, description = @description, color = @color,
-    status = @status, updated_at = datetime('now') WHERE id = @id
+    status = @status, space_id = @space_id, updated_at = datetime('now') WHERE id = @id
   `),
-  getTasksByProject: db.prepare(`SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at DESC`),
+  getTasksByProject: db.prepare(`SELECT * FROM tasks WHERE project_id = ? ORDER BY sort_order, created_at DESC`),
+  getTasksByProjectAndStatus: db.prepare(`
+    SELECT t.*, p.name as project_name, p.color as project_color
+    FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+    WHERE t.project_id = ? AND t.status = ?
+    ORDER BY t.sort_order, t.created_at DESC
+  `),
+
+  // Space CRUD statements
+  getAllSpaces: db.prepare(`
+    SELECT s.*, COUNT(p.id) as project_count
+    FROM spaces s LEFT JOIN projects p ON p.space_id = s.id
+    GROUP BY s.id ORDER BY s.sort_order, s.name
+  `),
+  getSpaceById: db.prepare(`SELECT * FROM spaces WHERE id = ?`),
+  insertSpace: db.prepare(`
+    INSERT INTO spaces (name, slug, description, color, sort_order)
+    VALUES (@name, @slug, @description, @color, @sort_order)
+  `),
+  updateSpace: db.prepare(`
+    UPDATE spaces SET name = @name, description = @description, color = @color,
+    sort_order = @sort_order, updated_at = datetime('now') WHERE id = @id
+  `),
+  deleteSpace: db.prepare(`DELETE FROM spaces WHERE id = ?`),
+  countProjectsInSpace: db.prepare(`SELECT COUNT(*) as count FROM projects WHERE space_id = ?`),
   getRunsByProject: db.prepare(`
     SELECT ar.* FROM agent_runs ar JOIN tasks t ON ar.task_id = t.id
     WHERE t.project_id = ? ORDER BY ar.created_at DESC LIMIT 20

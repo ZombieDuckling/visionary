@@ -1756,11 +1756,100 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // ===== Spaces CRUD (workspace grouping above Projects) =====
+
+      // GET /api/spaces — list spaces with project count
+      if (method === 'GET' && pathname === '/api/spaces') {
+        const spaces = stmts.getAllSpaces.all();
+        res.json({ spaces: spaces });
+        return;
+      }
+
+      // GET /api/spaces/:id — one space + nested projects
+      if (method === 'GET' && /^\/api\/spaces\/(\d+)$/.test(pathname)) {
+        const spaceId = parseInt(pathname.match(/^\/api\/spaces\/(\d+)$/)[1], 10);
+        const space = stmts.getSpaceById.get(spaceId);
+        if (!space) { res.json({ error: 'Space not found' }, 404); return; }
+        const projects = stmts.getProjectsBySpace.all(spaceId);
+        res.json({ space: space, projects: projects });
+        return;
+      }
+
+      // POST /api/spaces
+      if (method === 'POST' && pathname === '/api/spaces') {
+        const body = await readBody(req);
+        if (!body || !body.name || typeof body.name !== 'string' || !body.name.trim()) {
+          res.json({ error: 'name is required' }, 400); return;
+        }
+        const slug = body.name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        if (!slug) { res.json({ error: 'Invalid space name' }, 400); return; }
+        try {
+          const result = stmts.insertSpace.run({
+            name: body.name.trim(), slug: slug,
+            description: body.description || null,
+            color: body.color || '#FF2EC4',
+            sort_order: typeof body.sort_order === 'number' ? body.sort_order : 0
+          });
+          const space = stmts.getSpaceById.get(result.lastInsertRowid);
+          stmts.insertActivity.run({
+            event_type: 'space.created', agent_id: null, task_id: null, project_id: null,
+            summary: 'Space created: ' + space.name, detail_json: JSON.stringify(space)
+          });
+          bus.emit('activity:new', { event_type: 'space.created', summary: 'Space created: ' + space.name });
+          res.json({ space: space }, 201);
+        } catch (err) {
+          if (err.message && err.message.indexOf('UNIQUE') !== -1) {
+            res.json({ error: 'Space slug already exists' }, 409);
+          } else { throw err; }
+        }
+        return;
+      }
+
+      // PATCH /api/spaces/:id
+      if (method === 'PATCH' && /^\/api\/spaces\/(\d+)$/.test(pathname)) {
+        const spaceId = parseInt(pathname.match(/^\/api\/spaces\/(\d+)$/)[1], 10);
+        const existing = stmts.getSpaceById.get(spaceId);
+        if (!existing) { res.json({ error: 'Space not found' }, 404); return; }
+        const body = await readBody(req);
+        if (!body) { res.json({ error: 'Request body required' }, 400); return; }
+        stmts.updateSpace.run({
+          id: spaceId,
+          name: body.name !== undefined ? body.name : existing.name,
+          description: body.description !== undefined ? body.description : existing.description,
+          color: body.color !== undefined ? body.color : existing.color,
+          sort_order: body.sort_order !== undefined ? body.sort_order : existing.sort_order
+        });
+        const updated = stmts.getSpaceById.get(spaceId);
+        bus.emit('activity:new', { event_type: 'space.updated', summary: 'Space updated: ' + updated.name });
+        res.json({ space: updated });
+        return;
+      }
+
+      // DELETE /api/spaces/:id — block when the space still has projects
+      if (method === 'DELETE' && /^\/api\/spaces\/(\d+)$/.test(pathname)) {
+        const spaceId = parseInt(pathname.match(/^\/api\/spaces\/(\d+)$/)[1], 10);
+        if (spaceId === 1) { res.json({ error: 'Default Personal space cannot be deleted' }, 400); return; }
+        const existing = stmts.getSpaceById.get(spaceId);
+        if (!existing) { res.json({ error: 'Space not found' }, 404); return; }
+        const count = stmts.countProjectsInSpace.get(spaceId);
+        if (count && count.count > 0) {
+          res.json({ error: 'Space has ' + count.count + ' project(s). Move or delete them first.' }, 409);
+          return;
+        }
+        stmts.deleteSpace.run(spaceId);
+        bus.emit('activity:new', { event_type: 'space.deleted', summary: 'Space deleted: ' + existing.name });
+        res.json({ deleted: true });
+        return;
+      }
+
       // ===== INTEL-03: Project CRUD =====
 
-      // GET /api/projects
+      // GET /api/projects — optional ?space_id= filter
       if (method === 'GET' && pathname === '/api/projects') {
-        const projects = stmts.getAllProjects.all();
+        const spaceIdParam = url.searchParams.get('space_id');
+        const projects = spaceIdParam
+          ? stmts.getProjectsBySpace.all(parseInt(spaceIdParam, 10))
+          : stmts.getAllProjects.all();
         const result = projects.map(function (p) {
           const taskCount = db.prepare('SELECT COUNT(*) as count FROM tasks WHERE project_id = ?').get(p.id);
           const activeCount = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE project_id = ? AND status != 'done'").get(p.id);
@@ -1807,7 +1896,8 @@ const server = http.createServer(async (req, res) => {
           const result = stmts.insertProject.run({
             name: body.name.trim(), slug: slug,
             description: body.description || null,
-            color: body.color || '#00ff41'
+            color: body.color || '#00ff41',
+            space_id: typeof body.space_id === 'number' ? body.space_id : 1
           });
           const project = stmts.getProjectById.get(result.lastInsertRowid);
           stmts.insertActivity.run({
@@ -1839,7 +1929,8 @@ const server = http.createServer(async (req, res) => {
           name: body.name !== undefined ? body.name : existing.name,
           description: body.description !== undefined ? body.description : existing.description,
           color: body.color !== undefined ? body.color : existing.color,
-          status: body.status !== undefined ? body.status : existing.status
+          status: body.status !== undefined ? body.status : existing.status,
+          space_id: body.space_id !== undefined ? body.space_id : existing.space_id
         });
         const updated = stmts.getProjectById.get(projectId);
         stmts.insertActivity.run({

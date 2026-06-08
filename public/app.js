@@ -172,7 +172,11 @@
     agents: [],
     activeRuns: [],
     projects: [],
+    spaces: [],
     activeTab: 'board',
+    currentSpaceId: null,
+    currentProjectId: null,
+    collapsedSpaces: {},
     sseConnected: false
   };
 
@@ -574,7 +578,15 @@
     var labels = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
     var grouped = {};
     statuses.forEach(function (s) { grouped[s] = []; });
-    state.tasks.forEach(function (t) {
+
+    // Scope tasks by current project when one is selected
+    var scoped = state.tasks;
+    if (state.currentProjectId) {
+      scoped = state.tasks.filter(function (t) {
+        return String(t.project_id) === String(state.currentProjectId);
+      });
+    }
+    scoped.forEach(function (t) {
       var s = t.status || 'todo';
       if (grouped[s]) {
         grouped[s].push(t);
@@ -583,8 +595,32 @@
       }
     });
 
+    // Resolve project + space for the breadcrumb
+    var project = null;
+    var space = null;
+    if (state.currentProjectId) {
+      project = (state.projects || []).find(function (p) {
+        return String(p.id) === String(state.currentProjectId);
+      });
+    }
+    if (project) {
+      space = (state.spaces || []).find(function (s) { return s.id === project.space_id; });
+    }
+    var crumb = '';
+    if (project) {
+      crumb = '<div class="board-crumb">'
+        + (space ? '<span class="board-crumb-space" style="--space-color: ' + esc(space.color || '#FF2EC4') + '">' + esc(space.name) + '</span><span class="board-crumb-sep">/</span>' : '')
+        + '<span class="board-crumb-project" style="--project-color: ' + esc(project.color || '#00F0FF') + '">' + esc(project.name) + '</span>'
+        + '</div>';
+    } else {
+      crumb = '<div class="board-crumb"><span class="board-crumb-all">All tasks (no project selected)</span></div>';
+    }
+
     var html = '<div class="board-header">'
+      + '<div>'
       + '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCCB</span> Task Board</h2>'
+      + crumb
+      + '</div>'
       + '<button class="btn btn-primary" data-action="new-task">+ New Task</button>'
       + '</div>'
       + '<div class="board-grid">';
@@ -2144,6 +2180,114 @@
     state.projects = data.projects || [];
   }
 
+  // --- Spaces ---
+  async function loadSpaces() {
+    var data = await api('/spaces');
+    state.spaces = data.spaces || [];
+    if (!state.currentSpaceId && state.spaces.length) {
+      state.currentSpaceId = state.spaces[0].id;
+    }
+  }
+
+  function renderSidebar() {
+    var el = document.getElementById('app-sidebar');
+    if (!el) return;
+    var spaces = state.spaces || [];
+    var projects = state.projects || [];
+    var collapsed = state.collapsedSpaces || {};
+    var currentProjectId = state.currentProjectId;
+
+    var html = '<div class="sidebar-head">'
+      + '<span class="sidebar-title">Workspaces</span>'
+      + '<button class="sidebar-add" data-action="new-space" title="New space">+</button>'
+      + '</div>';
+
+    if (!spaces.length) {
+      html += '<div class="sidebar-empty">No spaces yet. Click + to create one.</div>';
+      el.innerHTML = html;
+      return;
+    }
+
+    spaces.forEach(function (space) {
+      var spaceProjects = projects.filter(function (p) { return p.space_id === space.id; });
+      var isCollapsed = collapsed[space.id];
+      html += '<div class="sidebar-space" data-space-id="' + esc(space.id) + '" style="--space-color: ' + esc(space.color || '#FF2EC4') + '">'
+        + '<div class="sidebar-space-header" data-action="toggle-space" data-space-id="' + esc(space.id) + '">'
+        + '<span class="sidebar-space-chev">' + (isCollapsed ? '▶' : '▼') + '</span>'
+        + '<span class="sidebar-space-dot"></span>'
+        + '<span class="sidebar-space-name">' + esc(space.name) + '</span>'
+        + '<span class="sidebar-space-count">' + spaceProjects.length + '</span>'
+        + '<button class="sidebar-add sidebar-add-sm" data-action="new-project" data-space-id="' + esc(space.id) + '" title="New project in ' + esc(space.name) + '">+</button>'
+        + '</div>';
+
+      if (!isCollapsed) {
+        html += '<div class="sidebar-projects">';
+        if (!spaceProjects.length) {
+          html += '<div class="sidebar-project-empty">No projects</div>';
+        } else {
+          spaceProjects.forEach(function (project) {
+            var isActive = String(project.id) === String(currentProjectId);
+            html += '<a class="sidebar-project' + (isActive ? ' active' : '') + '"'
+              + ' href="#/board/' + esc(project.id) + '"'
+              + ' data-project-id="' + esc(project.id) + '"'
+              + ' style="--project-color: ' + esc(project.color || '#00F0FF') + '">'
+              + '<span class="sidebar-project-dot"></span>'
+              + '<span class="sidebar-project-name">' + esc(project.name) + '</span>'
+              + (project.active_task_count ? '<span class="sidebar-project-count">' + esc(project.active_task_count) + '</span>' : '')
+              + '</a>';
+          });
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+
+    el.innerHTML = html;
+
+    // Delegate clicks once per render
+    el.onclick = function (e) {
+      var target = e.target.closest('[data-action]');
+      if (!target) return;
+      var action = target.getAttribute('data-action');
+      if (action === 'toggle-space') {
+        var sid = target.getAttribute('data-space-id');
+        var next = Object.assign({}, state.collapsedSpaces);
+        next[sid] = !next[sid];
+        state.collapsedSpaces = next;
+        renderSidebar();
+      } else if (action === 'new-space') {
+        e.preventDefault(); e.stopPropagation();
+        promptNewSpace();
+      } else if (action === 'new-project') {
+        e.preventDefault(); e.stopPropagation();
+        var spaceId = parseInt(target.getAttribute('data-space-id'), 10);
+        promptNewProject(spaceId);
+      }
+    };
+  }
+
+  function promptNewSpace() {
+    var name = prompt('Space name?');
+    if (!name || !name.trim()) return;
+    api('/spaces', { method: 'POST', body: { name: name.trim() } })
+      .then(function () {
+        return Promise.all([loadSpaces(), loadProjects()]);
+      })
+      .then(renderSidebar)
+      .catch(function (err) { alert('Failed to create space: ' + (err.message || err)); });
+  }
+
+  function promptNewProject(spaceId) {
+    var name = prompt('Project name?');
+    if (!name || !name.trim()) return;
+    api('/projects', { method: 'POST', body: { name: name.trim(), space_id: spaceId } })
+      .then(function () {
+        return loadProjects();
+      })
+      .then(renderSidebar)
+      .catch(function (err) { alert('Failed to create project: ' + (err.message || err)); });
+  }
+
 
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme || 'dark');
@@ -2222,6 +2366,14 @@
 
   function navigate() {
     var hash = location.hash || '#/overview';
+
+    // Support #/board/:projectId — extract the project id, then fall through to /board route
+    var boardMatch = hash.match(/^#\/board\/(\d+)$/);
+    if (boardMatch) {
+      state.currentProjectId = parseInt(boardMatch[1], 10);
+      hash = '#/board';
+    }
+
     var tab = tabs[hash];
     if (!tab) {
       hash = '#/board';
@@ -2231,6 +2383,9 @@
     // Update active tab in state
     var tabName = hash.replace('#/', '');
     state.activeTab = tabName;
+
+    // Re-render sidebar so the active project highlight follows navigation
+    renderSidebar();
 
     // Update nav link active classes
     var navLinks = document.querySelectorAll('.nav-tab');
@@ -2559,8 +2714,10 @@
       loadActivity().catch(function (err) { console.warn('Failed to load activity:', err); }),
       loadAgents().catch(function (err) { console.warn('Failed to load agents:', err); }),
       loadNotifications().catch(function (err) { console.warn('Failed to load notifications:', err); }),
-      loadProjects().catch(function (err) { console.warn('Failed to load projects:', err); })
+      loadProjects().catch(function (err) { console.warn('Failed to load projects:', err); }),
+      loadSpaces().catch(function (err) { console.warn('Failed to load spaces:', err); })
     ]).then(function () {
+      renderSidebar();
       // Initial route
       navigate();
       // Initial status bar update
