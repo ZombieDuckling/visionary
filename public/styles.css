@@ -75,6 +75,22 @@
   --agent-designer: #e879f9;
 }
 
+:root[data-theme="light"] {
+  --bg-primary: #f6f8fb;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #eef2f7;
+  --bg-input: #ffffff;
+  --border: #d9e2ef;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+}
+
+:root[data-theme="system"] {
+  color-scheme: dark light;
+}
+
 /* --- Reset and Base --- */
 *,
 *::before,
@@ -1976,4 +1992,43 @@ textarea {
   .orchestrator-workers {
     grid-template-columns: 1fr;
   }
+}
+
+
+.settings-panel {
+  max-width: 820px;
+}
+
+.settings-form {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.settings-form label {
+  display: grid;
+  gap: var(--space-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.settings-form label span {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.settings-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.settings-note {
+  border: 1px solid rgba(255, 136, 0, 0.32);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  color: var(--text-secondary);
+  background: rgba(255, 136, 0, 0.08);
 }

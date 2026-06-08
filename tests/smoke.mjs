@@ -276,6 +276,55 @@ test('GET /api/export + POST /api/import round-trip', async () => {
   assert.ok(badVersion.json && badVersion.json.error, 'error message present for bad schema_version');
 });
 
+
+test('GET /api/runtimes exposes adapter registry and direct mock routing works', async () => {
+  const { status, json } = await http('GET', '/api/runtimes');
+  assert.equal(status, 200);
+  const ids = json.runtimes.map(r => r.id);
+  for (const required of ['openclaw', 'claude', 'hermes']) {
+    assert.ok(ids.includes(required), `runtime registry includes ${required}`);
+  }
+
+  const registry = require('../src/runtimes');
+  let called = false;
+  registry.registerRuntime('smoke-mock', {
+    buildCommand(ctx) {
+      called = true;
+      assert.equal(ctx.agentId, 'main');
+      assert.equal(ctx.message, 'hello');
+      return { bin: 'node', args: ['-e', 'process.stdout.write("ok")'] };
+    }
+  });
+  const cmd = registry.getRuntime('smoke-mock').buildCommand({ agentId: 'main', message: 'hello' });
+  assert.equal(cmd.bin, 'node');
+  assert.equal(called, true, 'mock runtime buildCommand was called for configured agent context');
+});
+
+test('GET /api/settings + PUT /api/settings persists operator settings', async () => {
+  const before = await http('GET', '/api/settings');
+  assert.equal(before.status, 200);
+  assert.ok(before.json.settings);
+  assert.ok(Array.isArray(before.json.runtimes));
+
+  const payload = {
+    port: 3399,
+    workspace_path: '/tmp/visionary-workspace',
+    theme: 'light',
+    default_runtime: 'openclaw'
+  };
+  const saved = await http('PUT', '/api/settings', payload);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.json.settings.port, 3399);
+  assert.equal(saved.json.settings.workspace_path, '/tmp/visionary-workspace');
+  assert.equal(saved.json.settings.theme, 'light');
+  assert.equal(saved.json.settings.default_runtime, 'openclaw');
+  assert.equal(saved.json.restart_required, true);
+
+  const after = await http('GET', '/api/settings');
+  assert.equal(after.status, 200);
+  assert.equal(after.json.settings.theme, 'light');
+});
+
 test('Overview cleanup: source code does not touch activeDispatches map (live-dispatch safety)', () => {
   // Static structural assertion: the cleanup handler must not mutate the
   // in-memory dispatch map. We grep the handler block of server.js.
