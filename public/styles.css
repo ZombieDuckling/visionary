@@ -1649,3 +1649,331 @@ textarea {
   padding: var(--space-sm);
   background: rgba(0, 0, 0, 0.14);
 }
+
+/* ============================================
+   Mobile Responsive Breakpoints
+   CSS-only, appended per issue #2
+   ============================================ */
+
+/* --- Shared viewport meta helper --- */
+/* Ensure the browser uses logical pixels on mobile */
+
+/* ≤768px: small tablet / large phone
+   - Kanban: 2×2 grid
+   - Chat panel: overlay (slides over content)
+   ------------------------------------------------ */
+@media (max-width: 768px) {
+  /* Kanban: 2-column grid */
+  .board-grid {
+    grid-template-columns: repeat(2, 1fr);
+    min-height: unset;
+  }
+
+  /* Chat panel becomes a fixed overlay when open */
+  .content-with-chat {
+    position: relative;
+  }
+
+  .chat-panel {
+    position: fixed;
+    top: 44px; /* below top-bar */
+    right: 0;
+    bottom: 28px; /* above status-bar */
+    width: 320px;
+    min-width: 0;
+    z-index: 200;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.6);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    transform: translateX(0);
+  }
+
+  .chat-panel.collapsed {
+    transform: translateX(100%);
+    width: 320px;
+    min-width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Chat reopen button repositioned for tablet */
+  .chat-reopen-btn {
+    bottom: 36px;
+    right: 12px;
+  }
+
+  /* Overlay content fits narrower screens */
+  .overlay-content {
+    min-width: unset;
+    width: calc(100% - 32px);
+    max-width: 500px;
+    margin: 0 16px;
+  }
+
+  /* Interview overlay content height */
+  .interview-overlay .overlay-content {
+    height: 80vh;
+  }
+
+  /* Agent grid: 2 columns on tablet */
+  .agent-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  /* Overview grid: single column */
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Status bar: hide center metrics to save space */
+  .status-bar-center {
+    display: none;
+  }
+}
+
+/* ≤480px: phone
+   - Kanban: single column
+   - Tab strip: horizontally scrollable
+   - Chat panel: bottom sheet (collapsible)
+   - Tap targets ≥44px
+   - Hide priority badges, keep agent badges
+   ------------------------------------------------ */
+@media (max-width: 480px) {
+  /* Single-column kanban */
+  .board-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
+
+  /* Tab strip: horizontally scrollable */
+  .nav-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    flex: 1;
+    flex-wrap: nowrap;
+  }
+
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Ensure tab items don't wrap and remain tappable */
+  .nav-tab {
+    flex-shrink: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-md);
+    font-size: var(--font-size-xs);
+  }
+
+  /* Top bar adjustments */
+  .top-bar {
+    padding: 0 var(--space-sm);
+    gap: var(--space-sm);
+  }
+
+  /* Logo: smaller on phone */
+  .top-bar .logo {
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+
+  /* Top bar action buttons: 44px tap targets */
+  .top-bar-actions .btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: var(--space-xs) var(--space-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Main content: tighter padding on phone */
+  .main-content {
+    padding: var(--space-sm);
+  }
+
+  /* Chat panel: bottom sheet on phone */
+  .content-with-chat {
+    position: relative;
+  }
+
+  .chat-panel {
+    position: fixed;
+    top: unset;
+    bottom: 28px; /* sits above status bar */
+    left: 0;
+    right: 0;
+    width: 100%;
+    min-width: 0;
+    height: 60vh;
+    border-left: none;
+    border-top: 2px solid var(--border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6);
+    z-index: 300;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    transform: translateY(0);
+  }
+
+  .chat-panel.collapsed {
+    transform: translateY(100%);
+    width: 100%;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Chat reopen button: bottom-right on phone */
+  .chat-reopen-btn {
+    bottom: 36px;
+    right: 12px;
+    width: 48px;
+    height: 48px;
+  }
+
+  /* Hide priority badges (keep agent badges) */
+  .badge-red.priority-badge,
+  .badge-orange.priority-badge,
+  .badge-blue.priority-badge,
+  .board-card-meta .badge:not(.activity-agent-badge):not([style*="background"]):not([class*="agent"]) {
+    display: none;
+  }
+
+  /* More robust priority badge hiding via data attribute selectors
+     The board cards render priority as a badge — hide those */
+  .board-card .badge-red,
+  .board-card .badge-orange,
+  .board-card .badge-blue,
+  .board-card .badge-purple {
+    display: none;
+  }
+
+  /* Keep agent badges visible — re-show them if caught by above rule */
+  .board-card .activity-agent-badge {
+    display: inline-block;
+  }
+
+  /* Tap targets: buttons ≥44px */
+  .btn {
+    min-height: 44px;
+    padding: var(--space-sm) var(--space-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Board card: larger tap targets */
+  .board-card {
+    padding: var(--space-md) var(--space-md);
+    min-height: 44px;
+  }
+
+  /* Agent cards: full width */
+  .agent-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Project grid: full width */
+  .project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Overview hero: stacked */
+  .overview-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* Overview metrics: 2 columns max on phone */
+  .overview-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Overview grid: single column */
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Overlay content: full width with small margin */
+  .overlay-content {
+    min-width: unset;
+    width: calc(100% - 16px);
+    max-width: unset;
+    margin: 0 8px;
+    padding: var(--space-lg);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* Command bar: full width on phone */
+  .command-bar {
+    width: calc(100% - 32px);
+  }
+
+  /* Status bar: compact */
+  .status-bar {
+    font-size: 10px;
+    padding: 0 var(--space-sm);
+    gap: var(--space-sm);
+  }
+
+  .status-bar-center {
+    display: none;
+  }
+
+  /* Inbox filters: horizontally scrollable */
+  .inbox-filters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .inbox-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .inbox-filter {
+    flex-shrink: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Board header: stack on phone */
+  .board-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  /* Cron table: allow horizontal scroll */
+  .cron-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Memory search: stack on phone */
+  .memory-search {
+    flex-direction: column;
+  }
+
+  /* Mission card: single column on phone */
+  .mission-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .mission-card .badge,
+  .mission-card .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  /* Orchestrator workers: single column */
+  .orchestrator-workers {
+    grid-template-columns: 1fr;
+  }
+}
