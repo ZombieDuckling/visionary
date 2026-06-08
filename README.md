@@ -28,6 +28,8 @@ npm start              # server only, visit http://127.0.0.1:3333
 npm run app            # full Electron desktop app
 ```
 
+Visionary is also installable as a Progressive Web App. On Chrome desktop, look for the install icon in the address bar after opening the dashboard. On iOS Safari, tap Share → "Add to Home Screen". Once installed, the app launches in standalone mode (no browser chrome) and caches the static shell for offline use — API calls remain network-first.
+
 For the agent bridge:
 
 ```bash
