@@ -325,6 +325,92 @@ test('GET /api/settings + PUT /api/settings persists operator settings', async (
   assert.equal(after.json.settings.theme, 'light');
 });
 
+test('Rate limiter: GET /api/agents/:id/throttle returns bucket state', async () => {
+  // Use a known agent seeded by org-chart bootstrap (main/jarvis is always present).
+  const { status, json } = await http('GET', '/api/agents/main/throttle');
+  assert.equal(status, 200);
+  assert.ok(json && json.agent_id === 'main', 'agent_id present');
+  assert.ok(json.throttle, 'throttle object present');
+  assert.equal(typeof json.throttle.tokens, 'number', 'tokens is a number');
+  assert.equal(typeof json.throttle.capacity, 'number', 'capacity is a number');
+  assert.equal(typeof json.throttle.refill_per_second, 'number', 'refill_per_second is a number');
+  assert.ok(json.throttle.tokens >= 0, 'tokens non-negative');
+  assert.ok(json.throttle.capacity >= 1, 'capacity at least 1');
+});
+
+test('Rate limiter: PUT /api/agents/:id/throttle reconfigures bucket', async () => {
+  const { status, json } = await http('PUT', '/api/agents/main/throttle', {
+    capacity: 5,
+    refill_per_second: 0.5
+  });
+  assert.equal(status, 200);
+  assert.equal(json.throttle.capacity, 5);
+  assert.equal(json.throttle.refill_per_second, 0.5);
+  assert.equal(json.throttle.tokens, 5, 'bucket resets to full on reconfigure');
+
+  // Persisted — round-trip via GET
+  const get = await http('GET', '/api/agents/main/throttle');
+  assert.equal(get.json.throttle.capacity, 5);
+});
+
+test('Rate limiter: acquire + token-bucket unit smoke (via require)', () => {
+  const rl = require('../src/rate-limiter');
+
+  // Give scout a small bucket so we can exhaust it quickly.
+  rl.configure('scout', 3, 10);
+  assert.ok(rl.acquire('scout'), 'first acquire allowed');
+  assert.ok(rl.acquire('scout'), 'second acquire allowed');
+  assert.ok(rl.acquire('scout'), 'third acquire allowed');
+  assert.equal(rl.acquire('scout'), false, 'fourth acquire denied — bucket empty');
+
+  // After refill the bucket should recover.
+  rl.configure('scout', 3, 10);
+  assert.ok(rl.acquire('scout'), 'allowed again after re-configure (reset)');
+});
+
+test('Token-aware replay: selectForReplay covers small + large conversation', () => {
+  const guardrails = require('../src/guardrails');
+
+  // Small conversation — all messages fit within ceiling.
+  const small = [
+    { id: 1, role: 'user',      content: 'hello' },
+    { id: 2, role: 'assistant', content: 'world' }
+  ];
+  // newest-first (as getRecentAgentMessages returns them)
+  const smallReversed = small.slice().reverse();
+  const selectedSmall = guardrails.selectForReplay(smallReversed, 8000, true);
+  assert.equal(selectedSmall.length, 2, 'small: both messages included');
+  assert.equal(selectedSmall[0].id, 1, 'small: returned in chronological order');
+
+  // Large conversation — content that exceeds ceiling
+  const bigContent = 'x'.repeat(4001); // ~1000 tokens each
+  const large = [
+    { id: 10, role: 'user',      content: bigContent },
+    { id: 11, role: 'assistant', content: bigContent },
+    { id: 12, role: 'user',      content: bigContent },
+    { id: 13, role: 'assistant', content: bigContent },
+    { id: 14, role: 'user',      content: 'final question' }
+  ];
+  const largeReversed = large.slice().reverse(); // newest-first
+  const ceiling = 2000; // fits ~2 turns
+  const selectedLarge = guardrails.selectForReplay(largeReversed, ceiling, true);
+  assert.ok(selectedLarge.length < large.length, 'large: older turns pruned to fit ceiling');
+  assert.ok(selectedLarge.length >= 1, 'large: at least the most-recent turn included');
+  // Must be chronological
+  for (let i = 1; i < selectedLarge.length; i++) {
+    assert.ok(selectedLarge[i].id > selectedLarge[i - 1].id, 'large: chronological order');
+  }
+});
+
+test('Token-aware replay: failover.js source uses selectForReplay (structural)', () => {
+  const src = readFileSync(join(repoRoot, 'src', 'runtimes', 'failover.js'), 'utf8');
+  assert.ok(src.includes('selectForReplay'), 'failover uses guardrails.selectForReplay');
+  assert.ok(src.includes('estimatedTokens'), 'failover reports estimated token count');
+  assert.ok(/est\. tokens/.test(src), 'replay header includes "est. tokens"');
+  assert.ok(src.includes('rate-limiter'), 'failover imports rate-limiter');
+  assert.ok(src.includes("status: 'rate-limited'"), 'failover returns rate-limited status');
+});
+
 test('Overview cleanup: source code does not touch activeDispatches map (live-dispatch safety)', () => {
   // Static structural assertion: the cleanup handler must not mutate the
   // in-memory dispatch map. We grep the handler block of server.js.
