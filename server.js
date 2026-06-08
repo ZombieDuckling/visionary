@@ -6,6 +6,9 @@ const { execFile, execFileSync } = require('node:child_process');
 const { db, stmts } = require('./db');
 const { bus, handleSSE } = require('./sse');
 const runtimes = require('./src/runtimes');
+const cookbook = require('./src/cookbook');
+const guardrails = require('./src/guardrails');
+const deepResearch = require('./src/deep-research');
 
 // Read HTML file once at startup
 const indexHTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
@@ -1193,6 +1196,57 @@ const server = http.createServer(async (req, res) => {
       // GET /api/runtimes
       if (method === 'GET' && pathname === '/api/runtimes') {
         res.json({ runtimes: runtimes.listRuntimes() });
+        return;
+      }
+
+      // GET /api/cookbook — model inventory per available harness
+      if (method === 'GET' && pathname === '/api/cookbook') {
+        const inventory = await cookbook.inventory(runtimes.listRuntimes());
+        res.json({ inventory });
+        return;
+      }
+
+      // POST /api/research — kick off a Deep Research run on an agent
+      if (method === 'POST' && pathname === '/api/research') {
+        const body = await readBody(req);
+        if (!body || !body.question || !body.agent_id) {
+          res.json({ error: 'agent_id and question are required' }, 400); return;
+        }
+        const agent = stmts.getAgentById.get(body.agent_id);
+        if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
+
+        const dispatchFn = async function (message, _phaseMeta) {
+          const ctx = { message: String(message), allowedTools: body.allowed_tools, maxTurns: body.max_turns };
+          return await runtimes.executeWithFailover(
+            { getRuntime: runtimes.getRuntime, stmts, db },
+            agent, ctx,
+            { timeout: body.per_step_timeout || 180000, replayTurns: 0 }
+          );
+        };
+        const result = await deepResearch.runResearch({ dispatch: dispatchFn }, {
+          question: String(body.question),
+          maxQueries: body.max_queries || 5
+        });
+        stmts.insertActivity.run({
+          event_type: 'research.completed',
+          agent_id: agent.id, task_id: null, project_id: null,
+          summary: 'Research: ' + result.question.substring(0, 80),
+          detail_json: JSON.stringify({ sub_queries: result.subQueries, errors: result.errors })
+        });
+        bus.emit('activity:new', { event_type: 'research.completed', summary: 'Research: ' + result.question.substring(0, 80) });
+        res.json(result);
+        return;
+      }
+
+      // POST /api/guardrails/scan — scan arbitrary text for jailbreak patterns
+      if (method === 'POST' && pathname === '/api/guardrails/scan') {
+        const body = await readBody(req);
+        if (!body || typeof body.text !== 'string') {
+          res.json({ error: 'text is required' }, 400); return;
+        }
+        const hits = guardrails.detectJailbreak(body.text);
+        const tokens = guardrails.estimateTokens(body.text);
+        res.json({ jailbreak_hits: hits, estimated_tokens: tokens });
         return;
       }
 
