@@ -1,4 +1,40 @@
+# Dependencies
 node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Local database (contains personal task/agent data)
 visionary.sqlite
 visionary.sqlite-wal
 visionary.sqlite-shm
+
+# Build artifacts
+dist/
+macos-app/
+
+# Internal agent / orchestration state (machine-specific)
+.omc/
+.orchestration/
+.gstack/
+.openclaw/
+.claude/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Personal / off-topic content (not part of the dashboard)
+public/fu-dannel/

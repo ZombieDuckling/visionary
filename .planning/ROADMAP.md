@@ -2,7 +2,7 @@
 
 ## Overview
 
-Visionary transforms Josh's static Node.js dashboard into a full interactive operations center for orchestrating 8 OpenClaw agents. The build follows a strict dependency chain: database and server foundations first, then the kanban board and agent cards that form the daily-driver view, then agent dispatch and real-time telemetry that make it operational, then notification inbox and content viewers that surface agent outputs, and finally the intelligence features (interview mode, Jarvis routing) that differentiate Visionary from every other agent dashboard.
+Visionary transforms the user's static Node.js dashboard into a full interactive operations center for orchestrating 8 OpenClaw agents. The build follows a strict dependency chain: database and server foundations first, then the kanban board and agent cards that form the daily-driver view, then agent dispatch and real-time telemetry that make it operational, then notification inbox and content viewers that surface agent outputs, and finally the intelligence features (interview mode, Jarvis routing) that differentiate Visionary from every other agent dashboard.
 
 ## Phases
 

@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"node -e \\\"\\n  const fs = require('fs');\\n  const js = fs.readFileSync('public/app.js', 'utf8');\\n  const checks = [\\n    ['Has Proxy', js.includes('new Proxy')],\\n    ['Has EventSource', j...",
-  "error": "Exit code 1\nPASS Has Proxy\nPASS Has EventSource\nPASS Has onChange\nFAIL Has fetch helper\nPASS Has esc function\nPASS Has navigate\nPASS Has renderBoard\nPASS Has DOMContentLoaded\nPASS Has keyboard shortcuts",
-  "timestamp": "2026-05-13T11:20:25.341Z",
-  "retry_count": 1
-}

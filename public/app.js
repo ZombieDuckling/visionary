@@ -45,12 +45,24 @@
   }
 
   // --- Markdown Renderer ---
+  // Allow only safe URL schemes in markdown links; rejected URLs render as '#'.
+  // Blocks javascript:, data:, vbscript:, file:, etc. — XSS via markdown.
+  function safeUrl(raw) {
+    if (raw == null) return '#';
+    var u = String(raw).trim();
+    if (!u) return '#';
+    if (/^(https?:|mailto:|\/|#|\?|\.\/|\.\.\/)/i.test(u)) return u;
+    if (/^[a-z][a-z0-9+.\-]*:/i.test(u)) return '#';
+    return u;
+  }
   function inlineFormat(text) {
     var s = esc(text);
     s = s.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="md-link">$1</a>');
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_m, label, url) {
+      return '<a href="' + safeUrl(url) + '" target="_blank" rel="noopener noreferrer" class="md-link">' + label + '</a>';
+    });
     return s;
   }
 
@@ -137,17 +149,20 @@
   var AGENT_COLORS = {
     main: '#3b8bff', jarvis: '#3b8bff', scout: '#06b6d4', analyst: '#7c5cff', forge: '#f59e0b',
     sentinel: '#ef4444', broker: '#22c55e', ops: '#8b5cf6', hunter: '#ec4899', reviewer: '#f97316',
-    coder: '#d97706', researcher: '#4285f4', designer: '#e879f9'
+    coder: '#d97706', researcher: '#4285f4', designer: '#e879f9', hermes: '#00ff88'
   };
 
   // --- Agent Emoji Map ---
   var AGENT_ICONS = {
     jarvis: '\u2699\uFE0F', scout: '\uD83D\uDD2D', analyst: '\uD83D\uDD2C', forge: '\uD83D\uDD28',
-    sentinel: '\uD83D\uDEE1\uFE0F', broker: '\uD83D\uDCC8', ops: '\uD83D\uDDA5\uFE0F', hunter: '\uD83C\uDFAF'
+    sentinel: '\uD83D\uDEE1\uFE0F', broker: '\uD83D\uDCC8', ops: '\uD83D\uDDA5\uFE0F', hunter: '\uD83C\uDFAF', hermes: '\uD83E\uDDED'
   };
 
   // --- Last SSE Event Time ---
   var _lastSSEEventTime = null;
+
+  // --- Navigation generation counter (stale-async guard) ---
+  var _navGeneration = 0;
 
   // --- Reactive State Store (Proxy-based) ---
   var _state = {
@@ -351,7 +366,8 @@
     { id: 'sentinel', name: 'Sentinel', role: 'Security audits' },
     { id: 'broker', name: 'Broker', role: 'Portfolio & finance' },
     { id: 'ops', name: 'Ops', role: 'Infrastructure' },
-    { id: 'hunter', name: 'Hunter', role: 'Job hunting' }
+    { id: 'hunter', name: 'Hunter', role: 'Job hunting' },
+    { id: 'hermes', name: 'Hermes', role: 'Persistent orchestrator' }
   ];
 
   // --- Priority Helpers ---
@@ -409,6 +425,151 @@
   }
 
   // --- Render Functions ---
+
+  // Overview view: mission control snapshot for deciding what to do next
+  function renderOverview(container) {
+    var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
+    container._viewRequestId = requestId;
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">⌁</span> Mission Overview</h2>'
+      + '<div class="overview-loading card">Loading live project state...</div>';
+
+    api('/overview').then(function (data) {
+      if (container._viewRequestId !== requestId || state.activeTab !== 'overview') return;
+      var counts = data.counts || {};
+      var tasks = counts.tasks || {};
+      var runs = counts.runs || {};
+      var projects = counts.projects || {};
+      var openTasks = data.open_tasks || [];
+      var staleRuns = data.stale_running_runs || [];
+      var recentRuns = data.recent_runs || [];
+      var activity = data.recent_activity || [];
+      var missions = data.missions || [];
+      var orchestrator = data.orchestrator || null;
+      var healthLabel = staleRuns.length ? 'Needs attention' : 'Ready';
+
+      var html = '<h2 class="section-header"><span class="section-header-icon">⌁</span> Mission Overview</h2>';
+      html += '<div class="overview-hero card">'
+        + '<div><div class="overview-kicker">Daily command center</div>'
+        + '<div class="overview-title">' + esc(healthLabel) + '</div>'
+        + '<div class="overview-subtitle">' + esc(openTasks.length ? 'Next useful work is waiting on the board.' : 'No open dashboard tasks. Create or dispatch the next mission.') + '</div></div>'
+        + '<div class="overview-actions"><a class="btn btn-primary" href="#/board">Open board</a><button class="btn" data-action="open-command-bar">Dispatch Cmd+K</button></div>'
+        + '</div>';
+
+      html += '<section class="card overview-panel overview-missions"><div class="overview-panel-header"><h3>Today\'s top 3 missions</h3><span class="badge badge-blue">auto-ranked</span></div>';
+      if (!missions.length) {
+        html += '<div class="empty-state compact"><div class="empty-state-title">No missions ranked yet</div><div class="empty-state-desc">Overview could not derive missions from the current state.</div></div>';
+      } else {
+        html += '<div class="mission-list">';
+        missions.forEach(function (m) {
+          html += '<div class="mission-card">'
+            + '<div class="mission-rank">#' + esc(m.rank || '') + '</div>'
+            + '<div class="mission-body"><div class="mission-title">' + esc(m.title) + '</div><div class="overview-meta">' + esc(m.detail || '') + '</div></div>'
+            + '<span class="badge ' + priorityBadge(m.priority) + '">' + esc(m.priority || 'medium') + '</span>'
+            + '<button class="btn btn-small" data-action="mission-action" data-mission-action="' + esc(m.action_type || '') + '" data-target="' + esc(m.target || '') + '" data-task-id="' + esc(m.task_id || '') + '" data-agent-id="' + esc(m.agent_id || '') + '">' + esc(m.action_label || 'Open') + '</button>'
+            + '</div>';
+        });
+        html += '</div>';
+      }
+      html += '</section>';
+
+      if (orchestrator) {
+        html += renderOrchestratorPanel(orchestrator);
+      }
+
+      html += '<div class="overview-metrics">'
+        + overviewMetric('Open tasks', (tasks.todo || 0) + (tasks.in_progress || 0) + (tasks.review || 0), 'todo ' + (tasks.todo || 0) + ' · active ' + (tasks.in_progress || 0) + ' · review ' + (tasks.review || 0))
+        + overviewMetric('Done', tasks.done || 0, 'completed tasks')
+        + overviewMetric('Agents running', counts.active_dispatches || 0, 'db running ' + (runs.running || 0))
+        + overviewMetric('Projects', projects.active || 0, 'active')
+        + overviewMetric('Unread', counts.unread_notifications || 0, 'notifications')
+        + '</div>';
+
+      if (staleRuns.length) {
+        html += '<div class="overview-alert card"><span class="badge badge-orange">Stale running rows</span><span>' + staleRuns.length + ' agent run(s) have been marked running for more than 2 hours. They may be leftovers from previous sessions.</span><button class="btn btn-danger" data-action="clean-stale-runs">Clean stale runs</button></div>';
+      }
+
+      html += '<div class="overview-grid">';
+      html += '<section class="card overview-panel"><h3>Next tasks</h3>';
+      if (!openTasks.length) {
+        html += '<div class="empty-state compact"><div class="empty-state-title">No open tasks</div><div class="empty-state-desc">Use Cmd+K to create or dispatch the next mission.</div></div>';
+      } else {
+        html += '<div class="overview-list">';
+        openTasks.forEach(function (t) {
+          html += '<div class="overview-list-item">'
+            + '<div><strong>' + esc(t.title) + '</strong><div class="overview-meta">' + esc(t.project_name || 'No project') + ' · ' + esc(t.agent_id || 'unassigned') + '</div></div>'
+            + '<span class="badge ' + priorityBadge(t.priority) + '">' + esc(t.priority || 'medium') + '</span>'
+            + '</div>';
+        });
+        html += '</div>';
+      }
+      html += '</section>';
+
+      html += '<section class="card overview-panel"><h3>Recent agent runs</h3>';
+      if (!recentRuns.length) { html += '<div class="empty-state compact"><div class="empty-state-title">No runs yet</div></div>'; }
+      else {
+        html += '<div class="overview-list">';
+        recentRuns.forEach(function (r) {
+          html += '<div class="overview-list-item">'
+            + '<div><strong>' + esc(r.agent_id) + '</strong><div class="overview-meta">' + esc(r.task_title || r.message || 'Manual run') + '</div></div>'
+            + '<span class="badge ' + runBadge(r.status) + '">' + esc(r.status) + '</span>'
+            + '</div>';
+        });
+        html += '</div>';
+      }
+      html += '</section>';
+
+      html += '<section class="card overview-panel wide"><h3>Recent activity</h3>';
+      if (!activity.length) { html += '<div class="empty-state compact"><div class="empty-state-title">No activity yet</div></div>'; }
+      else {
+        html += '<div class="overview-activity">';
+        activity.forEach(function (a) {
+          html += '<div class="overview-activity-row"><span class="overview-dot"></span><div><strong>' + esc(a.event_type) + '</strong><div>' + esc(a.summary) + '</div><small>' + esc(timeAgo(a.created_at)) + '</small></div></div>';
+        });
+        html += '</div>';
+      }
+      html += '</section></div>';
+
+      container.innerHTML = html;
+    }).catch(function (err) {
+      if (container._viewRequestId !== requestId || state.activeTab !== 'overview') return;
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">⌁</span> Mission Overview</h2>'
+        + '<div class="card overview-alert"><span class="badge badge-red">Error</span><span>' + esc((err.data && err.data.error) || err.message || 'Failed to load overview') + '</span></div>';
+    });
+  }
+
+  function renderOrchestratorPanel(orchestrator) {
+    var workers = orchestrator.workers || [];
+    var running = workers.filter(function (w) { return w.tmux === 'running'; }).length;
+    var html = '<section class="card overview-panel overview-orchestrator">'
+      + '<div class="overview-panel-header"><h3>Hermes persistent orchestrator</h3><span class="badge badge-green">wired</span></div>'
+      + '<div class="overview-meta">Cron ' + esc((orchestrator.cron && orchestrator.cron.schedule) || 'every 30m') + ' · workers ' + running + '/' + workers.length + ' running · updated ' + esc(timeAgo(orchestrator.updated_at)) + '</div>'
+      + '<div class="orchestrator-workers">';
+    workers.forEach(function (w) {
+      html += '<div class="orchestrator-worker"><div><strong>' + esc(w.lane) + '</strong><div class="overview-meta">' + esc(w.status) + ' · tmux ' + esc(w.tmux) + '</div></div><span class="badge ' + (w.tmux === 'running' ? 'badge-green' : 'badge-orange') + '">' + esc(w.tmux) + '</span></div>';
+    });
+    html += '</div>'
+      + '<div class="overview-actions"><a class="btn" href="#/agents">View agents</a><a class="btn" href="#/activity">Activity</a><button class="btn" data-action="open-command-bar">Dispatch Hermes</button></div>'
+      + '</section>';
+    return html;
+  }
+
+  function overviewMetric(label, value, detail) {
+    return '<div class="card overview-metric"><div class="overview-metric-label">' + esc(label) + '</div><div class="overview-metric-value">' + esc(value) + '</div><div class="overview-metric-detail">' + esc(detail) + '</div></div>';
+  }
+
+  function priorityBadge(priority) {
+    if (priority === 'critical') return 'badge-red';
+    if (priority === 'high') return 'badge-orange';
+    if (priority === 'low') return 'badge-blue';
+    return 'badge-green';
+  }
+
+  function runBadge(status) {
+    if (status === 'completed') return 'badge-green';
+    if (status === 'running') return 'badge-blue';
+    if (status === 'failed' || status === 'timeout') return 'badge-red';
+    return 'badge-orange';
+  }
 
   // Board view: 4-column grid grouped by status
   function renderBoard(container) {
@@ -596,7 +757,7 @@
       var statusLabel = hasRunningState ? 'Running now' : ((agent.status || 'idle').replace(/_/g, ' '));
 
       // Agent card with colored glow border
-      html += '<div class="agent-card" style="border-color: color-mix(in srgb, ' + agentColor + ' 30%, var(--border)); box-shadow: 0 0 12px color-mix(in srgb, ' + agentColor + ' 10%, transparent), inset 0 1px 0 color-mix(in srgb, ' + agentColor + ' 8%, transparent);">'
+      html += '<div class="agent-card" style="border-color: color-mix(in srgb, ' + agentColor + ' 30%, var(--border));">'
         + '<div class="agent-icon-lg">' + esc(icon) + '</div>'
         + '<div class="agent-name" style="color: ' + agentColor + '">'
         + '<span class="status-indicator ' + esc(statusClass) + '"></span>'
@@ -860,10 +1021,13 @@
 
   // Crons view: table + 24h SAST timeline
   function renderCrons(container) {
+    var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
+    container._viewRequestId = requestId;
     container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\u23F0</span> Cron Schedule</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/crons').then(function (data) {
+      if (container._viewRequestId !== requestId || state.activeTab !== 'crons') return;
       var raw = data.crons || data || {};
       var crons = raw.jobs || (Array.isArray(raw) ? raw : []);
       var html = '<h2 class="section-header"><span class="section-header-icon">\u23F0</span> Cron Schedule</h2>';
@@ -934,6 +1098,7 @@
 
       container.innerHTML = html;
     }).catch(function () {
+      if (container._viewRequestId !== requestId || state.activeTab !== 'crons') return;
       container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\u23F0</span> Cron Schedule</h2>'
         + '<div class="empty-state">'
         + '<div class="empty-state-icon">\u26A0\uFE0F</div>'
@@ -944,10 +1109,12 @@
 
   // Briefs viewer: list with inline expand/collapse
   function renderBriefs(container) {
+    var navGen = _navGeneration;
     container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCF0</span> Daily Briefs</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/briefs').then(function (data) {
+      if (navGen !== _navGeneration) return;
       var briefs = data.briefs || [];
       var html = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCF0</span> Daily Briefs</h2>';
       if (briefs.length === 0) {
@@ -996,6 +1163,7 @@
         }
       });
     }).catch(function () {
+      if (navGen !== _navGeneration) return;
       container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCF0</span> Daily Briefs</h2>'
         + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load briefs</div></div>';
     });
@@ -1003,10 +1171,12 @@
 
   // Audits viewer: list with inline expand/collapse
   function renderAudits(container) {
+    var navGen = _navGeneration;
     container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDEE1\uFE0F</span> Security Audits</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/audits').then(function (data) {
+      if (navGen !== _navGeneration) return;
       var audits = data.audits || [];
       var html = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDEE1\uFE0F</span> Security Audits</h2>';
       if (audits.length === 0) {
@@ -1052,6 +1222,7 @@
         }
       });
     }).catch(function () {
+      if (navGen !== _navGeneration) return;
       container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDEE1\uFE0F</span> Security Audits</h2>'
         + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load audits</div></div>';
     });
@@ -1059,10 +1230,12 @@
 
   // Portfolio viewer: list with inline expand/collapse
   function renderPortfolio(container) {
+    var navGen = _navGeneration;
     container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC8</span> Portfolio Reports</h2>'
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/portfolio').then(function (data) {
+      if (navGen !== _navGeneration) return;
       var files = data.portfolio || [];
       var html = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC8</span> Portfolio Reports</h2>';
       if (files.length === 0) {
@@ -1108,6 +1281,7 @@
         }
       });
     }).catch(function () {
+      if (navGen !== _navGeneration) return;
       container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC8</span> Portfolio Reports</h2>'
         + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load portfolio</div></div>';
     });
@@ -1115,6 +1289,8 @@
 
   // Memory browser: search + file list with inline expand
   function renderMemory(container) {
+    var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
+    container._viewRequestId = requestId;
     var html = '<h2 class="section-header"><span class="section-header-icon">\uD83E\uDDE0</span> Memory Browser</h2>';
     html += '<div class="memory-search">'
       + '<input class="input" type="text" id="memory-query" placeholder="Search Karpathy memory wiki..." />'
@@ -1129,7 +1305,8 @@
 
     // Load memory file list
     api('/memory').then(function (data) {
-      var filesContainer = document.getElementById('memory-files');
+      if (container._viewRequestId !== requestId || state.activeTab !== 'memory') return;
+      var filesContainer = container.querySelector('#memory-files');
       if (!filesContainer) return;
       var files = data.files || [];
       var fhtml = '';
@@ -1152,7 +1329,8 @@
       }
       filesContainer.innerHTML = fhtml;
     }).catch(function () {
-      var filesContainer = document.getElementById('memory-files');
+      if (container._viewRequestId !== requestId || state.activeTab !== 'memory') return;
+      var filesContainer = container.querySelector('#memory-files');
       if (filesContainer) filesContainer.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load memory files</div></div>';
     });
 
@@ -1163,9 +1341,10 @@
         var queryInput = document.getElementById('memory-query');
         var query = queryInput ? queryInput.value.trim() : '';
         if (!query) return;
-        var resultsDiv = document.getElementById('memory-results');
+        var resultsDiv = container.querySelector('#memory-results');
         if (resultsDiv) resultsDiv.innerHTML = '<div class="empty-state"><div class="spinner"></div> Searching...</div>';
         api('/memory/search?q=' + encodeURIComponent(query)).then(function (data) {
+          if (container._viewRequestId !== requestId || state.activeTab !== 'memory') return;
           var results = data.results || [];
           if (!resultsDiv) return;
           if (results.length === 0) {
@@ -1190,10 +1369,11 @@
       var memItem = e.target.closest('[data-action="open-memory"]');
       if (memItem) {
         var filename = memItem.getAttribute('data-filename');
-        var viewer = document.getElementById('memory-viewer');
+        var viewer = container.querySelector('#memory-viewer');
         if (!viewer) return;
         viewer.innerHTML = '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
         api('/memory/' + encodeURIComponent(filename)).then(function (data) {
+          if (container._viewRequestId !== requestId || state.activeTab !== 'memory') return;
           viewer.innerHTML = '<button class="btn btn-back" data-action="close-memory-viewer">\u2190 Close</button>'
             + '<h3 style="font-size: var(--font-size-md); margin: var(--space-md) 0;">' + esc(data.filename) + '</h3>'
             + '<div class="md-viewer">' + renderMarkdown(data.content) + '</div>';
@@ -1205,13 +1385,13 @@
 
       var closeBtn = e.target.closest('[data-action="close-memory-viewer"]');
       if (closeBtn) {
-        var viewer = document.getElementById('memory-viewer');
+        var viewer = container.querySelector('#memory-viewer');
         if (viewer) viewer.innerHTML = '';
       }
     });
 
     // Enter key for search
-    var queryInput = document.getElementById('memory-query');
+    var queryInput = container.querySelector('#memory-query');
     if (queryInput) {
       queryInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
@@ -1669,7 +1849,7 @@
               }).then(function (result) {
                 overlay.remove();
                 showToast('Dispatched to ' + (result.agent_id || 'agent'));
-                location.hash = '#/board';
+                location.hash = '#/overview';
               }).catch(function (err) {
                 dispatchBtn.textContent = 'Dispatch';
                 dispatchBtn.disabled = false;
@@ -1695,12 +1875,15 @@
 
   // --- INTEL-03: Projects Tab ---
   function renderProjects(container) {
+    var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
+    container._viewRequestId = requestId;
     var selectedProject = container._selectedProject || null;
 
     if (selectedProject) {
       container.innerHTML = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
         + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
       api('/projects/' + selectedProject).then(function (data) {
+        if (container._viewRequestId !== requestId || state.activeTab !== 'projects') return;
         var p = data.project;
         var html = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
           + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-sm);">'
@@ -1758,16 +1941,6 @@
         html += '</div>';
 
         container.innerHTML = html;
-
-        // Event delegation
-        container.addEventListener('click', function (e) {
-          var back = e.target.closest('[data-action="projects-back"]');
-          if (back) { container._selectedProject = null; container.innerHTML = ''; renderProjects(container); return; }
-          var viewTask = e.target.closest('[data-action="view-task"]');
-          if (viewTask) { showTaskDetail(viewTask.getAttribute('data-task-id')); return; }
-          var editBtn = e.target.closest('[data-action="edit-project"]');
-          if (editBtn) { showEditProjectForm(editBtn.getAttribute('data-pid')); }
-        });
       }).catch(function () {
         container.innerHTML = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
           + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load project</div></div>';
@@ -1782,6 +1955,7 @@
       + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
 
     api('/projects').then(function (data) {
+      if (container._viewRequestId !== requestId || state.activeTab !== 'projects') return;
       var projects = data.projects || [];
       var html = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">'
         + '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC1</span> Projects</h2>'
@@ -1808,17 +1982,45 @@
         html += '</div>';
       }
       container.innerHTML = html;
-
-      container.addEventListener('click', function (e) {
-        var newBtn = e.target.closest('[data-action="new-project"]');
-        if (newBtn) { showCreateProjectForm(); return; }
-        var card = e.target.closest('[data-action="view-project"]');
-        if (card) { container._selectedProject = card.getAttribute('data-pid'); container.innerHTML = ''; renderProjects(container); }
-      });
     }).catch(function () {
       container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83D\uDCC1</span> Projects</h2>'
         + '<div class="empty-state"><div class="empty-state-icon">\u26A0\uFE0F</div><div class="empty-state-title">Failed to load projects</div></div>';
     });
+
+    container.onclick = function (e) {
+      var back = e.target.closest('[data-action="projects-back"]');
+      if (back) {
+        container._selectedProject = null;
+        container.innerHTML = '';
+        renderProjects(container);
+        return;
+      }
+
+      var viewTask = e.target.closest('[data-action="view-task"]');
+      if (viewTask) {
+        showTaskDetail(viewTask.getAttribute('data-task-id'));
+        return;
+      }
+
+      var editBtn = e.target.closest('[data-action="edit-project"]');
+      if (editBtn) {
+        showEditProjectForm(editBtn.getAttribute('data-pid'));
+        return;
+      }
+
+      var newBtn = e.target.closest('[data-action="new-project"]');
+      if (newBtn) {
+        showCreateProjectForm();
+        return;
+      }
+
+      var card = e.target.closest('[data-action="view-project"]');
+      if (card) {
+        container._selectedProject = card.getAttribute('data-pid');
+        container.innerHTML = '';
+        renderProjects(container);
+      }
+    };
   }
 
   // --- Project Create Form ---
@@ -1947,6 +2149,7 @@
 
   // --- Tab Router (hash-based) ---
   var tabs = {
+    '#/overview': { render: renderOverview, label: 'Overview' },
     '#/board': { render: renderBoard, label: 'Board' },
     '#/agents': { render: renderAgents, label: 'Agents' },
     '#/activity': { render: renderActivityView, label: 'Activity' },
@@ -1960,7 +2163,7 @@
   };
 
   function navigate() {
-    var hash = location.hash || '#/board';
+    var hash = location.hash || '#/overview';
     var tab = tabs[hash];
     if (!tab) {
       hash = '#/board';
@@ -1984,6 +2187,9 @@
     // Render tab content
     var main = document.getElementById('main-content');
     if (main && tab) {
+      _navGeneration++;
+      delete main._selectedProject;
+      delete main._viewRequestId;
       main.innerHTML = '';
       tab.render(main);
     }
@@ -2040,7 +2246,7 @@
         }
         // Navigation commands
         if (value.charAt(0) === '/') {
-          var routeMap = { '/board': '#/board', '/agents': '#/agents', '/activity': '#/activity', '/inbox': '#/inbox', '/crons': '#/crons', '/briefs': '#/briefs', '/audits': '#/audits', '/portfolio': '#/portfolio', '/memory': '#/memory', '/projects': '#/projects' };
+          var routeMap = { '/overview': '#/overview', '/home': '#/overview', '/board': '#/board', '/agents': '#/agents', '/activity': '#/activity', '/inbox': '#/inbox', '/crons': '#/crons', '/briefs': '#/briefs', '/audits': '#/audits', '/portfolio': '#/portfolio', '/memory': '#/memory', '/projects': '#/projects' };
           var route = routeMap[value.toLowerCase()];
           if (route) {
             location.hash = route;
@@ -2122,6 +2328,68 @@
     }
   }
 
+  document.addEventListener('click', function (e) {
+    var commandTarget = e.target.closest('[data-action="open-command-bar"]');
+    if (commandTarget) {
+      e.preventDefault();
+      showCommandBar();
+      return;
+    }
+
+    var cleanTarget = e.target.closest('[data-action="clean-stale-runs"]');
+    if (cleanTarget) {
+      e.preventDefault();
+      cleanTarget.disabled = true;
+      cleanTarget.textContent = 'Cleaning...';
+      api('/overview/clean-stale-runs', { method: 'POST', body: {} })
+        .then(function (result) {
+          showToast('Cleaned ' + (result.cleaned || 0) + ' stale run(s)');
+          return Promise.all([loadActivity(), loadAgents()]);
+        })
+        .then(function () {
+          var main = document.getElementById('main-content');
+          if (main && state.activeTab === 'overview') { main.innerHTML = ''; renderOverview(main); }
+        })
+        .catch(function (err) {
+          cleanTarget.disabled = false;
+          cleanTarget.textContent = 'Clean stale runs';
+          showToast((err.data && err.data.error) ? err.data.error : 'Cleanup failed');
+        });
+      return;
+    }
+
+    var missionTarget = e.target.closest('[data-action="mission-action"]');
+    if (missionTarget) {
+      e.preventDefault();
+      var action = missionTarget.getAttribute('data-mission-action');
+      var targetHash = missionTarget.getAttribute('data-target');
+      var taskId = missionTarget.getAttribute('data-task-id');
+      var agentId = missionTarget.getAttribute('data-agent-id');
+      if (action === 'clean_stale_runs') {
+        var cleanBtn = document.querySelector('[data-action="clean-stale-runs"]');
+        if (cleanBtn) cleanBtn.click();
+        return;
+      }
+      if (action === 'open_command_bar') {
+        showCommandBar();
+        return;
+      }
+      if (action === 'open_inbox') {
+        location.hash = '#/inbox';
+        return;
+      }
+      if (action === 'dispatch_task' && taskId && agentId) {
+        missionTarget.disabled = true;
+        missionTarget.textContent = 'Dispatching...';
+        api('/dispatch', { method: 'POST', body: { task_id: Number(taskId), agent_id: agentId } })
+          .then(function () { showToast('Dispatched task #' + taskId + ' to ' + agentId); location.hash = '#/board'; })
+          .catch(function (err) { missionTarget.disabled = false; missionTarget.textContent = 'Dispatch'; showToast((err.data && err.data.error) ? err.data.error : 'Dispatch failed'); });
+        return;
+      }
+      if (targetHash) location.hash = targetHash;
+    }
+  });
+
   // --- Keyboard Shortcuts ---
   document.addEventListener('keydown', function (e) {
     // Cmd+K / Ctrl+K: toggle command bar (works even in input fields)
@@ -2138,8 +2406,8 @@
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
     var keyMap = {
-      '1': '#/board', '2': '#/agents', '3': '#/activity', '4': '#/inbox',
-      '5': '#/crons', '6': '#/briefs', '7': '#/audits', '8': '#/portfolio', '9': '#/memory',
+      '1': '#/overview', '2': '#/board', '3': '#/agents', '4': '#/activity', '5': '#/inbox',
+      '6': '#/crons', '7': '#/briefs', '8': '#/audits', '9': '#/portfolio',
       '0': '#/projects'
     };
 

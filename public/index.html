@@ -11,7 +11,8 @@
     <header class="top-bar">
       <span class="logo">Visionary</span>
       <nav class="nav-tabs">
-        <a class="nav-tab active" href="#/board" data-tab="board">Board</a>
+        <a class="nav-tab active" href="#/overview" data-tab="overview">Overview</a>
+        <a class="nav-tab" href="#/board" data-tab="board">Board</a>
         <a class="nav-tab" href="#/agents" data-tab="agents">Agents</a>
         <a class="nav-tab" href="#/activity" data-tab="activity">Activity</a>
         <a class="nav-tab" href="#/inbox" data-tab="inbox">Inbox</a>
@@ -33,8 +34,13 @@
           <span class="chat-title">⚙️ Jarvis</span>
           <button class="chat-toggle" id="chat-toggle" title="Toggle chat">◀</button>
         </div>
+        <div class="chat-voice-strip" id="chat-voice-strip">
+          <span class="chat-voice-state" id="chat-voice-state">Voice idle</span>
+          <span class="chat-voice-detail" id="chat-voice-detail">Push to talk</span>
+        </div>
         <div class="chat-messages" id="chat-messages"></div>
         <div class="chat-input-bar">
+          <button class="chat-voice-btn" id="chat-voice-btn" title="Talk to Jarvis">🎙</button>
           <input type="text" id="chat-input" class="chat-input" placeholder="Talk to Jarvis..." autocomplete="off">
           <button class="chat-send" id="chat-send">▶</button>
         </div>

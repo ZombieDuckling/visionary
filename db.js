@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
-const db = new Database('./visionary.sqlite');
+const DB_PATH = process.env.VISIONARY_DB || './visionary.sqlite';
+const db = new Database(DB_PATH);
 
 // PRAGMAs -- WAL first, then the rest
 db.pragma('journal_mode = WAL');
