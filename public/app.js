@@ -370,18 +370,6 @@
     { id: 'hermes', name: 'Hermes', role: 'Persistent orchestrator' }
   ];
 
-  // --- Priority Helpers ---
-  function priorityBadge(priority) {
-    var map = {
-      critical: 'badge-red',
-      high: 'badge-orange',
-      medium: 'badge-blue',
-      low: 'text-muted'
-    };
-    var cls = map[priority] || 'badge-blue';
-    return '<span class="badge ' + cls + '">' + esc(priority || 'medium') + '</span>';
-  }
-
   function agentBadge(agentId) {
     if (!agentId) return '';
     var colorVar = '--agent-' + esc(agentId);

@@ -266,25 +266,10 @@ function postAgentMessage(fromAgent, toAgent, subject, body, taskId) {
 const BRIDGE_HTTP = 'http://127.0.0.1:3335';
 let bridgeProcess = null;
 
-function bridgePublishMessage(fromAgent, toAgent, subject, body, taskId) {
-  const https = require('node:http');
-  const payload = JSON.stringify({
-    from: fromAgent, to: toAgent, subject: subject, body: body || '', task_id: taskId || null
-  });
-  const req = https.request(`${BRIDGE_HTTP}/message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
-    timeout: 2000
-  }, () => {});
-  req.on('error', () => { /* bridge may not be running */ });
-  req.write(payload);
-  req.end();
-}
-
-function bridgePublish(topic, payload, fromAgent) {
-  const https = require('node:http');
-  const data = JSON.stringify({ topic, payload, from: fromAgent || 'node-server' });
-  const req = https.request(`${BRIDGE_HTTP}/publish`, {
+// Fire-and-forget POST to the local bridge. Swallows errors — bridge may not be running.
+function bridgePost(endpoint, payload) {
+  const data = JSON.stringify(payload);
+  const req = http.request(`${BRIDGE_HTTP}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
     timeout: 2000
@@ -292,6 +277,16 @@ function bridgePublish(topic, payload, fromAgent) {
   req.on('error', () => {});
   req.write(data);
   req.end();
+}
+
+function bridgePublishMessage(fromAgent, toAgent, subject, body, taskId) {
+  bridgePost('/message', {
+    from: fromAgent, to: toAgent, subject: subject, body: body || '', task_id: taskId || null
+  });
+}
+
+function bridgePublish(topic, payload, fromAgent) {
+  bridgePost('/publish', { topic, payload, from: fromAgent || 'node-server' });
 }
 
 function spawnBridge() {
@@ -836,8 +831,7 @@ const server = http.createServer(async (req, res) => {
 
       // GET /api/bridge — health check for agent bridge
       if (method === 'GET' && pathname === '/api/bridge') {
-        const https = require('node:http');
-        const bReq = https.get('http://127.0.0.1:3335/health', { timeout: 1000 }, (bRes) => {
+        const bReq = http.get('http://127.0.0.1:3335/health', { timeout: 1000 }, (bRes) => {
           let data = '';
           bRes.on('data', (c) => data += c);
           bRes.on('end', () => {
