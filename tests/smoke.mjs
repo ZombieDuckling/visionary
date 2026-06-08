@@ -243,6 +243,39 @@ test('Overview cleanup: idempotent on a single seeded stale row', async () => {
   }
 });
 
+test('GET /api/export + POST /api/import round-trip', async () => {
+  // Seed a project so the export is non-trivial
+  const created = await http('POST', '/api/projects', { name: 'Export Test Project', description: 'smoke' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+
+  // Export
+  const exportRes = await fetch(BASE + '/api/export');
+  assert.equal(exportRes.status, 200);
+  assert.ok(exportRes.headers.get('content-disposition').includes('visionary-backup-'), 'Content-Disposition attachment present');
+  const exportJson = await exportRes.json();
+  assert.equal(exportJson.schema_version, 1);
+  assert.ok(typeof exportJson.exported_at === 'string', 'exported_at present');
+  assert.ok(exportJson.tables && typeof exportJson.tables === 'object', 'tables object present');
+  for (const tbl of ['projects', 'tasks', 'agent_runs', 'notifications', 'activity_log']) {
+    assert.ok(Array.isArray(exportJson.tables[tbl]), `tables.${tbl} is array`);
+  }
+  const exportedProject = exportJson.tables.projects.find(p => p.id === projectId);
+  assert.ok(exportedProject, 'seeded project appears in export');
+
+  // Import (idempotent — same data, should succeed)
+  const importRes = await http('POST', '/api/import', exportJson);
+  assert.equal(importRes.status, 200);
+  assert.ok(importRes.json && importRes.json.imported, 'imported counts present');
+  assert.ok(typeof importRes.json.imported.projects === 'number', 'projects count numeric');
+  assert.ok(importRes.json.imported.projects >= 1, 'at least one project imported');
+
+  // Import rejects unknown schema_version
+  const badVersion = await http('POST', '/api/import', { schema_version: 99, tables: {} });
+  assert.equal(badVersion.status, 422);
+  assert.ok(badVersion.json && badVersion.json.error, 'error message present for bad schema_version');
+});
+
 test('Overview cleanup: source code does not touch activeDispatches map (live-dispatch safety)', () => {
   // Static structural assertion: the cleanup handler must not mutate the
   // in-memory dispatch map. We grep the handler block of server.js.
