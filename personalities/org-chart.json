@@ -1,0 +1,161 @@
+{
+  "$schema": "./org-chart.schema.json",
+  "comment": "Visionary org chart. Edit this to change reporting lines, harness chains, or watchdog policy. Reloaded on server boot.",
+  "defaults": {
+    "harness_chain": ["openclaw", "claude-code", "hermes", "codex", "cursor"],
+    "check_interval_seconds": 60,
+    "expected_activity_within_seconds": 7200,
+    "replay_turns_on_failover": 10
+  },
+  "ceo": {
+    "id": "jarvis",
+    "name": "Jarvis",
+    "title": "Chief of Staff",
+    "personality_path": "personalities/agents/jarvis.md",
+    "harness_chain": ["openclaw", "claude-code", "hermes", "codex"],
+    "watchdog": {
+      "role": "orchestrate work, route tasks, talk to the operator",
+      "check_interval_seconds": 60,
+      "expected_activity_within_seconds": 1800
+    }
+  },
+  "directors": [
+    {
+      "id": "director-intelligence",
+      "name": "Intelligence",
+      "personality_path": "personalities/agents/director-intelligence.md",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "reports_to": "jarvis",
+      "members": ["scout", "analyst", "researcher"],
+      "watchdog": { "role": "coordinate intel pod", "check_interval_seconds": 120 }
+    },
+    {
+      "id": "director-engineering",
+      "name": "Engineering",
+      "personality_path": "personalities/agents/director-engineering.md",
+      "harness_chain": ["openclaw", "claude-code", "codex", "cursor"],
+      "reports_to": "jarvis",
+      "members": ["forge", "coder", "designer"],
+      "watchdog": { "role": "ship code, design surfaces, builder pod", "check_interval_seconds": 120 }
+    },
+    {
+      "id": "director-security",
+      "name": "Security",
+      "personality_path": "personalities/agents/director-security.md",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "reports_to": "jarvis",
+      "members": ["sentinel", "hunter"],
+      "watchdog": { "role": "audits, threat intel, hunting", "check_interval_seconds": 120 }
+    },
+    {
+      "id": "director-operations",
+      "name": "Operations",
+      "personality_path": "personalities/agents/director-operations.md",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "reports_to": "jarvis",
+      "members": ["ops", "broker", "reviewer"],
+      "watchdog": { "role": "infra, money, QA gate", "check_interval_seconds": 120 }
+    }
+  ],
+  "agents": [
+    {
+      "id": "scout",
+      "name": "Scout",
+      "title": "Morning intelligence, news, signals",
+      "personality_path": "personalities/agents/scout.md",
+      "reports_to": "director-intelligence",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "watchdog": { "role": "scrape news + RSS, produce morning brief", "expected_activity_within_seconds": 14400 }
+    },
+    {
+      "id": "analyst",
+      "name": "Analyst",
+      "title": "Research deep-diver, OpenClaw tools",
+      "personality_path": "personalities/agents/analyst.md",
+      "reports_to": "director-intelligence",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "watchdog": { "role": "deep research on assigned topics", "expected_activity_within_seconds": 21600 }
+    },
+    {
+      "id": "researcher",
+      "name": "Researcher",
+      "title": "Multi-source research, long context",
+      "personality_path": "personalities/agents/researcher.md",
+      "reports_to": "director-intelligence",
+      "harness_chain": ["claude-code", "openclaw", "codex"],
+      "watchdog": { "role": "long-form research, citations", "expected_activity_within_seconds": 28800 }
+    },
+    {
+      "id": "forge",
+      "name": "Forge",
+      "title": "Builder, OpenClaw workspace projects",
+      "personality_path": "personalities/agents/forge.md",
+      "reports_to": "director-engineering",
+      "harness_chain": ["openclaw", "claude-code", "codex", "cursor"],
+      "watchdog": { "role": "scaffold and assemble workspace projects", "expected_activity_within_seconds": 7200 }
+    },
+    {
+      "id": "coder",
+      "name": "Coder",
+      "title": "Deep coding: debug, refactor, architecture",
+      "personality_path": "personalities/agents/coder.md",
+      "reports_to": "director-engineering",
+      "harness_chain": ["claude-code", "openclaw", "cursor", "codex"],
+      "watchdog": { "role": "ship code on assigned tasks", "expected_activity_within_seconds": 7200 }
+    },
+    {
+      "id": "designer",
+      "name": "Designer",
+      "title": "UI/UX, design systems, visual polish",
+      "personality_path": "personalities/agents/designer.md",
+      "reports_to": "director-engineering",
+      "harness_chain": ["claude-code", "openclaw", "codex"],
+      "watchdog": { "role": "design surfaces and visual polish", "expected_activity_within_seconds": 14400 }
+    },
+    {
+      "id": "sentinel",
+      "name": "Sentinel",
+      "title": "Security monitor, audits, health",
+      "personality_path": "personalities/agents/sentinel.md",
+      "reports_to": "director-security",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "watchdog": { "role": "run scheduled audits, alert on anomalies", "expected_activity_within_seconds": 3600 }
+    },
+    {
+      "id": "hunter",
+      "name": "Hunter",
+      "title": "Career & opportunities",
+      "personality_path": "personalities/agents/hunter.md",
+      "reports_to": "director-security",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "watchdog": { "role": "scan opportunities and surface leads", "expected_activity_within_seconds": 21600 }
+    },
+    {
+      "id": "ops",
+      "name": "Ops",
+      "title": "Infrastructure & DevOps",
+      "personality_path": "personalities/agents/ops.md",
+      "reports_to": "director-operations",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "watchdog": { "role": "keep infrastructure healthy, ship deploys", "expected_activity_within_seconds": 7200 }
+    },
+    {
+      "id": "broker",
+      "name": "Broker",
+      "title": "Investment & financial intelligence",
+      "personality_path": "personalities/agents/broker.md",
+      "reports_to": "director-operations",
+      "harness_chain": ["openclaw", "claude-code", "codex"],
+      "watchdog": { "role": "track portfolio, surface market moves", "expected_activity_within_seconds": 14400 }
+    },
+    {
+      "id": "reviewer",
+      "name": "Reviewer",
+      "title": "Quality gate & review",
+      "personality_path": "personalities/agents/reviewer.md",
+      "reports_to": "director-operations",
+      "harness_chain": ["claude-code", "openclaw", "codex"],
+      "watchdog": { "role": "review PRs, gate quality, block bad merges", "expected_activity_within_seconds": 14400 }
+    }
+  ]
+}

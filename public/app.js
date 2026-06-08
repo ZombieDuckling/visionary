@@ -762,7 +762,9 @@
   // Agents view: grid of 8 agent cards with live status + kill switch
   function renderAgents(container) {
     var agents = state.agents.length > 0 ? state.agents : AGENTS;
-    var html = '<h2 class="section-header"><span class="section-header-icon">\uD83E\uDD16</span> Agent Desk</h2>'
+    var html = '<h2 class="section-header"><span class="section-header-icon">\uD83C\uDFD9</span> Org Chart</h2>'
+      + '<div id="org-chart-mount" class="org-chart"><div class="overview-loading">Loading org chart...</div></div>'
+      + '<h2 class="section-header" style="margin-top: var(--s-7)"><span class="section-header-icon">\uD83E\uDD16</span> Agent Desk</h2>'
       + '<div class="agent-grid">';
 
     agents.forEach(function (agent) {
@@ -848,6 +850,56 @@
         showAgentDispatchForm(agentId);
       }
     });
+
+    // Hydrate org chart asynchronously
+    loadAndRenderOrgChart(container);
+  }
+
+  function loadAndRenderOrgChart(container) {
+    var mount = container.querySelector('#org-chart-mount');
+    if (!mount) return;
+    api('/org').then(function (data) {
+      if (!mount.isConnected) return;
+      mount.innerHTML = renderOrgChartHTML(data);
+    }).catch(function (err) {
+      if (!mount.isConnected) return;
+      mount.innerHTML = '<div class="empty-state"><div class="empty-state-title">Org chart unavailable</div><div class="empty-state-desc">' + esc(err.message || 'fetch failed') + '</div></div>';
+    });
+  }
+
+  function renderOrgChartHTML(data) {
+    if (!data || !data.ceo) {
+      return '<div class="empty-state"><div class="empty-state-title">No org chart configured</div><div class="empty-state-desc">Edit personalities/org-chart.json and restart the server.</div></div>';
+    }
+    return '<div class="org-tree">' + renderOrgNode(data.ceo, 0) + '</div>';
+  }
+
+  function renderOrgNode(node, depth) {
+    var statusClass = 'health-' + (node.health_status || 'unknown');
+    var lastActivity = node.last_activity_at ? timeAgo(node.last_activity_at) : 'no activity';
+    var lastCheck = node.last_health_check ? timeAgo(node.last_health_check) : 'never';
+    var chain = (node.harness_chain || []).map(function (h) {
+      var active = h === node.current_harness;
+      return '<span class="org-harness' + (active ? ' active' : '') + '">' + esc(h) + '</span>';
+    }).join('');
+
+    var html = '<div class="org-node org-role-' + esc(node.role || 'ic') + ' ' + statusClass + '" data-depth="' + depth + '">'
+      + '<div class="org-node-head">'
+      + '<span class="org-led"></span>'
+      + '<span class="org-name">' + esc(node.name) + '</span>'
+      + (node.title ? '<span class="org-title">' + esc(node.title) + '</span>' : '')
+      + '<span class="org-role-pill">' + esc((node.role || 'ic').toUpperCase()) + '</span>'
+      + '</div>'
+      + '<div class="org-node-meta">'
+      + '<div class="org-harness-chain">' + chain + '</div>'
+      + '<div class="org-stats"><span>activity ' + esc(lastActivity) + '</span><span>checked ' + esc(lastCheck) + '</span></div>'
+      + '</div>'
+      + '</div>';
+
+    if (node.reports && node.reports.length) {
+      html += '<div class="org-children">' + node.reports.map(function (child) { return renderOrgNode(child, depth + 1); }).join('') + '</div>';
+    }
+    return html;
   }
 
   // Agent dispatch quick form

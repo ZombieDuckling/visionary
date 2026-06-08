@@ -1196,6 +1196,112 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // GET /api/org — full org chart with live state
+      if (method === 'GET' && pathname === '/api/org') {
+        const allAgents = stmts.getAllAgentRuntimes.all();
+        const byId = {};
+        allAgents.forEach((a) => {
+          let chain = [];
+          try { chain = JSON.parse(a.harness_chain || '[]'); } catch { chain = []; }
+          byId[a.id] = {
+            id: a.id,
+            name: a.name || a.id,
+            title: a.title,
+            role: a.role,
+            reports_to: a.reports_to,
+            personality_path: a.personality_path,
+            harness_chain: chain,
+            current_harness: a.current_harness,
+            health_status: a.health_status,
+            last_health_check: a.last_health_check,
+            last_activity_at: a.last_activity_at,
+            watchdog_role: a.watchdog_role,
+            expected_activity_within_seconds: a.expected_activity_within_seconds,
+            reports: []
+          };
+        });
+        // Build reports[] tree
+        Object.values(byId).forEach((node) => {
+          if (node.reports_to && byId[node.reports_to]) byId[node.reports_to].reports.push(node);
+        });
+        const ceo = Object.values(byId).find((n) => n.role === 'ceo');
+        const orphans = Object.values(byId).filter((n) => !n.reports_to && n.role !== 'ceo');
+        res.json({ ceo: ceo || null, orphans, all: Object.values(byId) });
+        return;
+      }
+
+      // GET /api/agents/:id/messages — recent conversation (newest first)
+      if (method === 'GET' && /^\/api\/agents\/[\w-]+\/messages$/.test(pathname)) {
+        const id = pathname.match(/^\/api\/agents\/([\w-]+)\/messages$/)[1];
+        const limitParam = parseInt(url.searchParams.get('limit') || '20', 10);
+        const limit = Math.min(Math.max(limitParam, 1), 200);
+        res.json({ messages: stmts.getRecentAgentMessages.all(id, limit) });
+        return;
+      }
+
+      // GET /api/agents/:id/health — snapshot
+      if (method === 'GET' && /^\/api\/agents\/[\w-]+\/health$/.test(pathname)) {
+        const id = pathname.match(/^\/api\/agents\/([\w-]+)\/health$/)[1];
+        const agent = stmts.getAgentById.get(id);
+        if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
+        res.json({
+          id: agent.id,
+          health_status: agent.health_status,
+          last_health_check: agent.last_health_check,
+          last_activity_at: agent.last_activity_at,
+          current_harness: agent.current_harness
+        });
+        return;
+      }
+
+      // POST /api/agents/:id/dispatch — run a prompt with full failover
+      if (method === 'POST' && /^\/api\/agents\/[\w-]+\/dispatch$/.test(pathname)) {
+        const id = pathname.match(/^\/api\/agents\/([\w-]+)\/dispatch$/)[1];
+        const agent = stmts.getAgentById.get(id);
+        if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
+        const body = await readBody(req);
+        if (!body || !body.message) { res.json({ error: 'message is required' }, 400); return; }
+        const result = await runtimes.executeWithFailover(
+          { getRuntime: runtimes.getRuntime, stmts, db },
+          agent,
+          { message: String(body.message) },
+          { timeout: body.timeout || 120000, replayTurns: body.replay_turns || 10 }
+        );
+        stmts.insertActivity.run({
+          event_type: result.status === 'ok' ? 'agent.dispatched' : 'agent.failed',
+          agent_id: agent.id, task_id: null, project_id: null,
+          summary: agent.name + ' dispatch via ' + (result.harness || 'none') + ' (' + result.status + ')',
+          detail_json: JSON.stringify({ attempts: result.attempts, replayed: result.replayed })
+        });
+        bus.emit('activity:new', { event_type: 'agent.dispatched', summary: agent.name + ' → ' + result.status });
+        res.json(result);
+        return;
+      }
+
+      // POST /api/agents/:id/health-check — run healthcheck on current_harness, update DB
+      if (method === 'POST' && /^\/api\/agents\/[\w-]+\/health-check$/.test(pathname)) {
+        const id = pathname.match(/^\/api\/agents\/([\w-]+)\/health-check$/)[1];
+        const agent = stmts.getAgentById.get(id);
+        if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
+        let runtime;
+        try { runtime = runtimes.getRuntime(agent.current_harness || 'openclaw'); }
+        catch (err) {
+          stmts.setAgentHealth.run('fail', id);
+          stmts.insertHealthLog.run({ agent_id: id, harness: agent.current_harness, status: 'fail', detail: err.message });
+          res.json({ ok: false, error: err.message }, 200);
+          return;
+        }
+        const result = await Promise.resolve(runtime.healthcheck());
+        const status = result && result.ok ? 'ok' : 'fail';
+        stmts.setAgentHealth.run(status, id);
+        stmts.insertHealthLog.run({
+          agent_id: id, harness: agent.current_harness,
+          status, detail: result && result.error ? result.error : null
+        });
+        res.json({ id, harness: agent.current_harness, status, raw: result });
+        return;
+      }
+
       // GET /api/agents
       if (method === 'GET' && pathname === '/api/agents') {
         const latestRuns = stmts.getLatestRunPerAgent.all();
