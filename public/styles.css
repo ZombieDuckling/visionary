@@ -1255,7 +1255,16 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
   border-bottom: 0;
 }
 .section-header-icon {
-  font-size: var(--fs-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--face);
+  color: var(--info);
+  box-shadow: var(--bevel-out-thin);
+  font-size: var(--fs-base);
+  font-weight: 700;
 }
 
 /* HERO — answers the 5-second question: "is the system OK?" */
@@ -1543,7 +1552,31 @@ code, pre, kbd { font-family: var(--font-mono); font-size: var(--fs-sm); }
 /* ORCHESTRATOR PANEL */
 .overview-orchestrator { margin-bottom: var(--s-5); }
 .overview-orchestrator h3 { margin-top: 0; }
-.overview-metric-label { line-height: 1.4; }
+
+/* Inline label/value pairs used inside the orchestrator panel */
+.overview-orchestrator > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-3);
+}
+.overview-orchestrator > div > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-3);
+  background: var(--face-input);
+  box-shadow: var(--bevel-in-thin);
+}
+.overview-orchestrator > div > div .overview-metric-label {
+  margin: 0;
+  display: block;
+}
+.overview-orchestrator > div > div strong {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--black);
+}
 
 /* Loading state */
 .overview-loading {
