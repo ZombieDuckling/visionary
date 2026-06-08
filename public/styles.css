@@ -1850,6 +1850,37 @@ code, pre, kbd { font-family: var(--font-mono); }
   align-items: center;
   gap: var(--s-3);
 }
+.org-icon {
+  font-size: 18px;
+  filter: drop-shadow(0 0 6px var(--node-color, var(--neon-c)));
+  flex-shrink: 0;
+}
+.org-node-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--s-2);
+}
+.org-node-model {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--neon-c);
+  text-shadow: var(--glow-c);
+  letter-spacing: 0.04em;
+}
+.org-node-summary {
+  font-family: var(--font-pixel);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+  line-height: 1.4;
+  border-left: 2px solid rgba(0, 240, 255, 0.25);
+  padding-left: var(--s-3);
+  margin: 2px 0;
+}
+.org-running {
+  color: var(--neon-g);
+  text-shadow: var(--glow-g);
+  animation: pulse-live 1.6s ease-in-out infinite;
+}
 .org-led {
   width: 10px; height: 10px;
   background: var(--neon-c);

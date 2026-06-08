@@ -761,79 +761,11 @@
 
   // Agents view: grid of 8 agent cards with live status + kill switch
   function renderAgents(container) {
-    var agents = state.agents.length > 0 ? state.agents : AGENTS;
-    var html = '<h2 class="section-header"><span class="section-header-icon">\uD83C\uDFD9</span> Org Chart</h2>'
-      + '<div id="org-chart-mount" class="org-chart"><div class="overview-loading">Loading org chart...</div></div>'
-      + '<h2 class="section-header" style="margin-top: var(--s-7)"><span class="section-header-icon">\uD83E\uDD16</span> Agent Desk</h2>'
-      + '<div class="agent-grid">';
+    container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">\uD83C\uDFD9</span> Org Chart</h2>'
+      + '<div id="org-chart-mount" class="org-chart"><div class="overview-loading">Loading org chart...</div></div>';
 
-    agents.forEach(function (agent) {
-      var agentColor = agent.color || AGENT_COLORS[agent.id] || '#888';
-      // Strip date suffix from model (e.g. "claude-sonnet-4-20250514" -> "claude-sonnet-4")
-      var modelDisplay = '';
-      if (agent.model) {
-        modelDisplay = agent.model.replace(/-\d{8}$/, '');
-      }
-      var lastActivity = agent.last_activity ? timeAgo(agent.last_activity) : 'No activity yet';
-      var summary = agent.last_run_summary ? agent.last_run_summary.substring(0, 80) : '';
-      var icon = agent.icon || AGENT_ICONS[agent.id] || '';
-
-      // Check for active run on this agent
-      var activeRun = null;
-      for (var j = 0; j < state.activeRuns.length; j++) {
-        if (state.activeRuns[j].agent_id === agent.id) {
-          activeRun = state.activeRuns[j];
-          break;
-        }
-      }
-
-      var hasRunningState = !!activeRun || agent.last_run_status === 'running';
-      var statusClass = hasRunningState ? 'running' : (agent.status || 'idle');
-      var statusLabel = hasRunningState ? 'Running now' : ((agent.status || 'idle').replace(/_/g, ' '));
-
-      // Agent card with colored glow border
-      html += '<div class="agent-card" style="border-color: color-mix(in srgb, ' + agentColor + ' 30%, var(--border));">'
-        + '<div class="agent-icon-lg">' + esc(icon) + '</div>'
-        + '<div class="agent-name" style="color: ' + agentColor + '">'
-        + '<span class="status-indicator ' + esc(statusClass) + '"></span>'
-        + esc(agent.name)
-        + '</div>'
-        + '<div class="agent-role">' + esc(agent.role) + '</div>'
-        + '<div class="agent-model">' + esc(modelDisplay) + '</div>'
-        + '<div class="agent-last-activity">' + esc(lastActivity) + '</div>'
-        + '<div class="agent-status-text ' + esc(statusClass) + '">' + esc(statusLabel) + '</div>';
-      if (summary) {
-        html += '<div class="agent-summary">' + esc(summary) + '</div>';
-      }
-      if (agent.last_run_cost) {
-        html += '<div class="agent-cost">Last run: $' + agent.last_run_cost.toFixed(4) + '</div>';
-      }
-      if (activeRun) {
-        html += '<div class="agent-running">'
-          + '<div class="spinner"></div>'
-          + '<span>Running ' + esc(formatElapsed(activeRun.elapsed_ms)) + '</span>'
-          + '<button class="btn-kill" data-action="kill-agent" data-run-id="' + esc(activeRun.run_id) + '">Kill</button>'
-          + '</div>';
-      } else if (agent.last_run_status === 'running') {
-        html += '<div class="agent-running inferred">'
-          + '<div class="spinner"></div>'
-          + '<span>Running, waiting for live run telemetry</span>'
-          + '</div>';
-      }
-      // Dispatch button
-      html += '<button class="agent-dispatch-btn" data-action="dispatch-agent" data-agent-id="' + esc(agent.id) + '" '
-        + 'style="background: color-mix(in srgb, ' + agentColor + ' 12%, transparent); color: ' + agentColor + '; border-color: color-mix(in srgb, ' + agentColor + ' 30%, transparent);"'
-        + '>\u25B6 Dispatch</button>';
-      html += '</div>';
-    });
-
-    html += '</div>';
-    // All dynamic content escaped via esc()
-    container.innerHTML = html;
-
-    // Event delegation
+    // Event delegation for dispatch + kill on the org tree
     container.addEventListener('click', function (e) {
-      // Kill button
       var killBtn = e.target.closest('[data-action="kill-agent"]');
       if (killBtn) {
         var runId = killBtn.getAttribute('data-run-id');
@@ -843,7 +775,6 @@
           .catch(function (err) { console.warn('Kill failed:', err); });
         return;
       }
-      // Dispatch button
       var dispatchBtn = e.target.closest('[data-action="dispatch-agent"]');
       if (dispatchBtn) {
         var agentId = dispatchBtn.getAttribute('data-agent-id');
@@ -871,10 +802,22 @@
     if (!data || !data.ceo) {
       return '<div class="empty-state"><div class="empty-state-title">No org chart configured</div><div class="empty-state-desc">Edit personalities/org-chart.json and restart the server.</div></div>';
     }
-    return '<div class="org-tree">' + renderOrgNode(data.ceo, 0) + '</div>';
+    // Build an index of agent operational state by id (status, model, icon, etc.)
+    var agentsById = {};
+    var sourceAgents = (state.agents && state.agents.length) ? state.agents : AGENTS;
+    sourceAgents.forEach(function (a) { agentsById[a.id] = a; });
+    var activeRunsById = {};
+    (state.activeRuns || []).forEach(function (r) { activeRunsById[r.agent_id] = r; });
+    return '<div class="org-tree">' + renderOrgNode(data.ceo, 0, agentsById, activeRunsById) + '</div>';
   }
 
-  function renderOrgNode(node, depth) {
+  function renderOrgNode(node, depth, agentsById, activeRunsById) {
+    var liveAgent = agentsById[node.id] || {};
+    var activeRun = activeRunsById[node.id] || null;
+    var icon = liveAgent.icon || AGENT_ICONS[node.id] || '';
+    var color = liveAgent.color || AGENT_COLORS[node.id] || '#00F0FF';
+    var model = liveAgent.model ? liveAgent.model.replace(/-\d{8}$/, '') : '';
+    var summary = liveAgent.last_run_summary ? liveAgent.last_run_summary.substring(0, 100) : '';
     var statusClass = 'health-' + (node.health_status || 'unknown');
     var lastActivity = node.last_activity_at ? timeAgo(node.last_activity_at) : 'no activity';
     var lastCheck = node.last_health_check ? timeAgo(node.last_health_check) : 'never';
@@ -883,21 +826,34 @@
       return '<span class="org-harness' + (active ? ' active' : '') + '">' + esc(h) + '</span>';
     }).join('');
 
-    var html = '<div class="org-node org-role-' + esc(node.role || 'ic') + ' ' + statusClass + '" data-depth="' + depth + '">'
+    var html = '<div class="org-node org-role-' + esc(node.role || 'ic') + ' ' + statusClass + '" data-depth="' + depth + '" style="--node-color: ' + esc(color) + '">'
       + '<div class="org-node-head">'
       + '<span class="org-led"></span>'
+      + (icon ? '<span class="org-icon">' + esc(icon) + '</span>' : '')
       + '<span class="org-name">' + esc(node.name) + '</span>'
       + (node.title ? '<span class="org-title">' + esc(node.title) + '</span>' : '')
       + '<span class="org-role-pill">' + esc((node.role || 'ic').toUpperCase()) + '</span>'
+      + '<div class="org-node-actions">'
+      + (activeRun
+        ? '<button class="btn btn-small btn-danger" data-action="kill-agent" data-run-id="' + esc(activeRun.run_id) + '">Kill</button>'
+        : '<button class="btn btn-small btn-dispatch" data-action="dispatch-agent" data-agent-id="' + esc(node.id) + '">\u25B6 Dispatch</button>'
+        )
       + '</div>'
+      + '</div>'
+      + (model ? '<div class="org-node-model">' + esc(model) + '</div>' : '')
+      + (summary ? '<div class="org-node-summary">' + esc(summary) + '</div>' : '')
       + '<div class="org-node-meta">'
       + '<div class="org-harness-chain">' + chain + '</div>'
-      + '<div class="org-stats"><span>activity ' + esc(lastActivity) + '</span><span>checked ' + esc(lastCheck) + '</span></div>'
+      + '<div class="org-stats">'
+      + '<span>act ' + esc(lastActivity) + '</span>'
+      + '<span>chk ' + esc(lastCheck) + '</span>'
+      + (activeRun ? '<span class="org-running">\u25CF running ' + esc(formatElapsed(activeRun.elapsed_ms)) + '</span>' : '')
+      + '</div>'
       + '</div>'
       + '</div>';
 
     if (node.reports && node.reports.length) {
-      html += '<div class="org-children">' + node.reports.map(function (child) { return renderOrgNode(child, depth + 1); }).join('') + '</div>';
+      html += '<div class="org-children">' + node.reports.map(function (child) { return renderOrgNode(child, depth + 1, agentsById, activeRunsById); }).join('') + '</div>';
     }
     return html;
   }
