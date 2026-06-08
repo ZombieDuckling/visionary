@@ -1806,6 +1806,133 @@ code, pre, kbd { font-family: var(--font-mono); }
 .main-content h2 { color: var(--neon-y); text-shadow: var(--glow-y); }
 
 /* ============================================
+   ORG CHART — hierarchical tree on the Agents tab
+   ============================================ */
+
+.org-chart { display: flex; flex-direction: column; gap: var(--s-3); }
+
+.org-tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: rgba(15, 0, 38, 0.5);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+}
+
+.org-node {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--s-3) var(--s-4);
+  background: rgba(31, 4, 56, 0.85);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-left: 3px solid var(--neon-c);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.org-node:hover { border-color: var(--neon-m); box-shadow: 0 0 12px rgba(255, 46, 196, 0.2); }
+
+.org-role-ceo       { border-left-color: var(--neon-y); }
+.org-role-director  { border-left-color: var(--neon-m); }
+.org-role-ic        { border-left-color: var(--neon-c); }
+
+.org-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-left: var(--s-5);
+  padding-left: var(--s-4);
+  border-left: 1px dashed rgba(0, 240, 255, 0.25);
+}
+
+.org-node-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.org-led {
+  width: 10px; height: 10px;
+  background: var(--neon-c);
+  box-shadow: 0 0 6px var(--neon-c);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.org-node.health-ok   .org-led { background: var(--neon-g); box-shadow: 0 0 8px var(--neon-g); animation: pulse-live 1.6s ease-in-out infinite; }
+.org-node.health-warn .org-led { background: var(--neon-y); box-shadow: 0 0 8px var(--neon-y); }
+.org-node.health-fail .org-led { background: var(--neon-r); box-shadow: 0 0 10px var(--neon-r); animation: blink-fail 0.8s steps(2, start) infinite; }
+.org-node.health-unknown .org-led { background: var(--ink-faint); box-shadow: none; }
+@keyframes blink-fail { 50% { opacity: 0.25; } }
+
+.org-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-bright);
+}
+.org-role-ceo       .org-name { color: var(--neon-y); text-shadow: var(--glow-y); }
+.org-role-director  .org-name { color: var(--neon-m); text-shadow: var(--glow-m); }
+.org-title {
+  font-family: var(--font-pixel);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+.org-role-pill {
+  margin-left: auto;
+  padding: 2px 6px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--neon-c);
+  border: 1px solid var(--neon-c);
+}
+.org-role-ceo      .org-role-pill { background: rgba(249, 240, 2, 0.12); color: var(--neon-y); border-color: var(--neon-y); }
+.org-role-director .org-role-pill { background: rgba(255, 46, 196, 0.12); color: var(--neon-m); border-color: var(--neon-m); }
+
+.org-node-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+}
+.org-harness-chain {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.org-harness {
+  padding: 1px 6px;
+  background: transparent;
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  color: var(--ink-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.org-harness.active {
+  background: rgba(0, 255, 156, 0.12);
+  border-color: var(--neon-g);
+  color: var(--neon-g);
+  text-shadow: 0 0 6px var(--neon-g);
+  font-weight: 700;
+}
+.org-stats {
+  display: flex;
+  gap: var(--s-3);
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ============================================
    RESPONSIVE
    ============================================ */
 

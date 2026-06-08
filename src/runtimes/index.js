@@ -2,6 +2,8 @@ const { execFile } = require('node:child_process');
 const openclaw = require('./openclaw');
 const claude = require('./claude-code');
 const hermes = require('./hermes');
+const cursor = require('./cursor');
+const { executeWithFailover, looksExhausted } = require('./failover');
 
 const registry = new Map();
 
@@ -43,6 +45,7 @@ registerRuntime('openclaw', openclaw);
 registerRuntime('claude', claude);
 registerRuntime('claude-code', claude);
 registerRuntime('hermes', hermes);
+registerRuntime('cursor', cursor);
 registerRuntime('codex', makeSimpleRuntime('codex', ctx => ({ bin: 'codex', args: ['exec', ctx.message, '--skip-git-repo-check'] })));
 registerRuntime('gemini', makeSimpleRuntime('gemini', ctx => ({ bin: 'gemini', args: ['-p', ctx.message] })));
 registerRuntime('ollama', makeSimpleRuntime('ollama', ctx => ({ bin: 'ollama', args: ['run', ctx.model || 'llama3.2:3b', ctx.message] })));
@@ -62,4 +65,4 @@ function listRuntimes() {
   }).map(([key, rt]) => ({ id: key, name: rt.name, health: rt.healthcheck() }));
 }
 
-module.exports = { getRuntime, listRuntimes, registerRuntime };
+module.exports = { getRuntime, listRuntimes, registerRuntime, executeWithFailover, looksExhausted };

@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "bridge": ".venv/bin/python3 bridge.py",
+    "watchdog": "python3 watchdog.py",
     "app": "electron .",
     "build": "electron-builder --mac",
     "dist": "electron-builder --mac dmg",
@@ -39,7 +40,9 @@
       "server.js",
       "db.js",
       "sse.js",
+      "src/**/*",
       "public/**/*",
+      "personalities/**/*",
       "package.json",
       "node_modules/**/*"
     ]

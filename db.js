@@ -155,6 +155,41 @@ const migrations = [
   UPDATE projects SET space_id = 1 WHERE space_id IS NULL;
 
   CREATE INDEX idx_projects_space ON projects(space_id);
+  `,
+
+  // Migration 4 -> 5: Org-chart fields on agents + conversation replay buffer
+  `
+  ALTER TABLE agents ADD COLUMN personality_path TEXT;
+  ALTER TABLE agents ADD COLUMN title TEXT;
+  ALTER TABLE agents ADD COLUMN role TEXT;
+  ALTER TABLE agents ADD COLUMN reports_to TEXT;
+  ALTER TABLE agents ADD COLUMN harness_chain TEXT DEFAULT '["openclaw"]' NOT NULL;
+  ALTER TABLE agents ADD COLUMN current_harness TEXT DEFAULT 'openclaw' NOT NULL;
+  ALTER TABLE agents ADD COLUMN health_status TEXT DEFAULT 'unknown' NOT NULL;
+  ALTER TABLE agents ADD COLUMN last_health_check TEXT;
+  ALTER TABLE agents ADD COLUMN last_activity_at TEXT;
+  ALTER TABLE agents ADD COLUMN watchdog_role TEXT;
+  ALTER TABLE agents ADD COLUMN expected_activity_within_seconds INTEGER DEFAULT 7200;
+
+  CREATE TABLE IF NOT EXISTS agent_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('system','user','assistant','tool')),
+    content TEXT NOT NULL,
+    harness TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_agent_messages_agent ON agent_messages(agent_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS agent_health_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    harness TEXT,
+    status TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_agent_health_agent ON agent_health_log(agent_id, created_at DESC);
   `
 ];
 
@@ -169,6 +204,70 @@ const runMigrations = db.transaction(() => {
   }
 });
 runMigrations();
+
+// --- Org-chart bootstrap: seed agents from personalities/org-chart.json ---
+// Reloaded on every boot so the file is the source of truth. Updates only the
+// columns that come from the chart; runtime state (current_harness, health,
+// last_activity_at) is preserved if the agent already exists.
+function bootstrapOrgChart() {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const chartPath = path.join(__dirname, 'personalities', 'org-chart.json');
+  if (!fs.existsSync(chartPath)) return;
+  let chart;
+  try { chart = JSON.parse(fs.readFileSync(chartPath, 'utf-8')); }
+  catch (err) { console.error('[org-chart] parse error:', err.message); return; }
+
+  const defaults = chart.defaults || {};
+  const upsert = db.prepare(`
+    INSERT INTO agents (
+      id, name, runtime, title, role, reports_to,
+      personality_path, harness_chain, current_harness,
+      watchdog_role, expected_activity_within_seconds, updated_at
+    ) VALUES (
+      @id, @name, @runtime, @title, @role, @reports_to,
+      @personality_path, @harness_chain, @current_harness,
+      @watchdog_role, @expected_activity_within_seconds, datetime('now')
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      title = excluded.title,
+      role = excluded.role,
+      reports_to = excluded.reports_to,
+      personality_path = excluded.personality_path,
+      harness_chain = excluded.harness_chain,
+      watchdog_role = excluded.watchdog_role,
+      expected_activity_within_seconds = excluded.expected_activity_within_seconds,
+      updated_at = datetime('now')
+  `);
+
+  function seed(node, reportsTo, role) {
+    const harnessChain = node.harness_chain || defaults.harness_chain || ['openclaw'];
+    const watchdog = node.watchdog || {};
+    upsert.run({
+      id: node.id,
+      name: node.name || node.id,
+      runtime: harnessChain[0],
+      title: node.title || null,
+      role: role,
+      reports_to: reportsTo,
+      personality_path: node.personality_path || null,
+      harness_chain: JSON.stringify(harnessChain),
+      current_harness: harnessChain[0],
+      watchdog_role: watchdog.role || null,
+      expected_activity_within_seconds: watchdog.expected_activity_within_seconds
+        || defaults.expected_activity_within_seconds || 7200
+    });
+  }
+
+  const tx = db.transaction(() => {
+    if (chart.ceo) seed(chart.ceo, null, 'ceo');
+    (chart.directors || []).forEach((d) => seed(d, d.reports_to || 'jarvis', 'director'));
+    (chart.agents || []).forEach((a) => seed(a, a.reports_to || null, 'ic'));
+  });
+  tx();
+}
+bootstrapOrgChart();
 
 // Prepared statements
 const stmts = {
@@ -323,6 +422,30 @@ const stmts = {
   `),
   getAgentRuntime: db.prepare('SELECT * FROM agents WHERE id = ?'),
   getAllAgentRuntimes: db.prepare('SELECT * FROM agents ORDER BY id'),
+
+  // Org chart + health + replay buffer statements
+  getAgentById: db.prepare('SELECT * FROM agents WHERE id = ?'),
+  getAgentsByReportsTo: db.prepare('SELECT * FROM agents WHERE reports_to = ? ORDER BY name'),
+  setAgentHarness: db.prepare(`
+    UPDATE agents SET current_harness = ?, updated_at = datetime('now') WHERE id = ?
+  `),
+  setAgentHealth: db.prepare(`
+    UPDATE agents SET health_status = ?, last_health_check = datetime('now') WHERE id = ?
+  `),
+  setAgentActivity: db.prepare(`
+    UPDATE agents SET last_activity_at = datetime('now') WHERE id = ?
+  `),
+  insertAgentMessage: db.prepare(`
+    INSERT INTO agent_messages (agent_id, role, content, harness)
+    VALUES (@agent_id, @role, @content, @harness)
+  `),
+  getRecentAgentMessages: db.prepare(`
+    SELECT * FROM agent_messages WHERE agent_id = ? ORDER BY id DESC LIMIT ?
+  `),
+  insertHealthLog: db.prepare(`
+    INSERT INTO agent_health_log (agent_id, harness, status, detail)
+    VALUES (@agent_id, @harness, @status, @detail)
+  `),
   getSettings: db.prepare('SELECT value_json, updated_at FROM settings WHERE key = ?'),
   upsertSettings: db.prepare(`
     INSERT INTO settings (key, value_json, updated_at) VALUES (@key, @value_json, datetime('now'))
