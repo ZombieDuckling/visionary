@@ -91,3 +91,17 @@ PRs welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers the sma
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Python backend migration (in progress)
+
+Phase 0 (scaffold) complete. See `docs/superpowers/specs/2026-06-09-python-backend-design.md` for design and `docs/superpowers/plans/` for phase plans.
+
+To run the Python backend side-by-side with the Node server on port 3333:
+
+    python3.13 -m venv .venv
+    .venv/bin/pip install -e ".[dev]"
+    .venv/bin/uvicorn visionary.main:app --port 3344
+
+To run tests:
+
+    .venv/bin/pytest
