@@ -28,6 +28,9 @@ def create_app() -> FastAPI:
             "schema_version": request.app.state.schema_version,
         }
 
+    from visionary.routes import org as org_routes
+    app.include_router(org_routes.router)
+
     # StaticFiles mount must be LAST — it matches every unmatched path.
     app.mount("/", StaticFiles(directory=settings.public_dir, html=True), name="public")
 
