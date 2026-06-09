@@ -50,6 +50,14 @@ def create_app() -> FastAPI:
     app.include_router(health_routes.router)
     app.include_router(throttle_routes.router)
 
+    from visionary.routes import blackboard as blackboard_routes
+    from visionary.routes import mailbox as mailbox_routes
+    app.include_router(mailbox_routes.router)
+    app.include_router(blackboard_routes.router)
+
+    from visionary.routes import ws as ws_routes
+    app.include_router(ws_routes.router)
+
     # StaticFiles mount must be LAST — it matches every unmatched path.
     app.mount("/", StaticFiles(directory=settings.public_dir, html=True), name="public")
 
