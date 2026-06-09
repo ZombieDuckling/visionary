@@ -43,5 +43,22 @@ class Database:
             self._conn.execute("ROLLBACK")
             raise
 
+    @contextmanager
+    def savepoint(self, name: str) -> Iterator[None]:
+        """Atomic SAVEPOINT block. Use when running DDL or executescript
+        inside an outer transaction is not feasible (executescript implicitly
+        commits in legacy mode). Releases on success, ROLLBACK TO on error.
+        """
+        if not name.replace("_", "").isalnum():
+            raise ValueError(f"Invalid savepoint name: {name!r}")
+        self._conn.execute(f"SAVEPOINT {name}")
+        try:
+            yield
+            self._conn.execute(f"RELEASE SAVEPOINT {name}")
+        except Exception:
+            self._conn.execute(f"ROLLBACK TO SAVEPOINT {name}")
+            self._conn.execute(f"RELEASE SAVEPOINT {name}")
+            raise
+
     def close(self) -> None:
         self._conn.close()

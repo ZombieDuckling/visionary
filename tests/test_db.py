@@ -47,3 +47,31 @@ def test_database_enables_wal_mode(tmp_path: Path):
     assert mode is not None
     assert mode.get("journal_mode") == "wal"
     db.close()
+
+
+def test_database_savepoint_releases_on_success(tmp_path: Path):
+    db = Database(str(tmp_path / "test.sqlite"))
+    db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+    with db.savepoint("sp1"):
+        db.execute("INSERT INTO t (name) VALUES (?)", ["kept"])
+    assert db.query_one("SELECT name FROM t")["name"] == "kept"
+    db.close()
+
+
+def test_database_savepoint_rolls_back_on_error(tmp_path: Path):
+    db = Database(str(tmp_path / "test.sqlite"))
+    db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)")
+    with pytest.raises(ValueError):
+        with db.savepoint("sp1"):
+            db.execute("INSERT INTO t (name) VALUES (?)", ["rolled_back"])
+            raise ValueError("boom")
+    assert db.query("SELECT name FROM t") == []
+    db.close()
+
+
+def test_database_savepoint_rejects_unsafe_name(tmp_path: Path):
+    db = Database(str(tmp_path / "test.sqlite"))
+    with pytest.raises(ValueError):
+        with db.savepoint("sp1; DROP TABLE t"):
+            pass
+    db.close()

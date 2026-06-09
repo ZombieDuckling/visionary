@@ -4,8 +4,6 @@ Add new migrations at the END of MIGRATIONS. Never edit or reorder a shipped
 entry.
 """
 
-import re
-
 from visionary.db.database import Database
 
 # Each entry is (version: int, sql: str).
@@ -265,20 +263,14 @@ def _run_atomic(db: Database, version: int, sql: str) -> None:
     and RELEASE finalises them.  SQLite DDL is fully transactional, so this
     gives true all-or-nothing semantics.
     """
-    conn = db._conn  # access the raw sqlite3.Connection
-    conn.execute("SAVEPOINT _mig")
-    try:
-        stmts = [s.strip() for s in re.split(r";", sql) if s.strip()]
+    sp_name = f"migration_{version}"
+    with db.savepoint(sp_name):
+        stmts = [s.strip() for s in sql.split(";") if s.strip()]
         for stmt in stmts:
-            conn.execute(stmt)
-        conn.execute(
+            db.execute(stmt)
+        db.execute(
             "UPDATE schema_version SET version = ? WHERE rowid = 1", [version]
         )
-        conn.execute("RELEASE _mig")
-    except Exception:
-        conn.execute("ROLLBACK TO _mig")
-        conn.execute("RELEASE _mig")
-        raise
 
 
 def run_migrations(db: Database) -> int:
