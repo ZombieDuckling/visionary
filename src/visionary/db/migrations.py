@@ -47,7 +47,8 @@ MIGRATIONS: list[tuple[int, str]] = [
     agent_id TEXT NOT NULL,
     session_id TEXT,
     message TEXT NOT NULL,
-    status TEXT DEFAULT 'pending' CHECK(status IN ('pending','running','completed','failed','timeout')),
+    status TEXT DEFAULT 'pending'
+      CHECK(status IN ('pending','running','completed','failed','timeout')),
     result_json TEXT,
     result_text TEXT,
     error TEXT,
@@ -225,7 +226,8 @@ MIGRATIONS: list[tuple[int, str]] = [
         7,
         """
   ALTER TABLE agents ADD COLUMN last_nudge_at TEXT;
-  INSERT OR IGNORE INTO settings (key, value_json) VALUES ('watchdog', '{"auto_nudge_enabled":false,"nudge_cooldown_seconds":900}');
+  INSERT OR IGNORE INTO settings (key, value_json)
+  VALUES ('watchdog', '{"auto_nudge_enabled":false,"nudge_cooldown_seconds":900}');
   """,
     ),
 ]

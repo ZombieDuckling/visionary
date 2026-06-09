@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -95,7 +96,7 @@ def test_run_migrations_rollback_on_failure(tmp_path: Path, monkeypatch):
     bogus = (len(m.MIGRATIONS) + 1, "CREATE TABLE leaks (id INTEGER); INTENTIONAL SYNTAX ERROR;")
     monkeypatch.setattr(m, "MIGRATIONS", list(m.MIGRATIONS) + [bogus])
 
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.OperationalError):
         run_migrations(db)
 
     # If atomicity holds, schema_version must NOT have advanced past the last real migration
