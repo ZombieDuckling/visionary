@@ -38,6 +38,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry.register(OpenClawAdapter())
         app.state.registry = registry
         app.state.rate_limiter = RateLimiter(db)
+        from visionary.comm.facade import Comm
+        app.state.comm = Comm(db, registry)
         yield
     finally:
         db.close()

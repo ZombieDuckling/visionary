@@ -228,6 +228,42 @@ MIGRATIONS: list[tuple[int, str]] = [
   VALUES ('watchdog', '{"auto_nudge_enabled":false,"nudge_cooldown_seconds":900}');
   """,
     ),
+    # Migration 7 -> 8: Comm fabric — agent_mailbox + blackboard + activity_log.trace_id
+    (
+        8,
+        """
+        CREATE TABLE agent_mailbox (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            to_agent_id   TEXT NOT NULL,
+            from_agent_id TEXT,
+            subject       TEXT NOT NULL,
+            body_json     TEXT NOT NULL,
+            priority      INTEGER NOT NULL DEFAULT 0,
+            status        TEXT NOT NULL DEFAULT 'pending',
+            thread_id     TEXT,
+            reply_to      INTEGER REFERENCES agent_mailbox(id),
+            trace_id      TEXT,
+            created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+            read_at       TEXT,
+            processed_at  TEXT,
+            FOREIGN KEY (to_agent_id) REFERENCES agents(id)
+        );
+        CREATE INDEX idx_mailbox_to_status ON agent_mailbox(to_agent_id, status);
+        CREATE INDEX idx_mailbox_thread    ON agent_mailbox(thread_id);
+        CREATE INDEX idx_mailbox_trace     ON agent_mailbox(trace_id);
+
+        CREATE TABLE blackboard (
+            key         TEXT PRIMARY KEY,
+            value_json  TEXT NOT NULL,
+            updated_by  TEXT,
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            version     INTEGER NOT NULL DEFAULT 1
+        );
+
+        ALTER TABLE activity_log ADD COLUMN trace_id TEXT;
+        CREATE INDEX idx_activity_trace ON activity_log(trace_id);
+        """,
+    ),
 ]
 
 

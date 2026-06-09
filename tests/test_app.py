@@ -35,7 +35,7 @@ def test_healthz_returns_ok(temp_db: str, temp_public: str, monkeypatch):
         assert r.status_code == 200
         body = r.json()
         assert body["ok"] is True
-        assert body["schema_version"] == 7
+        assert body["schema_version"] == 8
 
 
 def test_index_html_is_served_at_root(temp_db: str, temp_public: str, monkeypatch):
