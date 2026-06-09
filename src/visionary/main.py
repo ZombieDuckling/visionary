@@ -43,6 +43,13 @@ def create_app() -> FastAPI:
     from visionary.routes import events as events_routes
     app.include_router(events_routes.router)
 
+    from visionary.routes import dispatch as dispatch_routes
+    from visionary.routes import health as health_routes
+    from visionary.routes import throttle as throttle_routes
+    app.include_router(dispatch_routes.router)
+    app.include_router(health_routes.router)
+    app.include_router(throttle_routes.router)
+
     # StaticFiles mount must be LAST — it matches every unmatched path.
     app.mount("/", StaticFiles(directory=settings.public_dir, html=True), name="public")
 
