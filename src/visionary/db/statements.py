@@ -134,3 +134,40 @@ class Statements:
             "SELECT * FROM agent_mailbox WHERE thread_id = ? ORDER BY id ASC LIMIT ?",
             [thread_id, limit],
         )
+
+    # --- blackboard ---
+    def get_blackboard(self, key: str) -> dict | None:
+        return self._db.query_one(
+            "SELECT * FROM blackboard WHERE key = ?", [key]
+        )
+
+    def upsert_blackboard(
+        self, key: str, value_json: str, updated_by: str | None,
+        expected_version: int | None = None,
+    ) -> int:
+        # Late import to avoid circular dep (statements <- blackboard <- statements)
+        from visionary.comm.blackboard import BlackboardConflictError
+
+        row = self.get_blackboard(key)
+        if row is None:
+            self._db.execute(
+                "INSERT INTO blackboard (key, value_json, updated_by, version) "
+                "VALUES (?, ?, ?, 1)",
+                [key, value_json, updated_by],
+            )
+            return 1
+        if expected_version is not None and row["version"] != expected_version:
+            raise BlackboardConflictError(
+                f"version mismatch for key {key}: "
+                f"expected {expected_version}, actual {row['version']}"
+            )
+        new_version = row["version"] + 1
+        self._db.execute(
+            "UPDATE blackboard SET value_json = ?, updated_by = ?, "
+            "version = ?, updated_at = datetime('now') WHERE key = ?",
+            [value_json, updated_by, new_version, key],
+        )
+        return new_version
+
+    def delete_blackboard(self, key: str) -> None:
+        self._db.execute("DELETE FROM blackboard WHERE key = ?", [key])
