@@ -27,6 +27,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.schema_version = version
         from visionary.sse import EventBus
         app.state.event_bus = EventBus()
+
+        from visionary.orchestration.rate_limiter import RateLimiter
+        from visionary.runtimes.claude import ClaudeAdapter
+        from visionary.runtimes.openclaw import OpenClawAdapter
+        from visionary.runtimes.registry import Registry
+
+        registry = Registry()
+        registry.register(ClaudeAdapter())
+        registry.register(OpenClawAdapter())
+        app.state.registry = registry
+        app.state.rate_limiter = RateLimiter(db)
         yield
     finally:
         db.close()
