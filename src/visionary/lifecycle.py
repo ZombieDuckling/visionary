@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = settings
         app.state.db = db
         app.state.schema_version = version
+        from visionary.sse import EventBus
+        app.state.event_bus = EventBus()
         yield
     finally:
         db.close()
