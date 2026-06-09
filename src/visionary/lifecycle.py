@@ -19,13 +19,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     settings = Settings()
     db = Database(settings.db_path)
-    version = run_migrations(db)
-    logger.info("DB ready at %s (schema_version=%d)", settings.db_path, version)
-    app.state.settings = settings
-    app.state.db = db
-    app.state.schema_version = version
-
     try:
+        version = run_migrations(db)
+        logger.info("DB ready at %s (schema_version=%d)", settings.db_path, version)
+        app.state.settings = settings
+        app.state.db = db
+        app.state.schema_version = version
         yield
     finally:
         db.close()

@@ -26,8 +26,6 @@ def create_app() -> FastAPI:
         return {
             "ok": True,
             "schema_version": request.app.state.schema_version,
-            "host": settings.host,
-            "port": settings.port,
         }
 
     # StaticFiles mount must be LAST — it matches every unmatched path.
