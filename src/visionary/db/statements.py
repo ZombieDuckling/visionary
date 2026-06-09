@@ -83,3 +83,54 @@ class Statements:
             "VALUES (?, ?, ?)",
             [agent_id, status, detail],
         )
+
+    # --- mailbox ---
+    def insert_mailbox_message(
+        self, to_agent_id: str, from_agent_id: str | None,
+        subject: str, body_json: str, priority: int = 0,
+        thread_id: str | None = None, reply_to: int | None = None,
+        trace_id: str | None = None,
+    ) -> int:
+        cursor = self._db.execute(
+            "INSERT INTO agent_mailbox "
+            "(to_agent_id, from_agent_id, subject, body_json, priority, "
+            " thread_id, reply_to, trace_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [to_agent_id, from_agent_id, subject, body_json, priority,
+             thread_id, reply_to, trace_id],
+        )
+        return cursor.lastrowid
+
+    def list_mailbox(
+        self, to_agent_id: str, status: str = "pending", limit: int = 50
+    ) -> list[dict]:
+        return self._db.query(
+            "SELECT * FROM agent_mailbox "
+            "WHERE to_agent_id = ? AND status = ? "
+            "ORDER BY priority DESC, id ASC LIMIT ?",
+            [to_agent_id, status, limit],
+        )
+
+    def get_mailbox_message(self, mid: int) -> dict | None:
+        return self._db.query_one("SELECT * FROM agent_mailbox WHERE id = ?", [mid])
+
+    def mark_mailbox_read(self, mid: int) -> None:
+        self._db.execute(
+            "UPDATE agent_mailbox SET status = 'read', read_at = datetime('now') "
+            "WHERE id = ?",
+            [mid],
+        )
+
+    def mark_mailbox_processed(self, mid: int) -> None:
+        self._db.execute(
+            "UPDATE agent_mailbox SET status = 'processed', "
+            "processed_at = datetime('now') "
+            "WHERE id = ?",
+            [mid],
+        )
+
+    def list_thread(self, thread_id: str, limit: int = 100) -> list[dict]:
+        return self._db.query(
+            "SELECT * FROM agent_mailbox WHERE thread_id = ? ORDER BY id ASC LIMIT ?",
+            [thread_id, limit],
+        )
