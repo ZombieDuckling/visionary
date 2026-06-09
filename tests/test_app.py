@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from fastapi.testclient import TestClient
 
 from visionary.db import Database
 from visionary.db.migrations import run_migrations
@@ -26,37 +26,34 @@ def temp_public(tmp_path: Path) -> str:
     return str(pub)
 
 
-async def test_healthz_returns_ok(temp_db: str, temp_public: str, monkeypatch):
+def test_healthz_returns_ok(temp_db: str, temp_public: str, monkeypatch):
     monkeypatch.setenv("VISIONARY_DB", temp_db)
     monkeypatch.setenv("VISIONARY_PUBLIC", temp_public)
     app = create_app()
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.get("/healthz")
+    with TestClient(app) as client:
+        r = client.get("/healthz")
         assert r.status_code == 200
         body = r.json()
         assert body["ok"] is True
         assert body["schema_version"] == 7
 
 
-async def test_index_html_is_served_at_root(temp_db: str, temp_public: str, monkeypatch):
+def test_index_html_is_served_at_root(temp_db: str, temp_public: str, monkeypatch):
     monkeypatch.setenv("VISIONARY_DB", temp_db)
     monkeypatch.setenv("VISIONARY_PUBLIC", temp_public)
     app = create_app()
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.get("/")
+    with TestClient(app) as client:
+        r = client.get("/")
         assert r.status_code == 200
         assert "hello" in r.text
         assert "text/html" in r.headers["content-type"]
 
 
-async def test_static_assets_are_served(temp_db: str, temp_public: str, monkeypatch):
+def test_static_assets_are_served(temp_db: str, temp_public: str, monkeypatch):
     monkeypatch.setenv("VISIONARY_DB", temp_db)
     monkeypatch.setenv("VISIONARY_PUBLIC", temp_public)
     app = create_app()
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.get("/app.js")
+    with TestClient(app) as client:
+        r = client.get("/app.js")
         assert r.status_code == 200
         assert "stub asset" in r.text

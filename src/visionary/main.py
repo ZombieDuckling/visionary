@@ -23,18 +23,6 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz(request: Request) -> dict:
-        # In production the lifespan populates app.state before any request.
-        # In tests ASGITransport never sends the lifespan scope, so we
-        # lazy-initialise state on the first call here.
-        if not hasattr(request.app.state, "schema_version"):
-            _settings = Settings()
-            from visionary.db import Database
-            from visionary.db.migrations import run_migrations
-
-            _db = Database(_settings.db_path)
-            _version = run_migrations(_db)
-            _db.close()
-            request.app.state.schema_version = _version
         return {
             "ok": True,
             "schema_version": request.app.state.schema_version,
