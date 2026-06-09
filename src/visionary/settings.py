@@ -16,3 +16,6 @@ class Settings:
         self.public_dir: str = os.environ.get(
             "VISIONARY_PUBLIC", str(repo_root / "public")
         )
+        self.org_chart_path: str = os.environ.get(
+            "VISIONARY_ORG_CHART", str(repo_root / "personalities" / "org-chart.json")
+        )
