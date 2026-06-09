@@ -1,5 +1,8 @@
 from visionary.comm.envelope import (
-    Envelope, new_trace_id, current_trace_id, with_trace_id,
+    Envelope,
+    current_trace_id,
+    new_trace_id,
+    with_trace_id,
 )
 
 
