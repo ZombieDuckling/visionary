@@ -29,3 +29,12 @@ class Statements:
         return self._db.query_one(
             "SELECT key, value_json FROM settings WHERE key = ?", [key]
         )
+
+    # --- settings (upsert) ---
+    def upsert_setting(self, key: str, value_json: str) -> None:
+        self._db.execute(
+            "INSERT INTO settings (key, value_json) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, "
+            "updated_at = datetime('now')",
+            [key, value_json],
+        )
