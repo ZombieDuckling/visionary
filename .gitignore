@@ -38,3 +38,9 @@ logs/
 
 # Personal / off-topic content (not part of the dashboard)
 public/fu-dannel/
+
+# Python (Phase 0)
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
