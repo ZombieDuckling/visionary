@@ -87,7 +87,10 @@ function runOnceStreaming(runtime, ctx, options) {
       timeout: options.timeout || 120000,
       killSignal: 'SIGTERM',
       env: options.env || process.env,
-      cwd: options.cwd
+      cwd: options.cwd,
+      // Close stdin so CLIs that probe it (e.g. `claude -p`) don't stall ~3s
+      // waiting for piped input that never comes.
+      stdio: ['ignore', 'pipe', 'pipe']
     };
 
     let child;
