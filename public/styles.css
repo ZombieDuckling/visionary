@@ -2207,6 +2207,29 @@ code, pre, kbd { font-family: var(--font-mono); }
 .drawer-stream-progress{ color: var(--neon-g);  border-left-color: var(--neon-g); animation: pulse-live 2s ease-in-out infinite; }
 .drawer-stream-done    { color: var(--neon-g);  border-left-color: var(--neon-g); }
 .drawer-stream-fail    { color: var(--neon-r);  border-left-color: var(--neon-r); }
+.drawer-stream-harness {
+  color: var(--neon-m);
+  border-left: 2px solid var(--neon-m);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  padding: 4px var(--s-3);
+  letter-spacing: 0.04em;
+}
+.drawer-stream-live {
+  margin: var(--s-2) 0 0;
+  padding: var(--s-2) var(--s-3);
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-1, #d8d2ff);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--neon-c);
+  border-radius: 0;
+}
 
 /* Recent messages */
 .drawer-messages {

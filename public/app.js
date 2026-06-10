@@ -982,11 +982,34 @@
           failBubble.className = 'drawer-stream-event drawer-stream-fail';
           failBubble.textContent = '\u2715 Failed' + (d.error ? ': ' + d.error : '');
           streamEl.appendChild(failBubble);
+        } else if (eventType === 'agent:harness') {
+          // Which harness is currently running (and the failover position).
+          var hb = streamEl.querySelector('.drawer-stream-harness');
+          if (!hb) {
+            hb = document.createElement('div');
+            hb.className = 'drawer-stream-event drawer-stream-harness';
+            streamEl.appendChild(hb);
+          }
+          hb.textContent = '\u2699 ' + (d.harness || '?') + ' \u00b7 attempt ' + (d.attempt || 1) + '/' + (d.total || 1);
+        } else if (eventType === 'agent:output') {
+          // Live token/line stream from the running harness.
+          var live = streamEl.querySelector('.drawer-stream-live');
+          if (!live) {
+            live = document.createElement('pre');
+            live.className = 'drawer-stream-live';
+            streamEl.appendChild(live);
+          }
+          live.textContent += (d.chunk || '');
+          // Keep the live buffer bounded so a chatty agent can't grow the DOM forever.
+          if (live.textContent.length > 20000) live.textContent = live.textContent.slice(-20000);
+          live.scrollTop = live.scrollHeight;
         }
       }
 
       drawerSSEListen('agent:started',   handleAgentEvent);
       drawerSSEListen('agent:progress',  handleAgentEvent);
+      drawerSSEListen('agent:harness',   handleAgentEvent);
+      drawerSSEListen('agent:output',    handleAgentEvent);
       drawerSSEListen('agent:completed', handleAgentEvent);
       drawerSSEListen('agent:failed',    handleAgentEvent);
     }
