@@ -42,19 +42,19 @@ const MIME_TYPES = {
 //   ollama   = ollama run <model> "<message>"
 //   hermes   = hermes --yolo chat -q "<message>"
 const agentConfigs = [
-  { id: 'main',       name: 'Jarvis',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'GPT-5.4',            runtime: 'openclaw', color: '#3b8bff' },
-  { id: 'scout',      name: 'Scout',      icon: '\uD83D\uDD2D',       role: 'Morning Intelligence — news, signals',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#06b6d4' },
-  { id: 'analyst',    name: 'Analyst',     icon: '\uD83D\uDD2C',       role: 'Research Deep-Diver — OpenClaw tools',         model: 'GPT-5.4',            runtime: 'openclaw', color: '#7c5cff' },
-  { id: 'forge',      name: 'Forge',      icon: '\uD83D\uDD28',       role: 'Builder — OpenClaw workspace projects',        model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#f59e0b' },
-  { id: 'sentinel',   name: 'Sentinel',   icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor — audits, health',           model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#ef4444' },
-  { id: 'broker',     name: 'Broker',     icon: '\uD83D\uDCC8',       role: 'Investment & Financial Intelligence',           model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#22c55e' },
-  { id: 'ops',        name: 'Ops',        icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps',                      model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#8b5cf6' },
-  { id: 'hunter',     name: 'Hunter',     icon: '\uD83C\uDFAF',       role: 'Career & Opportunities',                       model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ec4899' },
-  { id: 'reviewer',   name: 'Reviewer',   icon: '\uD83D\uDD0D',       role: 'Quality Gate & Review',                        model: 'GPT-5.4',            runtime: 'openclaw', color: '#f97316' },
-  { id: 'coder',      name: 'Coder',      icon: '\uD83E\uDDD1\u200D\uD83D\uDCBB', role: 'Deep coding — debug, refactor, architecture', model: 'Claude Opus 4.6',  runtime: 'claude',   color: '#d97706' },
-  { id: 'researcher', name: 'Researcher', icon: '\uD83C\uDF10',       role: 'Multi-source research — long context',          model: 'Gemini 2.5 Pro',     runtime: 'gemini',   color: '#4285f4' },
-  { id: 'designer',   name: 'Designer',   icon: '\uD83C\uDFA8',       role: 'UI/UX — design systems, visual polish',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#e879f9' },
-  { id: 'hermes',     name: 'Hermes',     icon: '\uD83E\uDDED',       role: 'Persistent orchestrator — overnight build loop', model: 'Hermes Agent',       runtime: 'hermes',   color: '#00ff88' },
+  { id: 'main',       name: 'Jarvis',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'GPT-5.4',            runtime: 'openclaw', color: '#0a84ff' },
+  { id: 'scout',      name: 'Scout',      icon: '\uD83D\uDD2D',       role: 'Morning Intelligence — news, signals',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#32ade6' },
+  { id: 'analyst',    name: 'Analyst',     icon: '\uD83D\uDD2C',       role: 'Research Deep-Diver — OpenClaw tools',         model: 'GPT-5.4',            runtime: 'openclaw', color: '#5e5ce6' },
+  { id: 'forge',      name: 'Forge',      icon: '\uD83D\uDD28',       role: 'Builder — OpenClaw workspace projects',        model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ff9f0a' },
+  { id: 'sentinel',   name: 'Sentinel',   icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor — audits, health',           model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#ff453a' },
+  { id: 'broker',     name: 'Broker',     icon: '\uD83D\uDCC8',       role: 'Investment & Financial Intelligence',           model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#30d158' },
+  { id: 'ops',        name: 'Ops',        icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps',                      model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#30b0c7' },
+  { id: 'hunter',     name: 'Hunter',     icon: '\uD83C\uDFAF',       role: 'Career & Opportunities',                       model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ff375f' },
+  { id: 'reviewer',   name: 'Reviewer',   icon: '\uD83D\uDD0D',       role: 'Quality Gate & Review',                        model: 'GPT-5.4',            runtime: 'openclaw', color: '#8e8e93' },
+  { id: 'coder',      name: 'Coder',      icon: '\uD83E\uDDD1\u200D\uD83D\uDCBB', role: 'Deep coding — debug, refactor, architecture', model: 'Claude Opus 4.6',  runtime: 'claude',   color: '#a2845e' },
+  { id: 'researcher', name: 'Researcher', icon: '\uD83C\uDF10',       role: 'Multi-source research — long context',          model: 'Gemini 2.5 Pro',     runtime: 'gemini',   color: '#00c7be' },
+  { id: 'designer',   name: 'Designer',   icon: '\uD83C\uDFA8',       role: 'UI/UX — design systems, visual polish',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#bf5af2' },
+  { id: 'hermes',     name: 'Hermes',     icon: '\uD83E\uDDED',       role: 'Persistent orchestrator — overnight build loop', model: 'Hermes Agent',       runtime: 'hermes',   color: '#00c7be' },
 ];
 const agentAliases = { jarvis: 'main' };
 const validAgentIds = agentConfigs.map(a => a.id).concat(['jarvis']);
