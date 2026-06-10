@@ -113,14 +113,6 @@ function resolveAgentConfig(agentId) {
   };
 }
 
-// Build CLI command per runtime through the adapter registry.
-function buildDispatchCommand(agentId, message) {
-  const cfg = resolveAgentConfig(agentId);
-  const runtimeName = cfg ? cfg.runtime : 'openclaw';
-  const runtime = runtimes.getRuntime(runtimeName);
-  return runtime.buildCommand({ agentId: cfg ? cfg.id : agentId, message, model: cfg && cfg.model, agent: cfg });
-}
-
 // INTEL-02: Jarvis auto-routing — keyword matching to select best agent
 function routeToAgent(description) {
   const lower = (description || '').toLowerCase();
@@ -376,7 +368,56 @@ function cleanCliOutput(raw) {
     .trim();
 }
 
-// Dispatch an agent via OpenClaw CLI
+function cap(s) { return String(s).charAt(0).toUpperCase() + String(s).slice(1); }
+
+// Agent personality / charter injection. Each dispatch is prefixed with the
+// agent's charter so it behaves per its role instead of as a blank assistant.
+const PERSONALITY_DIR = path.join(__dirname, 'personalities', 'agents');
+const personalityCache = new Map();
+const PERSONALITY_MAX_CHARS = 6000;
+function loadPersonality(agentId) {
+  const fileId = agentId === 'main' ? 'jarvis' : agentId;
+  if (personalityCache.has(fileId)) return personalityCache.get(fileId);
+  let text = '';
+  try {
+    const p = path.join(PERSONALITY_DIR, fileId + '.md');
+    if (fs.existsSync(p)) {
+      text = fs.readFileSync(p, 'utf8');
+      if (text.length > PERSONALITY_MAX_CHARS) text = text.slice(0, PERSONALITY_MAX_CHARS) + '\n…[charter truncated]';
+    }
+  } catch { text = ''; }
+  personalityCache.set(fileId, text);
+  return text;
+}
+function buildAgentPrompt(agentId, message) {
+  const cfg = resolveAgentConfig(agentId);
+  const persona = loadPersonality(agentId);
+  if (!persona) return message;
+  const name = (cfg && cfg.name) || agentId;
+  const role = (cfg && cfg.role) || '';
+  return '[SYSTEM — you are ' + name + (role ? ', ' + role : '') + '. Operate per your charter below.]\n'
+    + persona.trim() + '\n\n[TASK]\n' + message;
+}
+
+// Resolve the org-chart row that owns this agent's harness_chain (for failover +
+// conversation history + health bookkeeping). Falls back to a synthesized row
+// built from the flat agent config so dispatch always has at least one harness.
+function resolveAgentRow(agentId) {
+  const tableId = agentId === 'main' ? 'jarvis' : agentId;
+  let row = null;
+  try { row = stmts.getAgentById.get(tableId); } catch { row = null; }
+  if (row && row.harness_chain) return row;
+  const cfg = resolveAgentConfig(agentId);
+  const runtime = (cfg && cfg.runtime) || 'openclaw';
+  return {
+    id: (row && row.id) || (cfg && cfg.id) || agentId,
+    name: (cfg && cfg.name) || agentId,
+    harness_chain: JSON.stringify([runtime]),
+    current_harness: (row && row.current_harness) || runtime
+  };
+}
+
+// Dispatch an agent through the full failover chain, streaming output over SSE.
 function dispatchAgent(taskId, agentId, message) {
   const startTime = Date.now();
 
@@ -414,168 +455,192 @@ function dispatchAgent(taskId, agentId, message) {
   if (updatedTask) bus.emit('task:updated', updatedTask);
   bus.emit('activity:new', { event_type: 'agent.dispatched', agent_id: agentId, task_id: taskId, summary: 'Dispatched ' + agentId + ' for task #' + taskId });
 
-  // Spawn CLI process via runtime-specific command (execFile -- no shell, prevents injection)
-  const cmd = buildDispatchCommand(agentId, message);
+  // Resolve the org-chart row (harness chain + bookkeeping) and display config.
+  const agentRow = resolveAgentRow(agentId);
   const cfg = resolveAgentConfig(agentId);
-  const runtimeLabel = cfg ? cfg.runtime : 'openclaw';
-  stmts.insertActivity.run({
-    event_type: 'dispatch.runtime', agent_id: agentId, task_id: taskId,
-    project_id: null, summary: agentId + ' dispatched via ' + runtimeLabel + ' (' + cmd.bin + ')',
-    detail_json: JSON.stringify({ runtime: runtimeLabel, bin: cmd.bin })
-  });
+  const ctx = {
+    message: buildAgentPrompt(agentId, message),
+    agentId: cfg ? cfg.id : agentId,
+    model: cfg && cfg.model,
+    agent: cfg,
+    // Trusted local automation: let headless claude actually use its tools
+    // instead of blocking on permission prompts. Adapters that don't support
+    // this flag simply ignore it.
+    dangerouslySkipPermissions: true
+  };
 
-  const child = execFile(cmd.bin, cmd.args, {
+  // Track the run before dispatch so the kill switch can find + terminate the
+  // live child (the child is supplied via the onChild hook below).
+  activeDispatches.set(runId, { process: null, agentId, taskId, startTime, cancelled: false });
+
+  const env = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
+  const failoverOpts = {
     timeout: 660000,
-    maxBuffer: 10 * 1024 * 1024,
-    env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' },
-    cwd: __dirname
-  }, (error, stdout, stderr) => {
-    const durationMs = Date.now() - startTime;
-    const runInfo = activeDispatches.get(runId);
-
-    if (runInfo && runInfo.cancelled) {
-      activeDispatches.delete(runId);
-      return;
-    }
-
-    if (!error) {
-      // Success
-      const cleaned = cleanCliOutput(stdout);
-      let resultText = cleaned;
-      try {
-        const parsed = JSON.parse(cleaned);
-        if (parsed.payloads && Array.isArray(parsed.payloads)) {
-          resultText = parsed.payloads.map(p => p.text).join('\n');
-        } else if (parsed.result) {
-          resultText = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
-        }
-      } catch {
-        // Not valid JSON -- use cleaned stdout as-is
-      }
-
-      stmts.completeRun.run({
-        id: runId, status: 'completed', result_json: cleaned,
-        result_text: resultText, error: null, duration_ms: durationMs
-      });
-
-      // INTEL-04: Parse token usage from CLI JSON output and estimate cost
-      try {
-        const parsed = JSON.parse(cleaned);
-        const usage = parsed.usage || parsed.token_usage || (parsed.metrics && parsed.metrics);
-        if (usage && (usage.input_tokens || usage.output_tokens)) {
-          const inputTok = usage.input_tokens || 0;
-          const outputTok = usage.output_tokens || 0;
-          const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
-          const isLlama = agentCfg && agentCfg.model && agentCfg.model.indexOf('llama') !== -1;
-          const cost = isLlama
-            ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
-            : (inputTok * 0.003 + outputTok * 0.015) / 1000;
-          stmts.updateRunTokens.run({ id: runId, input_tokens: inputTok, output_tokens: outputTok, estimated_cost_usd: cost });
-        }
-      } catch (_tokenErr) { /* not valid JSON or no usage data */ }
-
-      // Create notification for completed run
-      const notifResult = stmts.insertNotification.run({
-        agent_run_id: runId,
-        type: 'info',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' completed task #' + taskId,
-        body: resultText ? resultText.substring(0, 500) : 'No output',
-        action_type: 'view_run',
-        action_data: JSON.stringify({ run_id: runId, task_id: taskId })
-      });
-      bus.emit('notification:created', {
-        id: Number(notifResult.lastInsertRowid),
-        agent_id: agentId, task_id: taskId, type: 'info',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' completed task #' + taskId
-      });
-
-      // Update task to review
-      const currentTask = stmts.getTaskById.get(taskId);
-      if (currentTask) {
-        stmts.updateTask.run({
-          id: taskId, title: currentTask.title, description: currentTask.description,
-          status: 'review', priority: currentTask.priority,
-          agent_id: currentTask.agent_id, sort_order: currentTask.sort_order
-        });
-        const reviewTask = stmts.getTaskById.get(taskId);
-        bus.emit('task:updated', reviewTask);
-      }
-
+    env,
+    cwd: __dirname,
+    onChunk: function (harness, chunk, stream) {
+      bus.emit('agent:output', { run_id: runId, agent_id: agentId, task_id: taskId, harness, stream, chunk });
+    },
+    onHarnessStart: function (harness, idx, total) {
       stmts.insertActivity.run({
-        event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
-        project_id: null, summary: agentId + ' completed task #' + taskId + ' (' + Math.round(durationMs / 1000) + 's)',
-        detail_json: JSON.stringify({ run_id: runId, duration_ms: durationMs })
+        event_type: 'dispatch.runtime', agent_id: agentId, task_id: taskId,
+        project_id: null, summary: agentId + ' dispatching via ' + harness + ' (' + (idx + 1) + '/' + total + ')',
+        detail_json: JSON.stringify({ harness, attempt: idx + 1, total })
       });
-
-      bus.emit('agent:completed', {
-        run_id: runId, agent_id: agentId, task_id: taskId,
-        duration_ms: durationMs, result_text: resultText ? resultText.substring(0, 200) : ''
-      });
-
-      // Auto-trigger Reviewer on completed tasks
-      if (agentId !== 'reviewer') {
-        triggerReview(taskId, runId, agentId, resultText);
-      }
-      bus.emit('activity:new', {
-        event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
-        summary: agentId + ' completed task #' + taskId + ' (' + Math.round(durationMs / 1000) + 's)'
-      });
-    } else {
-      // Error / timeout
-      const status = error.killed ? 'timeout' : 'failed';
-      stmts.completeRun.run({
-        id: runId, status, result_json: null, result_text: null,
-        error: error.message, duration_ms: durationMs
-      });
-
-      // Create notification for failed/timed-out run
-      const failNotifResult = stmts.insertNotification.run({
-        agent_run_id: runId,
-        type: status === 'timeout' ? 'warning' : 'error',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' ' + status + ' on task #' + taskId,
-        body: error.message.substring(0, 500),
-        action_type: 'view_run',
-        action_data: JSON.stringify({ run_id: runId, task_id: taskId })
-      });
-      bus.emit('notification:created', {
-        id: Number(failNotifResult.lastInsertRowid),
-        agent_id: agentId, task_id: taskId, type: status === 'timeout' ? 'warning' : 'error',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' ' + status + ' on task #' + taskId
-      });
-
-      // Return failed/timeout dispatches to todo so the board does not get stuck in_progress.
-      const failedTask = stmts.getTaskById.get(taskId);
-      if (failedTask && failedTask.status === 'in_progress') {
-        stmts.updateTask.run({
-          id: taskId, title: failedTask.title, description: failedTask.description,
-          status: 'todo', priority: failedTask.priority,
-          agent_id: failedTask.agent_id, sort_order: failedTask.sort_order
-        });
-        bus.emit('task:updated', stmts.getTaskById.get(taskId));
-      }
-
-      const errSummary = agentId + ' ' + status + ' on task #' + taskId + ': ' + error.message.substring(0, 100);
-      stmts.insertActivity.run({
-        event_type: 'agent.' + status, agent_id: agentId, task_id: taskId,
-        project_id: null, summary: errSummary,
-        detail_json: JSON.stringify({ run_id: runId, error: error.message, duration_ms: durationMs })
-      });
-
-      bus.emit('agent:failed', {
-        run_id: runId, agent_id: agentId, task_id: taskId,
-        error: error.message, duration_ms: durationMs
-      });
-      bus.emit('activity:new', {
-        event_type: 'agent.' + status, agent_id: agentId, task_id: taskId, summary: errSummary
-      });
+      bus.emit('agent:harness', { run_id: runId, agent_id: agentId, task_id: taskId, harness, attempt: idx + 1, total });
+    },
+    onChild: function (child) {
+      const inf = activeDispatches.get(runId);
+      if (inf) inf.process = child;
+    },
+    isCancelled: function () {
+      const inf = activeDispatches.get(runId);
+      return !!(inf && inf.cancelled);
     }
+  };
 
-    // Cleanup
-    activeDispatches.delete(runId);
+  runtimes.executeWithFailover(
+    { getRuntime: runtimes.getRuntime, stmts, db },
+    agentRow, ctx, failoverOpts
+  ).then(function (result) {
+    finishDispatch(runId, agentId, taskId, startTime, result);
+  }).catch(function (err) {
+    finishDispatch(runId, agentId, taskId, startTime, {
+      status: 'error', harness: null, stdout: '', stderr: (err && err.message) || String(err)
+    });
   });
 
-  activeDispatches.set(runId, { process: child, agentId, taskId, startTime, cancelled: false });
   return runId;
+}
+
+// Apply terminal run state + side effects after a (possibly multi-harness)
+// dispatch settles. Split out of dispatchAgent so the streaming failover call
+// reads cleanly.
+function finishDispatch(runId, agentId, taskId, startTime, result) {
+  const durationMs = Date.now() - startTime;
+  const info = activeDispatches.get(runId);
+
+  // Cancelled by the kill switch — that route already finalized the run row and
+  // emitted events; don't double-apply completion state.
+  if (result.status === 'cancelled' || (info && info.cancelled)) {
+    activeDispatches.delete(runId);
+    return;
+  }
+
+  if (result.status === 'ok') {
+    const cleaned = cleanCliOutput(result.stdout || '');
+    let resultText = cleaned;
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (parsed.payloads && Array.isArray(parsed.payloads)) {
+        resultText = parsed.payloads.map(p => p.text).join('\n');
+      } else if (parsed.result) {
+        resultText = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+      }
+    } catch { /* not JSON -- use cleaned stdout */ }
+
+    stmts.completeRun.run({
+      id: runId, status: 'completed', result_json: cleaned,
+      result_text: resultText, error: null, duration_ms: durationMs
+    });
+
+    // INTEL-04: parse token usage from CLI JSON output and estimate cost
+    try {
+      const parsed = JSON.parse(cleaned);
+      const usage = parsed.usage || parsed.token_usage || (parsed.metrics && parsed.metrics);
+      if (usage && (usage.input_tokens || usage.output_tokens)) {
+        const inputTok = usage.input_tokens || 0;
+        const outputTok = usage.output_tokens || 0;
+        const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
+        const isLlama = agentCfg && agentCfg.model && agentCfg.model.indexOf('llama') !== -1;
+        const cost = isLlama
+          ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
+          : (inputTok * 0.003 + outputTok * 0.015) / 1000;
+        stmts.updateRunTokens.run({ id: runId, input_tokens: inputTok, output_tokens: outputTok, estimated_cost_usd: cost });
+      }
+    } catch (_tokenErr) { /* no usage data */ }
+
+    const harnessLabel = result.harness ? ' via ' + result.harness : '';
+
+    const notifResult = stmts.insertNotification.run({
+      agent_run_id: runId, type: 'info',
+      title: cap(agentId) + ' completed task #' + taskId,
+      body: resultText ? resultText.substring(0, 500) : 'No output',
+      action_type: 'view_run', action_data: JSON.stringify({ run_id: runId, task_id: taskId })
+    });
+    bus.emit('notification:created', {
+      id: Number(notifResult.lastInsertRowid), agent_id: agentId, task_id: taskId,
+      type: 'info', title: cap(agentId) + ' completed task #' + taskId
+    });
+
+    const currentTask = stmts.getTaskById.get(taskId);
+    if (currentTask) {
+      stmts.updateTask.run({
+        id: taskId, title: currentTask.title, description: currentTask.description,
+        status: 'review', priority: currentTask.priority,
+        agent_id: currentTask.agent_id, sort_order: currentTask.sort_order
+      });
+      bus.emit('task:updated', stmts.getTaskById.get(taskId));
+    }
+
+    stmts.insertActivity.run({
+      event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
+      project_id: null, summary: agentId + ' completed task #' + taskId + harnessLabel + ' (' + Math.round(durationMs / 1000) + 's)',
+      detail_json: JSON.stringify({ run_id: runId, harness: result.harness, attempts: result.attempts, replayed: result.replayed, duration_ms: durationMs })
+    });
+
+    bus.emit('agent:completed', {
+      run_id: runId, agent_id: agentId, task_id: taskId, harness: result.harness,
+      duration_ms: durationMs, result_text: resultText ? resultText.substring(0, 200) : ''
+    });
+
+    if (agentId !== 'reviewer') triggerReview(taskId, runId, agentId, resultText);
+    bus.emit('activity:new', {
+      event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
+      summary: agentId + ' completed task #' + taskId + harnessLabel + ' (' + Math.round(durationMs / 1000) + 's)'
+    });
+  } else {
+    // Failure: all-exhausted / rate-limited / error.
+    const status = 'failed';
+    const errMsg = (result.stderr && String(result.stderr).slice(0, 1000))
+      || ('All harnesses exhausted (' + result.status + ')');
+    stmts.completeRun.run({
+      id: runId, status, result_json: null, result_text: null,
+      error: errMsg, duration_ms: durationMs
+    });
+
+    const failNotifResult = stmts.insertNotification.run({
+      agent_run_id: runId, type: 'error',
+      title: cap(agentId) + ' ' + status + ' on task #' + taskId,
+      body: errMsg.substring(0, 500),
+      action_type: 'view_run', action_data: JSON.stringify({ run_id: runId, task_id: taskId })
+    });
+    bus.emit('notification:created', {
+      id: Number(failNotifResult.lastInsertRowid), agent_id: agentId, task_id: taskId,
+      type: 'error', title: cap(agentId) + ' ' + status + ' on task #' + taskId
+    });
+
+    const failedTask = stmts.getTaskById.get(taskId);
+    if (failedTask && failedTask.status === 'in_progress') {
+      stmts.updateTask.run({
+        id: taskId, title: failedTask.title, description: failedTask.description,
+        status: 'todo', priority: failedTask.priority,
+        agent_id: failedTask.agent_id, sort_order: failedTask.sort_order
+      });
+      bus.emit('task:updated', stmts.getTaskById.get(taskId));
+    }
+
+    const errSummary = agentId + ' ' + status + ' on task #' + taskId + ': ' + errMsg.substring(0, 100);
+    stmts.insertActivity.run({
+      event_type: 'agent.' + status, agent_id: agentId, task_id: taskId,
+      project_id: null, summary: errSummary,
+      detail_json: JSON.stringify({ run_id: runId, error: errMsg, attempts: result.attempts, duration_ms: durationMs })
+    });
+    bus.emit('agent:failed', { run_id: runId, agent_id: agentId, task_id: taskId, error: errMsg, duration_ms: durationMs });
+    bus.emit('activity:new', { event_type: 'agent.' + status, agent_id: agentId, task_id: taskId, summary: errSummary });
+  }
+
+  activeDispatches.delete(runId);
 }
 
 // Helper: read request body and JSON.parse it
