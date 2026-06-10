@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# vision — launch Visionary Mission Control from anywhere.
+#
+#   vision              open the dashboard (starts the server if needed)
+#   vision start        start the server in the background
+#   vision stop         stop the server
+#   vision status       show server status
+#   vision app          launch the Electron desktop app
+#   vision logs         tail the server log
+#   vision help         this help
+set -euo pipefail
+
+# Resolve the repo root through any symlink chain (install.sh symlinks this file).
+SOURCE=${BASH_SOURCE[0]}
+while [ -L "$SOURCE" ]; do
+  DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+  SOURCE=$(readlink "$SOURCE")
+  [[ $SOURCE != /* ]] && SOURCE=$DIR/$SOURCE
+done
+REPO=$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)
+
+PORT="${VISIONARY_PORT:-3333}"
+URL="http://127.0.0.1:${PORT}"
+LOG_DIR="${HOME}/.visionary"
+LOG="${LOG_DIR}/server.log"
+
+port_open() {
+  (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
+}
+
+server_pid() {
+  lsof -ti tcp:"${PORT}" -sTCP:LISTEN 2>/dev/null | head -1 || true
+}
+
+start_server() {
+  if port_open; then
+    echo "vision: server already running at ${URL}"
+    return 0
+  fi
+  mkdir -p "$LOG_DIR"
+  echo "vision: starting server from ${REPO} (log: ${LOG})"
+  (cd "$REPO" && nohup npm start >>"$LOG" 2>&1 &)
+  # Wait up to 20s for the port (the prestart preflight may rebuild the native module).
+  for _ in $(seq 1 40); do
+    if port_open; then
+      echo "vision: running at ${URL}"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "vision: server did not come up — check ${LOG}" >&2
+  return 1
+}
+
+case "${1:-open}" in
+  open)
+    start_server
+    if command -v open >/dev/null 2>&1; then open "$URL"; else echo "vision: open ${URL} in your browser"; fi
+    ;;
+  start)
+    start_server
+    ;;
+  stop)
+    PID=$(server_pid)
+    if [ -n "$PID" ]; then
+      kill "$PID" 2>/dev/null || true
+      echo "vision: stopped (pid ${PID})"
+    else
+      echo "vision: nothing listening on port ${PORT}"
+    fi
+    ;;
+  status)
+    if port_open; then
+      echo "vision: running at ${URL} (pid $(server_pid))"
+    else
+      echo "vision: not running (port ${PORT})"
+    fi
+    ;;
+  app)
+    echo "vision: launching desktop app"
+    (cd "$REPO" && npm run app)
+    ;;
+  logs)
+    [ -f "$LOG" ] || { echo "vision: no log at ${LOG}"; exit 1; }
+    tail -f "$LOG"
+    ;;
+  help|-h|--help)
+    sed -n '2,10p' "$SOURCE" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    echo "vision: unknown command '$1' — try: vision help" >&2
+    exit 1
+    ;;
+esac
