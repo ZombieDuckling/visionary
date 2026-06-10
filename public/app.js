@@ -814,7 +814,7 @@
     if (harness) meta += '<span class="drawer-msg-harness">' + esc(harness) + '</span>';
     if (ts) meta += '<span class="drawer-msg-ts">' + timeAgo(ts) + '</span>';
     bubble.innerHTML = (meta ? '<div class="drawer-msg-meta">' + meta + '</div>' : '')
-      + '<div class="drawer-msg-body">' + renderMarkdown(content) + '</div>';
+      + '<div class="drawer-msg-body">' + renderMarkdown(previewText(content)) + '</div>';
     streamEl.insertBefore(bubble, streamEl.firstChild);
   }
 
@@ -1125,13 +1125,33 @@
     return '<div class="org-tree">' + renderOrgNode(data.ceo, 0, agentsById, activeRunsById) + '</div>';
   }
 
+  // Some stored run outputs are raw OpenClaw JSON envelopes
+  // ({"payloads":[{"text":...}]} or {"result":...}). Extract the human text
+  // for previews/bubbles; fall back to the raw string. Optional maxLen truncates.
+  function previewText(raw, maxLen) {
+    var text = String(raw == null ? '' : raw);
+    var trimmed = text.trim();
+    if (trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[') {
+      try {
+        var parsed = JSON.parse(trimmed);
+        if (parsed && parsed.payloads && Array.isArray(parsed.payloads)) {
+          text = parsed.payloads.map(function (p) { return p && p.text ? p.text : ''; }).join('\n').trim() || text;
+        } else if (parsed && parsed.result) {
+          text = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+        }
+      } catch (e) { /* not JSON — keep raw */ }
+    }
+    if (typeof maxLen === 'number' && text.length > maxLen) text = text.substring(0, maxLen) + '…';
+    return text;
+  }
+
   function renderOrgNode(node, depth, agentsById, activeRunsById) {
     var liveAgent = agentsById[node.id] || {};
     var activeRun = activeRunsById[node.id] || null;
     var icon = liveAgent.icon || AGENT_ICONS[node.id] || '';
     var color = AGENT_COLORS[node.id] || liveAgent.color || '#0a84ff';
     var model = liveAgent.model ? liveAgent.model.replace(/-\d{8}$/, '') : '';
-    var summary = liveAgent.last_run_summary ? liveAgent.last_run_summary.substring(0, 100) : '';
+    var summary = liveAgent.last_run_summary ? previewText(liveAgent.last_run_summary, 100) : '';
     var statusClass = 'health-' + (node.health_status || 'unknown');
     var lastActivity = node.last_activity_at ? timeAgo(node.last_activity_at) : 'no activity';
     var lastCheck = node.last_health_check ? timeAgo(node.last_health_check) : 'never';

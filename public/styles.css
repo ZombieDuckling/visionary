@@ -771,6 +771,8 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 }
 .overview-metric.wide { grid-column: span 2; }
 .overview-metric-label { font-size: var(--font-size-sm); font-weight: 500; color: var(--text-secondary); margin-bottom: var(--space-xs); }
+/* inline label/value pairs (orchestrator panel) need a gap between the pair */
+.overview-metric-label + strong { margin-left: 6px; }
 .overview-metric-value {
   font-family: var(--font-display);
   font-size: 26px;

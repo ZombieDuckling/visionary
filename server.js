@@ -368,6 +368,23 @@ function cleanCliOutput(raw) {
     .trim();
 }
 
+// Older agent_runs rows stored the raw OpenClaw JSON envelope in result_text.
+// Extract the human text before any truncation so previews stay readable.
+function extractResultText(raw) {
+  const text = String(raw || '').trim();
+  if (text.charAt(0) !== '{' && text.charAt(0) !== '[') return text;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && Array.isArray(parsed.payloads)) {
+      return parsed.payloads.map(p => (p && p.text) || '').join('\n').trim() || text;
+    }
+    if (parsed && parsed.result) {
+      return typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+    }
+  } catch { /* not JSON — fall through */ }
+  return text;
+}
+
 function cap(s) { return String(s).charAt(0).toUpperCase() + String(s).slice(1); }
 
 // Agent personality / charter injection. Each dispatch is prefixed with the
@@ -1545,7 +1562,7 @@ const server = http.createServer(async (req, res) => {
             last_activity: run ? (run.completed_at || run.started_at) : null,
             last_run_status: run ? run.status : null,
             last_run_duration_ms: run ? run.duration_ms : null,
-            last_run_summary: run && run.result_text ? run.result_text.substring(0, 120) : null,
+            last_run_summary: run && run.result_text ? extractResultText(run.result_text).substring(0, 120) : null,
             last_run_cost: costRow ? costRow.estimated_cost_usd : null
           };
         });

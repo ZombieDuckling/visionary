@@ -1,4 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="80" fill="#0a0e14"/>
-  <text x="256" y="360" font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace" font-size="320" font-weight="700" text-anchor="middle" fill="#3b8bff">V</text>
+  <!-- macOS Big Sur-style rounded square, Apple blue gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3ba0ff"/>
+      <stop offset="1" stop-color="#0a5fd7"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="url(#bg)"/>
+  <rect width="512" height="256" rx="115" fill="url(#sheen)"/>
+  <!-- V mark, SF-style geometry -->
+  <path d="M132 140 L222 384 Q256 412 290 384 L380 140 L322 140 L256 332 L190 140 Z" fill="#ffffff"/>
+  <!-- agent status dot accent -->
+  <circle cx="376" cy="368" r="40" fill="#30d158" stroke="#ffffff" stroke-width="14"/>
 </svg>
