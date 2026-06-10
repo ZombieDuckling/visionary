@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-06-10
+
+### The working-core release: agents actually run
+
+Dispatch any agent from the org chart and watch real CLI output stream back live, with automatic failover across harnesses. The whole surface is redesigned as a native macOS app, boards are project-scoped, and a `vision` terminal command launches everything.
+
+### Added
+- **Agent OS core** — 16-node org chart (CEO → 4 directors → 11 ICs) from `personalities/org-chart.json`, harness failover engine, independent watchdog, cron scheduler, retention cleanup, prompt guardrails, deep-research pipeline, per-harness model cookbook, Spaces → Projects hierarchy, per-agent dispatch drawer, per-agent token-bucket rate limiting, token-aware failover replay, watchdog auto-nudge (#14–#22, org-chart era).
+- **Streamed dispatch through failover** — the UI dispatch path now runs `executeWithFailover` against each agent's harness chain and streams stdout/stderr over new SSE events (`agent:output`, `agent:harness`); the drawer renders output live with a failover-position indicator. Kill switch cancels without failing over.
+- **Real harness healthchecks** — all 7 adapters (openclaw, claude, hermes, cursor, codex, gemini, ollama) probe the actual CLI; boot banner reports which harnesses are available.
+- **Agent personalities in dispatch** — each run is prefixed with the agent's charter so agents act their role; headless `claude` runs with tool permissions granted and stdin closed.
+- **Deterministic launch** — `scripts/ensure-native.js` self-heals the better-sqlite3 ABI on `npm start`/`npm run verify`; streaming/failover/cancellation integration tests added to the verify gate.
+- **`vision` terminal command + installer** — `./install.sh` sets up deps and links `vision` onto PATH: open the dash, start/stop/status, Electron app, logs.
+- **Python backend (frozen)** — FastAPI port phases 0–2 (read-only routes + SSE bus, dispatch + failover, comm fabric) on port 3344; development frozen, Node remains the shipping backend (#23–#26).
+
+### Changed
+- **Native macOS UI (Apple HIG)** — full redesign: SF system fonts, Apple system colors, light/dark/system themes, translucent toolbar + source-list sidebar with SVG icons, inspector-style chat panel and agent drawer, segmented controls, Spotlight-style ⌘K, new app icon. Zero external font loads.
+- **Boards are project-scoped** — the global all-tasks board is gone; `#/board` opens your last-used project board and New Task always targets the current project.
+- Org chart hides legacy registry rows; run summaries unwrap OpenClaw JSON envelopes into readable text.
+
+### Fixed
+- `cursor-agent` dispatch used a nonexistent `--message` flag (now `-p`).
+- Headless `claude -p` stalled ~3s waiting on stdin.
+- Live dispatches no longer fail on tool-permission prompts.
+- PWA manifest/theme colors and stale ROADMAP/STATE/README corrected; dead macOS Swift shell removed.
+
 ## [2.0.0] — 2026-06-08
 
 ### Major release: extensibility, portability, mobile, and a full visual overhaul
