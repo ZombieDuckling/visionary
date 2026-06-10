@@ -23,12 +23,21 @@ Most agent dashboards are SaaS, cloud-bound, and assume a team. Visionary is the
 ```bash
 git clone https://github.com/ZombieDuckling/visionary.git
 cd visionary
-npm install
-npm start              # server only, visit http://127.0.0.1:3333
-npm run app            # full Electron desktop app
+./install.sh           # deps + native binding + links the `vision` command
+vision                 # opens the dashboard (starts the server if needed)
 ```
 
-`npm start` is self-healing: a `prestart` preflight (`scripts/ensure-native.js`) checks that the native `better-sqlite3` binding loads under the current Node, and if its ABI doesn't match (e.g. the committed binary was built for Electron), it rebuilds the binding once automatically before the server boots — no manual `npm rebuild` needed.
+The `vision` command works from anywhere once installed:
+
+```bash
+vision                 # open the dashboard in your browser
+vision app             # full Electron desktop app
+vision start|stop      # manage the background server
+vision status          # is it running?
+vision logs            # tail ~/.visionary/server.log
+```
+
+Prefer plain npm? `npm install && npm start` still works (server on http://127.0.0.1:3333), and `npm run app` launches the desktop shell. `npm start` is self-healing: a `prestart` preflight (`scripts/ensure-native.js`) checks that the native `better-sqlite3` binding loads under the current Node, and if its ABI doesn't match (e.g. the committed binary was built for Electron), it rebuilds the binding once automatically — no manual `npm rebuild` needed.
 
 Visionary is also installable as a Progressive Web App. On Chrome desktop, look for the install icon in the address bar after opening the dashboard. On iOS Safari, tap Share → "Add to Home Screen". Once installed, the app launches in standalone mode (no browser chrome) and caches the static shell for offline use — API calls remain network-first.
 
