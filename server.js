@@ -77,7 +77,7 @@ function getAppSettings() {
 
 function saveAppSettings(input) {
   const current = getAppSettings();
-  const runtimeIds = runtimes.listRuntimes().map(r => r.id);
+  const runtimeIds = runtimes.listRuntimeIds();
   const next = {
     port: Number(input.port || current.port || DEFAULT_SETTINGS.port),
     workspace_path: String(input.workspace_path || current.workspace_path || DEFAULT_SETTINGS.workspace_path),
@@ -1188,7 +1188,7 @@ const server = http.createServer(async (req, res) => {
 
       // GET /api/settings + PUT /api/settings
       if (method === 'GET' && pathname === '/api/settings') {
-        res.json({ settings: getAppSettings(), runtimes: runtimes.listRuntimes() });
+        res.json({ settings: getAppSettings(), runtimes: await runtimes.listRuntimes() });
         return;
       }
       if (method === 'PUT' && pathname === '/api/settings') {
@@ -1210,13 +1210,13 @@ const server = http.createServer(async (req, res) => {
 
       // GET /api/runtimes
       if (method === 'GET' && pathname === '/api/runtimes') {
-        res.json({ runtimes: runtimes.listRuntimes() });
+        res.json({ runtimes: await runtimes.listRuntimes() });
         return;
       }
 
       // GET /api/cookbook — model inventory per available harness
       if (method === 'GET' && pathname === '/api/cookbook') {
-        const inventory = await cookbook.inventory(runtimes.listRuntimes());
+        const inventory = await cookbook.inventory(await runtimes.listRuntimes());
         res.json({ inventory });
         return;
       }
