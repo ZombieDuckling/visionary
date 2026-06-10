@@ -13,5 +13,17 @@ function dispatch(ctx, options, callback) {
 }
 
 function kill(child) { if (child && !child.killed) child.kill('SIGTERM'); }
-function healthcheck() { return { ok: true, command: 'hermes --yolo chat -q <prompt>' }; }
+
+function healthcheck() {
+  return new Promise((resolve) => {
+    execFile('hermes', ['--version'], { timeout: 3000 }, (err, stdout) => {
+      if (err) {
+        resolve({ ok: false, runtime: 'hermes', error: err.code === 'ENOENT' ? 'not-installed' : err.message });
+      } else {
+        resolve({ ok: true, runtime: 'hermes', version: String(stdout || '').trim() });
+      }
+    });
+  });
+}
+
 module.exports = { name: 'hermes', buildCommand, dispatch, kill, healthcheck };

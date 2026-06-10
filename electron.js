@@ -40,7 +40,7 @@ function startServer() {
 }
 
 function createWindow() {
-  nativeTheme.themeSource = 'dark';
+  nativeTheme.themeSource = 'system';
 
   mainWindow = new BrowserWindow({
     width: 1560,
@@ -48,7 +48,7 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 700,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0a0e14',
+    backgroundColor: '#1e1e20',
     show: false,
     webPreferences: { nodeIntegration: false, contextIsolation: true }
   });

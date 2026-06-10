@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Roadmap created, ready to plan Phase 1
-last_updated: "2026-05-13T13:45:09.161Z"
-last_activity: 2026-05-13
+status: complete
+stopped_at: All 5 phases shipped; superseded by v2.x working-core effort
+last_updated: "2026-06-10"
+last_activity: 2026-06-10
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 7
   completed_plans: 7
   percent: 100
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-13)
 
 **Core value:** One place to see everything your agents are doing, dispatch work, and manage projects -- without juggling Telegram/WhatsApp/terminal.
-**Current focus:** Phase 1: Foundation
+**Current focus:** v2.x working core — Node backend, real streamed dispatch.
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation)
-Plan: 3 of 3 in current phase
-Status: Phase complete — ready for verification
-Last activity: 2026-05-13
+Milestone: v1.0 `milestone` — **complete** (all 5 phases shipped, each has a SUMMARY under `.planning/phases/`).
+Phase: 5 of 5 (Intelligence) — done.
+Status: Milestone functionally complete and superseded by the v2.x working-core effort (org chart + harness failover + watchdog/scheduler/guardrails/deep research). See ROADMAP.md "Post-milestone (v2.x)".
+Last activity: 2026-06-10
 
 Progress: [██████████] 100%
 
@@ -88,6 +88,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13T13:45:09.156Z
-Stopped at: Roadmap created, ready to plan Phase 1
+Last session: 2026-06-10
+Stopped at: All 5 phases shipped; milestone closed and superseded by the v2.x working-core effort (Node backend, real streamed dispatch). Python/FastAPI backend migration exists but is frozen.
 Resume file: None

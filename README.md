@@ -28,13 +28,15 @@ npm start              # server only, visit http://127.0.0.1:3333
 npm run app            # full Electron desktop app
 ```
 
+`npm start` is self-healing: a `prestart` preflight (`scripts/ensure-native.js`) checks that the native `better-sqlite3` binding loads under the current Node, and if its ABI doesn't match (e.g. the committed binary was built for Electron), it rebuilds the binding once automatically before the server boots — no manual `npm rebuild` needed.
+
 Visionary is also installable as a Progressive Web App. On Chrome desktop, look for the install icon in the address bar after opening the dashboard. On iOS Safari, tap Share → "Add to Home Screen". Once installed, the app launches in standalone mode (no browser chrome) and caches the static shell for offline use — API calls remain network-first.
 
 For the agent bridge:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt  # if present
+.venv/bin/pip install -e ".[dev]"   # installs from pyproject.toml
 npm run bridge
 ```
 

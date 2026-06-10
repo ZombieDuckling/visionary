@@ -13,10 +13,10 @@ Visionary transforms the user's static Node.js dashboard into a full interactive
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - SQLite database, separate HTML serving, reactive state store, design system, REST API, SSE endpoint (completed 2026-05-13)
-- [ ] **Phase 2: Board & Agents** - Kanban board with drag-and-drop, task CRUD, agent status cards, keyboard shortcuts
-- [ ] **Phase 3: Dispatch & Real-Time** - Agent dispatch via CLI, command bar, kill switch, activity feed, run tracking
-- [ ] **Phase 4: Notifications & Viewers** - Inbox with actions, cron timeline, brief/audit/portfolio viewers, memory browser
-- [ ] **Phase 5: Intelligence** - Interview mode, Jarvis orchestrator routing, project panels, cost tracking
+- [x] **Phase 2: Board & Agents** - Kanban board with drag-and-drop, task CRUD, agent status cards, keyboard shortcuts (completed 2026-05-13)
+- [x] **Phase 3: Dispatch & Real-Time** - Agent dispatch via CLI, command bar, kill switch, activity feed, run tracking (completed 2026-05-13)
+- [x] **Phase 4: Notifications & Viewers** - Inbox with actions, cron timeline, brief/audit/portfolio viewers, memory browser (completed 2026-05-13)
+- [x] **Phase 5: Intelligence** - Interview mode, Jarvis orchestrator routing, project panels, cost tracking (completed 2026-05-13)
 
 ## Phase Details
 
@@ -96,7 +96,7 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 05-01-PLAN.md — Interview shaping mode + Jarvis routing + project panels + cost tracking (INTEL-01 through INTEL-04)
+- [x] 05-01-PLAN.md — Interview shaping mode + Jarvis routing + project panels + cost tracking (INTEL-01 through INTEL-04)
 
 ## Progress
 
@@ -105,8 +105,32 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 3/3 | Complete   | 2026-05-13 |
-| 2. Board & Agents | 0/2 | Not started | - |
-| 3. Dispatch & Real-Time | 0/1 | Not started | - |
-| 4. Notifications & Viewers | 0/1 | Not started | - |
-| 5. Intelligence | 0/1 | Not started | - |
+| 1. Foundation | 3/3 | Complete | 2026-05-13 |
+| 2. Board & Agents | 2/2 | Complete | 2026-05-13 |
+| 3. Dispatch & Real-Time | 1/1 | Complete | 2026-05-13 |
+| 4. Notifications & Viewers | 1/1 | Complete | 2026-05-13 |
+| 5. Intelligence | 1/1 | Complete | 2026-05-13 |
+
+All 5 phases of the v1.0 `milestone` shipped (each phase has a SUMMARY under
+`.planning/phases/`). See "Post-milestone (v2.x)" below for where the project went next.
+
+## Post-milestone (v2.x)
+
+This roadmap covers the original 5-phase GSD milestone, which is **complete**. The
+project has since advanced well beyond it into the "org chart + failover + working
+core" era:
+
+- **16-node org chart** (Jarvis CEO → 4 directors → 11 ICs) defined in
+  `personalities/org-chart.json` and bootstrapped on boot.
+- **Pluggable harness adapters** (`openclaw`, `claude`/`claude-code`, `hermes`,
+  `cursor`, `codex`, `gemini`, `ollama`) with a **failover engine** that walks each
+  agent's `harness_chain` on exhaustion and replays recent turns.
+- **Watchdog** (`watchdog.py`), **cron scheduler**, **cleanup service**, **prompt
+  guardrails** (canary tokens, jailbreak scan, token budgeting), and a
+  **deep-research** decompose→investigate→synthesize pipeline.
+- Currently **hardening into a "working core" release on the Node backend** with real
+  streamed dispatch.
+
+A **Python / FastAPI backend migration** exists under `src/visionary/` (scaffold +
+read-only routes + dispatch/failover + comm fabric) but is **paused / frozen** as
+future work — **ship Node** for the working-core release.

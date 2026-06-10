@@ -8,7 +8,7 @@ Copy everything below into a fresh Claude Code session to resume.
 
 **Visionary Mission Control** — a local-first desktop dashboard that orchestrates a multi-agent AI organization. Electron + tiny Node.js server (no Express) + SQLite + vanilla-JS frontend. Public OSS at <https://github.com/ZombieDuckling/visionary>. Currently at `v2.0.0` on `main`.
 
-The current synthwave-arcade UI is the visible surface. The substantive work is the agent OS underneath: 16-node org chart, pluggable harness adapters, failover engine, watchdog, cron scheduler, cleanup, prompt guardrails, and a deep-research workflow.
+The UI is a native-macOS design (Apple HIG: SF system fonts, system colors, light/dark/system themes, source-list sidebar). The substantive work is the agent OS underneath: 16-node org chart, pluggable harness adapters, failover engine, watchdog, cron scheduler, cleanup, prompt guardrails, and a deep-research workflow.
 
 ## Hard invariants — do not break
 
@@ -31,7 +31,7 @@ visionary/
 ├── public/
 │   ├── index.html         # Shell — top bar, sidebar, main, chat, status bar
 │   ├── app.js             # SPA — Proxy-based reactive state, tab router, all views
-│   ├── styles.css         # Synthwave HUD theme (deep purple + neon)
+│   ├── styles.css         # Native macOS theme (Apple HIG, light + dark)
 │   ├── sw.js              # PWA service worker (CACHE_NAME bumps on every UI change)
 │   ├── manifest.json
 │   └── coffee.html        # Demo page built during the failover integration test
@@ -138,19 +138,38 @@ Left sidebar shows the Space → Project tree (sets `state.currentSpaceId` and `
 
 ## Visual conventions
 
-- Theme: deep-purple synthwave (`#0F0026` bg, neon `#FF2EC4` magenta + `#00F0FF` cyan + `#F9F002` yellow + `#00FF9C` lime + `#FF8A2E` orange + `#FF2E5A` hot red).
-- Fonts: Orbitron (display), VT323 (body), Share Tech Mono (data) — Google Fonts.
-- CRT scanline overlay via `body::before`. Hard borders, glow via `box-shadow` + `text-shadow`, no rounded corners.
+- Theme: native macOS (Apple HIG). Light + dark + system via `data-theme` on `<html>`; tokens in `:root` / `[data-theme="dark"]` in `public/styles.css`.
+- Fonts: SF system stack (`-apple-system` …) for text/display, `ui-monospace` (SF Mono) for data. No external font loads.
+- Agent/space/project accents use the Apple system palette (`#0a84ff` blue, `#30d158` green, `#ff9f0a` orange, …) — defined in `AGENT_COLORS` (app.js) and `agentConfigs` (server.js).
+- Chrome: translucent toolbar + source-list sidebar (`backdrop-filter`), 6/10px radii, hairline `--separator` borders, `--shadow-*` elevation. Electron uses `titleBarStyle: 'hiddenInset'`; `body.electron` pads the titlebar for traffic lights.
 - Whenever you change `public/styles.css` or `public/index.html`, **bump `CACHE_NAME` in `public/sw.js`** so the PWA reloads.
+
+## Working-core release (2026-06-10)
+
+The dispatch→harness→stream critical path is now real end-to-end. See
+`docs/superpowers/specs/2026-06-10-working-core-design.md`. Shipped on branch
+`feat/working-core`:
+
+- **Deterministic launch** — `scripts/ensure-native.js` (prestart/predev/presmoke)
+  self-heals the better-sqlite3 ABI; `npm start`/`npm run verify` work from a clean checkout.
+- **Real harness healthchecks** — all 7 adapters probe `--version`; `listRuntimes()` is async,
+  `listRuntimeIds()` added. Boot banner logs which harnesses are available. Fixed `cursor-agent -p`.
+- **Streaming dispatch through failover** — `dispatchAgent` now runs `executeWithFailover` against
+  the agent's `harness_chain`, streaming stdout/stderr over new SSE events `agent:output` +
+  `agent:harness`; the dispatch drawer renders them live. Kill switch cancels without failing over.
+- **Agents actually do work** — each dispatch injects the agent's personality charter; headless
+  `claude` defaults to skip-permissions and runs with stdin closed (no 3s stall).
+- **Org chart** — legacy `main`/`hermes` rows hidden; clean CEO → 4 directors → 11 ICs.
+- Verified live: forge/openclaw (13 streamed chunks) and coder/claude-code (clean `pong`) both complete.
 
 ## Open threads (not blocking — pick up if relevant)
 
-- **Rate limiter** — per-agent dispatch throttle (token bucket). Pattern from odysseus's `rate_limiter.py`.
 - **Document ingestion** — accept PDF/docx, convert to text for agent inputs. Pattern from odysseus's `markitdown_runtime`.
 - **MCP server integration** — biggest remaining lift. Stub at `src/mcp.js`. Needs `@modelcontextprotocol/sdk` (would be the second runtime dep — go/no-go decision).
-- **Per-agent dispatch in the UI** — Org chart has dispatch buttons but no result-streaming view. Next: an SSE-fed conversation drawer when you click a node.
-- **Automated stale-activity nudge** — Watchdog currently only logs stale agents. Auto-dispatch their `watchdog_role` prompt would close the loop.
-- **Token-aware replay** — `failover.js` replays a fixed N turns. Use `guardrails.selectForReplay` instead so big conversations don't blow context budgets.
+- **Token/cost capture** — `agent_runs.input_tokens/output_tokens/estimated_cost_usd` columns exist but stay NULL; the dispatch path only fills them when a harness emits usage JSON (most don't).
+- **Reviewer loop** — the auto-Reviewer historically rejected ~98% of work (bounded by `MAX_REVIEW_RETRIES`); the permission/personality fixes should help, but the prompt/gate logic still deserves a hard look.
+- **Registry unification** — the flat `agentConfigs` (server.js) and the org-chart `agents` table are still two registries; directors aren't dispatchable via `/api/dispatch` (use `/api/agents/:id/dispatch`).
+- **Python backend** — frozen at phase 2 on port 3344. Decision: ship Node. Resume the migration (phases 1c/3/4) only if consolidating to one language becomes worth it.
 
 ## Conventions when you make changes
 

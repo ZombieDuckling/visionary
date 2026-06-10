@@ -5,7 +5,10 @@
   "description": "Local desktop agent operating system for Jarvis and the Visionary mission control stack.",
   "main": "electron.js",
   "scripts": {
+    "ensure-native": "node scripts/ensure-native.js",
+    "prestart": "node scripts/ensure-native.js",
     "start": "node server.js",
+    "predev": "node scripts/ensure-native.js",
     "dev": "node --watch server.js",
     "bridge": ".venv/bin/python3 bridge.py",
     "watchdog": "python3 watchdog.py",
@@ -17,7 +20,8 @@
     "rebuild:node": "npm rebuild better-sqlite3",
     "check": "node --check server.js && node --check db.js && node --check sse.js && node --check electron.js && node --check public/app.js",
     "smoke": "node --test tests/smoke.mjs",
-    "verify": "npm run check && npm run smoke"
+    "test:stream": "node scripts/stream-smoke.mjs",
+    "verify": "npm run check && npm run smoke && npm run test:stream"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0"
