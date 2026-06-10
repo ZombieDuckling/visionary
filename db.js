@@ -334,6 +334,13 @@ const stmts = {
     VALUES (@event_type, @agent_id, @task_id, @project_id, @summary, @detail_json)
   `),
   getRecentActivity: db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ?'),
+  countReviewOutcomes: db.prepare(`
+    SELECT event_type, COUNT(*) AS count, MAX(created_at) AS last_at
+    FROM activity_log
+    WHERE event_type IN ('review.approved', 'review.rejected', 'review.inconclusive')
+      AND created_at >= datetime('now', @since)
+    GROUP BY event_type
+  `),
   getLatestRunPerAgent: db.prepare('SELECT agent_id, status, completed_at, started_at, duration_ms, result_text FROM agent_runs WHERE id IN (SELECT MAX(id) FROM agent_runs GROUP BY agent_id)'),
   getRunningAgents: db.prepare('SELECT agent_id FROM agent_runs WHERE status = \'running\''),
   insertRun: db.prepare(`
