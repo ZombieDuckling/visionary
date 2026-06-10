@@ -12,6 +12,7 @@ const deepResearch = require('./src/deep-research');
 const scheduler = require('./src/scheduler');
 const cleanup = require('./src/cleanup');
 const rateLimiter = require('./src/rate-limiter');
+const review = require('./src/review');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -62,7 +63,10 @@ const DEFAULT_SETTINGS = {
   port: Number(process.env.VISIONARY_PORT || 3333),
   workspace_path: process.env.VISIONARY_WORKSPACE || path.join(process.env.HOME || '', '.openclaw', 'workspace'),
   theme: 'dark',
-  default_runtime: 'openclaw'
+  default_runtime: 'openclaw',
+  // Auto-review is opt-in: the reject->redeploy loop burns tokens and was
+  // rejecting ~98% of work before the verdict parsing was fixed.
+  auto_review_enabled: false
 };
 
 function safeJsonParse(text, fallback) {
@@ -82,7 +86,8 @@ function saveAppSettings(input) {
     port: Number(input.port || current.port || DEFAULT_SETTINGS.port),
     workspace_path: String(input.workspace_path || current.workspace_path || DEFAULT_SETTINGS.workspace_path),
     theme: ['dark', 'light', 'system'].includes(input.theme) ? input.theme : current.theme,
-    default_runtime: runtimeIds.includes(input.default_runtime) ? input.default_runtime : current.default_runtime
+    default_runtime: runtimeIds.includes(input.default_runtime) ? input.default_runtime : current.default_runtime,
+    auto_review_enabled: typeof input.auto_review_enabled === 'boolean' ? input.auto_review_enabled : current.auto_review_enabled === true
   };
   if (!Number.isInteger(next.port) || next.port < 1 || next.port > 65535) {
     throw new Error('port must be an integer from 1 to 65535');
@@ -173,128 +178,128 @@ const activeReviews = new Set();
 const reviewRetries = new Map();
 const MAX_REVIEW_RETRIES = 3;
 
-// Auto-review: dispatch Reviewer agent to evaluate completed work
-function triggerReview(taskId, runId, originalAgent, resultText) {
+// Auto-review: dispatch Reviewer agent to evaluate completed work.
+// Opt-in via settings.auto_review_enabled. Runs through executeWithFailover
+// (same harness chain / rate limiting as regular dispatches) instead of a raw
+// openclaw execFile. A verdict only counts when the reviewer's response leads
+// with APPROVE/REJECT on its own line; anything else is 'inconclusive' and
+// leaves the task in review for manual triage instead of redeploying.
+async function triggerReview(taskId, runId, originalAgent, resultText) {
+  if (!getAppSettings().auto_review_enabled) return;
   // Prevent concurrent reviews on same task
   if (activeReviews.has(taskId)) return;
   activeReviews.add(taskId);
 
-  const task = stmts.getTaskById.get(taskId);
-  if (!task) { activeReviews.delete(taskId); return; }
+  let reviewRunId = null;
+  try {
+    const task = stmts.getTaskById.get(taskId);
+    if (!task) return;
+    const reviewerAgent = stmts.getAgentById.get('reviewer');
+    if (!reviewerAgent) return;
 
-  const reviewPrompt = 'Review the output from agent "' + originalAgent + '" on task #' + taskId + ': "' + (task.title || '').replace(/"/g, '\\"') + '".\n\n'
-    + 'Task description: ' + (task.description || 'None').replace(/"/g, '\\"') + '\n\n'
-    + 'Agent output (first 2000 chars):\n' + (resultText || 'No output captured').substring(0, 2000).replace(/"/g, '\\"') + '\n\n'
-    + 'Evaluate for completeness, quality, correctness, and actionability.\n'
-    + 'Respond with EXACTLY one of these formats:\n'
-    + 'APPROVE: [one-line summary of what was delivered]\n'
-    + 'REJECT: [specific issues that need fixing]\n\n'
-    + 'Be strict. Only approve work that the user can use immediately.';
+    const reviewPrompt = review.buildReviewPrompt(task, originalAgent, resultText);
 
-  const args = ['agent', '--local', '--agent', 'reviewer', '--message', reviewPrompt, '--json', '--timeout', '120'];
-  const env = Object.assign({}, process.env, { PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' });
+    const reviewRun = stmts.insertRun.run({
+      task_id: taskId, agent_id: 'reviewer',
+      message: 'Reviewing ' + originalAgent + ' output on task #' + taskId
+    });
+    reviewRunId = Number(reviewRun.lastInsertRowid);
 
-  const reviewRun = stmts.insertRun.run({
-    task_id: taskId, agent_id: 'reviewer', session_id: null,
-    message: 'Reviewing ' + originalAgent + ' output on task #' + taskId,
-    status: 'running'
-  });
-  const reviewRunId = Number(reviewRun.lastInsertRowid);
+    stmts.insertActivity.run({
+      event_type: 'review.started', agent_id: 'reviewer', task_id: taskId,
+      project_id: task.project_id, summary: 'Reviewer evaluating ' + originalAgent + ' output on "' + task.title + '"',
+      detail_json: JSON.stringify({ original_agent: originalAgent, original_run: runId })
+    });
+    bus.emit('activity:new', { event_type: 'review.started', agent_id: 'reviewer', task_id: taskId, summary: 'Reviewing ' + originalAgent + ' output' });
 
-  stmts.insertActivity.run({
-    event_type: 'review.started', agent_id: 'reviewer', task_id: taskId,
-    project_id: task.project_id, summary: 'Reviewer evaluating ' + originalAgent + ' output on "' + task.title + '"',
-    detail_json: JSON.stringify({ original_agent: originalAgent, original_run: runId })
-  });
-  bus.emit('activity:new', { event_type: 'review.started', agent_id: 'reviewer', task_id: taskId, summary: 'Reviewing ' + originalAgent + ' output' });
-
-  const startTime = Date.now();
-  const child = execFile('openclaw', args, { env, timeout: 130000, maxBuffer: 4 * 1024 * 1024 }, function (error, stdout, stderr) {
+    const cfg = resolveAgentConfig('reviewer');
+    const startTime = Date.now();
+    const result = await runtimes.executeWithFailover(
+      { getRuntime: runtimes.getRuntime, stmts, db },
+      reviewerAgent,
+      { agentId: 'reviewer', message: reviewPrompt, model: cfg && cfg.model, agent: cfg },
+      { timeout: 130000, replayTurns: 0 }
+    );
     const durationMs = Date.now() - startTime;
-    const output = cleanCliOutput(stdout || '');
 
-    if (!error && output) {
-      stmts.completeRun.run({ id: reviewRunId, status: 'completed', result_json: null, result_text: output, error: null, duration_ms: durationMs });
-
-      const upperOutput = output.toUpperCase();
-      if (upperOutput.indexOf('APPROVE') !== -1) {
-        // Move task to done
-        stmts.updateTask.run({
-          id: taskId, title: task.title, description: task.description,
-          status: 'done', priority: task.priority,
-          agent_id: task.agent_id, sort_order: task.sort_order
-        });
-        const doneTask = stmts.getTaskById.get(taskId);
-        bus.emit('task:updated', doneTask);
-
-        const approveMatch = output.match(/APPROVE[:\s]*(.*)/i);
-        const summary = approveMatch ? approveMatch[1].trim().substring(0, 200) : 'Work approved';
-
-        stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'info', title: 'Reviewer approved task #' + taskId, body: summary, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
-        stmts.insertActivity.run({ event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Approved: ' + task.title + ' — ' + summary, detail_json: null });
-        bus.emit('activity:new', { event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, summary: 'Approved: ' + summary });
-        activeReviews.delete(taskId);
-
-      } else if (upperOutput.indexOf('REJECT') !== -1) {
-        // Move task back to todo and redeploy original agent
-        stmts.updateTask.run({
-          id: taskId, title: task.title, description: task.description,
-          status: 'todo', priority: task.priority,
-          agent_id: task.agent_id, sort_order: task.sort_order
-        });
-        const todoTask = stmts.getTaskById.get(taskId);
-        bus.emit('task:updated', todoTask);
-
-        const rejectMatch = output.match(/REJECT[:\s]*(.*)/i);
-        const feedback = rejectMatch ? rejectMatch[1].trim().substring(0, 500) : 'Quality issues found';
-
-        stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Reviewer rejected task #' + taskId, body: feedback + ' — Redeploying ' + originalAgent, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
-        stmts.insertActivity.run({ event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Rejected: ' + task.title + ' — ' + feedback, detail_json: null });
-        bus.emit('activity:new', { event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, summary: 'Rejected: ' + feedback });
-        activeReviews.delete(taskId);
-
-        // Redeploy original agent with review feedback (with retry limit)
-        const retries = reviewRetries.get(taskId) || 0;
-        if (retries >= MAX_REVIEW_RETRIES) {
-          stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'error', title: 'Review max retries reached for task #' + taskId, body: 'Task rejected ' + retries + ' times. Manual intervention needed.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
-          reviewRetries.delete(taskId);
-          return;
-        }
-        reviewRetries.set(taskId, retries + 1);
-
-        setTimeout(function () {
-          const redeployMsg = 'Your previous work on task "' + task.title + '" was reviewed and rejected. Feedback: ' + feedback + '\n\nOriginal task: ' + (task.description || task.title) + '\n\nThis is attempt ' + (retries + 1) + ' of ' + MAX_REVIEW_RETRIES + '. Please fix the issues and redo the work.';
-          const redeployArgs = ['agent', '--local', '--agent', originalAgent, '--message', redeployMsg, '--json', '--timeout', '600'];
-
-          const redeployRun = stmts.insertRun.run({ task_id: taskId, agent_id: originalAgent, session_id: null, message: 'Redeploy after review rejection', status: 'running' });
-          const redeployRunId = Number(redeployRun.lastInsertRowid);
-
-          stmts.updateTask.run({ id: taskId, title: task.title, description: task.description, status: 'in_progress', priority: task.priority, agent_id: originalAgent, sort_order: task.sort_order });
-          bus.emit('task:updated', stmts.getTaskById.get(taskId));
-          bus.emit('activity:new', { event_type: 'agent.redeployed', agent_id: originalAgent, task_id: taskId, summary: originalAgent + ' redeployed on "' + task.title + '" after review rejection' });
-
-          const redeployStart = Date.now();
-          execFile('openclaw', redeployArgs, { env, timeout: 610000, maxBuffer: 4 * 1024 * 1024 }, function (err2, stdout2) {
-            const dur2 = Date.now() - redeployStart;
-            const out2 = cleanCliOutput(stdout2 || '');
-            if (!err2 && out2) {
-              stmts.completeRun.run({ id: redeployRunId, status: 'completed', result_json: null, result_text: out2, error: null, duration_ms: dur2 });
-              stmts.updateTask.run({ id: taskId, title: task.title, description: task.description, status: 'review', priority: task.priority, agent_id: originalAgent, sort_order: task.sort_order });
-              bus.emit('task:updated', stmts.getTaskById.get(taskId));
-              // Trigger review again
-              triggerReview(taskId, redeployRunId, originalAgent, out2);
-            } else {
-              stmts.completeRun.run({ id: redeployRunId, status: 'failed', result_json: null, result_text: null, error: (err2 || {}).message || 'unknown', duration_ms: dur2 });
-            }
-          });
-        }, 2000);
-      }
-    } else {
-      stmts.completeRun.run({ id: reviewRunId, status: 'failed', result_json: null, result_text: null, error: (error || {}).message || 'unknown', duration_ms: durationMs });
-      activeReviews.delete(taskId);
+    if (result.status !== 'ok') {
+      stmts.completeRun.run({
+        id: reviewRunId, status: 'failed', result_json: null, result_text: null,
+        error: ('review dispatch ' + result.status + ': ' + (result.stderr || '')).substring(0, 500),
+        duration_ms: durationMs
+      });
+      return;
     }
-  });
-  child.unref();
+
+    const output = cleanCliOutput(result.stdout || '');
+    stmts.completeRun.run({ id: reviewRunId, status: 'completed', result_json: null, result_text: output, error: null, duration_ms: durationMs });
+
+    const parsed = review.parseReviewVerdict(output);
+
+    if (parsed.verdict === 'approve') {
+      reviewRetries.delete(taskId);
+      // Move task to done
+      stmts.updateTask.run({
+        id: taskId, title: task.title, description: task.description,
+        status: 'done', priority: task.priority,
+        agent_id: task.agent_id, sort_order: task.sort_order
+      });
+      bus.emit('task:updated', stmts.getTaskById.get(taskId));
+
+      const summary = (parsed.summary || 'Work approved').substring(0, 200);
+      stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'info', title: 'Reviewer approved task #' + taskId, body: summary, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+      stmts.insertActivity.run({ event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Approved: ' + task.title + ' — ' + summary, detail_json: null });
+      bus.emit('activity:new', { event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, summary: 'Approved: ' + summary });
+      return;
+    }
+
+    if (parsed.verdict === 'reject') {
+      // Move task back to todo and redeploy original agent
+      stmts.updateTask.run({
+        id: taskId, title: task.title, description: task.description,
+        status: 'todo', priority: task.priority,
+        agent_id: task.agent_id, sort_order: task.sort_order
+      });
+      bus.emit('task:updated', stmts.getTaskById.get(taskId));
+
+      const feedback = (parsed.summary || 'Quality issues found').substring(0, 500);
+      stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Reviewer rejected task #' + taskId, body: feedback + ' — Redeploying ' + originalAgent, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+      stmts.insertActivity.run({ event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Rejected: ' + task.title + ' — ' + feedback, detail_json: null });
+      bus.emit('activity:new', { event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, summary: 'Rejected: ' + feedback });
+
+      // Redeploy original agent with review feedback (with retry limit)
+      const retries = reviewRetries.get(taskId) || 0;
+      if (retries >= MAX_REVIEW_RETRIES) {
+        stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'error', title: 'Review max retries reached for task #' + taskId, body: 'Task rejected ' + retries + ' times. Manual intervention needed.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+        reviewRetries.delete(taskId);
+        return;
+      }
+      reviewRetries.set(taskId, retries + 1);
+
+      setTimeout(function () {
+        const redeployMsg = 'Your previous work on task "' + task.title + '" was reviewed and rejected. Feedback: ' + feedback + '\n\nOriginal task: ' + (task.description || task.title) + '\n\nThis is attempt ' + (retries + 1) + ' of ' + MAX_REVIEW_RETRIES + '. Please fix the issues and redo the work.';
+        bus.emit('activity:new', { event_type: 'agent.redeployed', agent_id: originalAgent, task_id: taskId, summary: originalAgent + ' redeployed on "' + task.title + '" after review rejection' });
+        // dispatchAgent handles run bookkeeping, task status, the configured
+        // runtime for the agent, and re-triggers review on completion.
+        dispatchAgent(taskId, originalAgent, redeployMsg);
+      }, 2000);
+      return;
+    }
+
+    // Inconclusive: no line-anchored APPROVE/REJECT in the reviewer's response.
+    // Leave the task in review and flag it rather than rejecting by default.
+    stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Review inconclusive for task #' + taskId, body: 'Reviewer did not return a clear APPROVE/REJECT verdict. Task left in review.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+    stmts.insertActivity.run({ event_type: 'review.inconclusive', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Inconclusive review: ' + task.title + ' — no clear verdict', detail_json: JSON.stringify({ response_head: parsed.text.substring(0, 300) }) });
+    bus.emit('activity:new', { event_type: 'review.inconclusive', agent_id: 'reviewer', task_id: taskId, summary: 'Inconclusive review on "' + task.title + '"' });
+  } catch (err) {
+    if (reviewRunId !== null) {
+      try {
+        stmts.completeRun.run({ id: reviewRunId, status: 'failed', result_json: null, result_text: null, error: (err.message || 'unknown').substring(0, 500), duration_ms: 0 });
+      } catch { /* ignore */ }
+    }
+  } finally {
+    activeReviews.delete(taskId);
+  }
 }
 
 // Inter-agent messaging: agents can leave messages for each other via the activity_log
@@ -1205,6 +1210,32 @@ const server = http.createServer(async (req, res) => {
         } catch (err) {
           res.json({ error: err.message }, 400);
         }
+        return;
+      }
+
+      // GET /api/review/stats?days=N — approval rate over the window, for
+      // measuring whether the auto-reviewer is behaving (vs. rejecting everything)
+      if (method === 'GET' && pathname === '/api/review/stats') {
+        const daysParam = parseInt(url.searchParams.get('days') || '30', 10);
+        const days = Math.min(Math.max(Number.isNaN(daysParam) ? 30 : daysParam, 1), 365);
+        const rows = stmts.countReviewOutcomes.all({ since: '-' + days + ' days' });
+        const byType = {};
+        rows.forEach(function (r) { byType[r.event_type] = r; });
+        const approved = (byType['review.approved'] || {}).count || 0;
+        const rejected = (byType['review.rejected'] || {}).count || 0;
+        const inconclusive = (byType['review.inconclusive'] || {}).count || 0;
+        const decided = approved + rejected;
+        res.json({
+          window_days: days,
+          auto_review_enabled: getAppSettings().auto_review_enabled === true,
+          approved,
+          rejected,
+          inconclusive,
+          total: decided + inconclusive,
+          approval_rate: decided > 0 ? Math.round((approved / decided) * 1000) / 10 : null,
+          last_approved_at: (byType['review.approved'] || {}).last_at || null,
+          last_rejected_at: (byType['review.rejected'] || {}).last_at || null
+        });
         return;
       }
 

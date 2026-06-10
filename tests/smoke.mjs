@@ -411,6 +411,126 @@ test('Token-aware replay: failover.js source uses selectForReplay (structural)',
   assert.ok(src.includes("status: 'rate-limited'"), 'failover returns rate-limited status');
 });
 
+test('Review verdict parser: line-anchored APPROVE/REJECT only', () => {
+  const { parseReviewVerdict } = require('../src/review');
+
+  // Clean verdicts
+  assert.equal(parseReviewVerdict('APPROVE: brief delivered with all sections').verdict, 'approve');
+  assert.equal(parseReviewVerdict('APPROVE: brief delivered').summary, 'brief delivered');
+  const rej = parseReviewVerdict('REJECT: missing the requested CSV export');
+  assert.equal(rej.verdict, 'reject');
+  assert.equal(rej.summary, 'missing the requested CSV export');
+
+  // Markdown-decorated verdict lines still count
+  assert.equal(parseReviewVerdict('**APPROVE:** looks good').verdict, 'approve');
+  assert.equal(parseReviewVerdict('  > REJECT: empty output').verdict, 'reject');
+
+  // Past-tense variants count too
+  assert.equal(parseReviewVerdict('Approved: solid work').verdict, 'approve');
+  assert.equal(parseReviewVerdict('REJECTED — output is an error message').verdict, 'reject');
+
+  // Verdict words mid-sentence must NOT count (this was the 98%-reject bug:
+  // substring matching fired on prose and echoed prompt instructions)
+  assert.equal(parseReviewVerdict('I cannot approve this work because it is incomplete.').verdict, 'inconclusive');
+  assert.equal(parseReviewVerdict('The format options were APPROVE: or REJECT: but neither fits.').verdict, 'inconclusive');
+
+  // No verdict at all -> inconclusive, never a default reject
+  assert.equal(parseReviewVerdict('Here are my general thoughts on the output...').verdict, 'inconclusive');
+  assert.equal(parseReviewVerdict('').verdict, 'inconclusive');
+
+  // First verdict line wins when both words appear
+  const both = parseReviewVerdict('REJECT: wrong data source\nNote: I would APPROVE a corrected version.');
+  assert.equal(both.verdict, 'reject');
+
+  // openclaw --json envelope: verdict extracted from payloads, not raw JSON
+  const envelope = JSON.stringify({
+    payloads: [{ text: 'APPROVE: morning brief complete' }],
+    usage: { input_tokens: 10, output_tokens: 5 }
+  });
+  const env = parseReviewVerdict(envelope);
+  assert.equal(env.verdict, 'approve');
+  assert.equal(env.summary, 'morning brief complete');
+
+  // Envelope where the agent text has no verdict stays inconclusive even
+  // though the raw JSON contains other matchable noise
+  const noisy = JSON.stringify({ payloads: [{ text: 'still thinking about it' }], status: 'REJECTED_BY_NOBODY' });
+  assert.equal(parseReviewVerdict(noisy).verdict, 'inconclusive');
+});
+
+test('Review prompt: includes verdict format and flags truncation', () => {
+  const { buildReviewPrompt, REVIEW_EXCERPT_CHARS } = require('../src/review');
+  const task = { id: 42, title: 'Morning brief', description: 'Compile the brief' };
+
+  const short = buildReviewPrompt(task, 'scout', 'short output');
+  assert.ok(short.includes('APPROVE: ['), 'prompt shows APPROVE format');
+  assert.ok(short.includes('REJECT: ['), 'prompt shows REJECT format');
+  assert.ok(short.includes('first line'), 'prompt demands verdict on first line');
+  assert.ok(!short.includes('do NOT penalize truncation'), 'no truncation note for short output');
+
+  const long = buildReviewPrompt(task, 'scout', 'x'.repeat(REVIEW_EXCERPT_CHARS + 500));
+  assert.ok(long.includes('do NOT penalize truncation'), 'truncation flagged for long output');
+});
+
+test('Settings: auto_review_enabled defaults to false and round-trips', async () => {
+  const before = await http('GET', '/api/settings');
+  assert.equal(before.status, 200);
+  assert.equal(before.json.settings.auto_review_enabled, false,
+    'auto-review must be opt-in (default false)');
+
+  const on = await http('PUT', '/api/settings', { auto_review_enabled: true });
+  assert.equal(on.status, 200);
+  assert.equal(on.json.settings.auto_review_enabled, true);
+
+  // PUT without the key preserves the current value
+  const unrelated = await http('PUT', '/api/settings', { theme: 'dark' });
+  assert.equal(unrelated.json.settings.auto_review_enabled, true);
+
+  const off = await http('PUT', '/api/settings', { auto_review_enabled: false });
+  assert.equal(off.json.settings.auto_review_enabled, false);
+});
+
+test('GET /api/review/stats returns approval-rate shape', async () => {
+  const { status, json } = await http('GET', '/api/review/stats?days=30');
+  assert.equal(status, 200);
+  assert.equal(json.window_days, 30);
+  assert.equal(typeof json.auto_review_enabled, 'boolean');
+  for (const key of ['approved', 'rejected', 'inconclusive', 'total']) {
+    assert.equal(typeof json[key], 'number', `${key} is a number`);
+  }
+  // Fresh DB: no review activity, rate is null (not 0 — avoids reading "0%" as data)
+  assert.equal(json.total, 0);
+  assert.equal(json.approval_rate, null);
+  assert.equal(json.last_approved_at, null);
+
+  // days param is clamped
+  const clamped = await http('GET', '/api/review/stats?days=99999');
+  assert.equal(clamped.json.window_days, 365);
+});
+
+test('triggerReview: structural — failover path, opt-in gate, no raw openclaw execFile', () => {
+  const src = readFileSync(join(repoRoot, 'server.js'), 'utf8');
+  const start = src.indexOf('async function triggerReview');
+  assert.ok(start !== -1, 'triggerReview should exist (async)');
+  const end = src.indexOf('function postAgentMessage', start);
+  assert.ok(end !== -1, 'expected postAgentMessage after triggerReview');
+  const body = src.slice(start, end);
+
+  assert.ok(body.includes('auto_review_enabled'),
+    'triggerReview must be gated on the auto_review_enabled setting');
+  assert.ok(body.includes('executeWithFailover'),
+    'reviewer must dispatch through the failover engine');
+  assert.ok(!body.includes("execFile('openclaw'"),
+    'no raw openclaw execFile inside the review loop');
+  assert.ok(body.includes('parseReviewVerdict'),
+    'verdict must come from the line-anchored parser');
+  assert.ok(body.includes('review.inconclusive'),
+    'unparseable verdicts must be surfaced as inconclusive, not rejected');
+  assert.ok(body.includes('dispatchAgent(taskId, originalAgent'),
+    'rejection redeploys via dispatchAgent (runtime registry), not raw openclaw');
+  assert.ok(/finally\s*{[^}]*activeReviews\.delete\(taskId\)/.test(body),
+    'activeReviews must be cleaned up on every exit path');
+});
+
 test('Overview cleanup: source code does not touch activeDispatches map (live-dispatch safety)', () => {
   // Static structural assertion: the cleanup handler must not mutate the
   // in-memory dispatch map. We grep the handler block of server.js.

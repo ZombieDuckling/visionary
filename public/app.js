@@ -2617,8 +2617,9 @@
         + '<option value="system"' + (settings.theme === 'system' ? ' selected' : '') + '>System</option>'
         + '</select></label>'
         + '<label><span>Default runtime</span><select class="input" name="default_runtime">' + runtimeOptions + '</select></label>'
+        + '<label><span>Auto-review completed tasks</span><input type="checkbox" name="auto_review_enabled"' + (settings.auto_review_enabled === true ? ' checked' : '') + '></label>'
         + '<div class="settings-actions"><button class="btn btn-primary" type="submit">Save settings</button><a class="btn" href="/api/export">Export data</a></div>'
-        + '<div class="settings-note">Theme applies immediately. Port and workspace path are saved, but require a server restart.</div>'
+        + '<div class="settings-note">Theme applies immediately. Port and workspace path are saved, but require a server restart. Auto-review dispatches the Reviewer agent after every completed task and redeploys on rejection — leave off unless you want that loop.</div>'
         + '<div id="settings-status" class="overview-meta"></div>'
         + '</form></section>';
       applyTheme(settings.theme || 'dark');
@@ -2630,7 +2631,8 @@
           port: Number(form.port.value),
           workspace_path: form.workspace_path.value,
           theme: form.theme.value,
-          default_runtime: form.default_runtime.value
+          default_runtime: form.default_runtime.value,
+          auto_review_enabled: form.auto_review_enabled.checked
         };
         api('/settings', { method: 'PUT', body: JSON.stringify(body) }).then(function (saved) {
           applyTheme(saved.settings.theme || 'dark');

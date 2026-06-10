@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Auto-Reviewer is now opt-in and goes through the failover engine.** The post-dispatch review loop (`triggerReview`) was rejecting ~98% of completed work (475 `review.rejected` vs 7 `review.approved`) and auto-redeploying agents up to 3 times per rejection. It is now gated behind a new `auto_review_enabled` setting (default **off**, toggle in Settings), dispatches the reviewer via `executeWithFailover` (harness chain + rate limiting) instead of a raw `openclaw` execFile, and redeploys rejected work through `dispatchAgent` so the agent's configured runtime is respected.
+
+### Fixed
+- Review verdicts are parsed from the reviewer's actual response text (extracted from the `--json` envelope) and only count when `APPROVE`/`REJECT` leads a line — substring matching against raw JSON misfired on prose and echoed prompt instructions. Output with no clear verdict is now surfaced as `review.inconclusive` (task stays in review) instead of silently wedging the task in the in-memory review set forever.
+- The review prompt no longer says "Be strict. Only approve work that the user can use immediately." — it now asks for rejection only on concrete, fixable defects and tells the reviewer not to penalize the 2000-char excerpt truncation.
+- `reviewRetries` is cleared on approval, so a previously-rejected task gets its full retry budget on later runs.
+
+### Added
+- `GET /api/review/stats?days=N` — approval/rejection/inconclusive counts and approval rate over a window, for measuring reviewer behavior against the live DB.
+
 ## [2.0.0] — 2026-06-08
 
 ### Major release: extensibility, portability, mobile, and a full visual overhaul
