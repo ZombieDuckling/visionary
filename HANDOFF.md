@@ -8,7 +8,7 @@ Copy everything below into a fresh Claude Code session to resume.
 
 **Visionary Mission Control** — a local-first desktop dashboard that orchestrates a multi-agent AI organization. Electron + tiny Node.js server (no Express) + SQLite + vanilla-JS frontend. Public OSS at <https://github.com/ZombieDuckling/visionary>. Currently at `v2.0.0` on `main`.
 
-The current synthwave-arcade UI is the visible surface. The substantive work is the agent OS underneath: 16-node org chart, pluggable harness adapters, failover engine, watchdog, cron scheduler, cleanup, prompt guardrails, and a deep-research workflow.
+The UI is a native-macOS design (Apple HIG: SF system fonts, system colors, light/dark/system themes, source-list sidebar). The substantive work is the agent OS underneath: 16-node org chart, pluggable harness adapters, failover engine, watchdog, cron scheduler, cleanup, prompt guardrails, and a deep-research workflow.
 
 ## Hard invariants — do not break
 
@@ -31,7 +31,7 @@ visionary/
 ├── public/
 │   ├── index.html         # Shell — top bar, sidebar, main, chat, status bar
 │   ├── app.js             # SPA — Proxy-based reactive state, tab router, all views
-│   ├── styles.css         # Synthwave HUD theme (deep purple + neon)
+│   ├── styles.css         # Native macOS theme (Apple HIG, light + dark)
 │   ├── sw.js              # PWA service worker (CACHE_NAME bumps on every UI change)
 │   ├── manifest.json
 │   └── coffee.html        # Demo page built during the failover integration test
@@ -138,9 +138,10 @@ Left sidebar shows the Space → Project tree (sets `state.currentSpaceId` and `
 
 ## Visual conventions
 
-- Theme: deep-purple synthwave (`#0F0026` bg, neon `#FF2EC4` magenta + `#00F0FF` cyan + `#F9F002` yellow + `#00FF9C` lime + `#FF8A2E` orange + `#FF2E5A` hot red).
-- Fonts: Orbitron (display), VT323 (body), Share Tech Mono (data) — Google Fonts.
-- CRT scanline overlay via `body::before`. Hard borders, glow via `box-shadow` + `text-shadow`, no rounded corners.
+- Theme: native macOS (Apple HIG). Light + dark + system via `data-theme` on `<html>`; tokens in `:root` / `[data-theme="dark"]` in `public/styles.css`.
+- Fonts: SF system stack (`-apple-system` …) for text/display, `ui-monospace` (SF Mono) for data. No external font loads.
+- Agent/space/project accents use the Apple system palette (`#0a84ff` blue, `#30d158` green, `#ff9f0a` orange, …) — defined in `AGENT_COLORS` (app.js) and `agentConfigs` (server.js).
+- Chrome: translucent toolbar + source-list sidebar (`backdrop-filter`), 6/10px radii, hairline `--separator` borders, `--shadow-*` elevation. Electron uses `titleBarStyle: 'hiddenInset'`; `body.electron` pads the titlebar for traffic lights.
 - Whenever you change `public/styles.css` or `public/index.html`, **bump `CACHE_NAME` in `public/sw.js`** so the PWA reloads.
 
 ## Working-core release (2026-06-10)
