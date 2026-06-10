@@ -594,13 +594,41 @@
     var grouped = {};
     statuses.forEach(function (s) { grouped[s] = []; });
 
-    // Scope tasks by current project when one is selected
-    var scoped = state.tasks;
-    if (state.currentProjectId) {
-      scoped = state.tasks.filter(function (t) {
-        return String(t.project_id) === String(state.currentProjectId);
-      });
+    // The board is always project-scoped — there is no global "all tasks" board.
+    // Resolve a project: current selection, else last-used (localStorage), else first.
+    var projects = state.projects || [];
+    var isValidProject = function (id) {
+      return projects.some(function (p) { return String(p.id) === String(id); });
+    };
+    if (!state.currentProjectId || !isValidProject(state.currentProjectId)) {
+      var remembered = null;
+      try { remembered = localStorage.getItem('visionary.lastProjectId'); } catch (e) { /* private mode */ }
+      if (remembered && isValidProject(remembered)) {
+        state.currentProjectId = parseInt(remembered, 10);
+      } else if (projects.length) {
+        state.currentProjectId = projects[0].id;
+      } else {
+        state.currentProjectId = null;
+      }
     }
+    if (!state.currentProjectId) {
+      container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">📋</span> Task Board</h2>'
+        + '<div class="empty-state">'
+        + '<div class="empty-state-icon">🗂</div>'
+        + '<div class="empty-state-title">No projects yet</div>'
+        + '<div class="empty-state-desc">Boards live inside projects. Create a project from the Workspaces sidebar (+) and its board will open here.</div>'
+        + '</div>';
+      return;
+    }
+    try { localStorage.setItem('visionary.lastProjectId', String(state.currentProjectId)); } catch (e) { /* private mode */ }
+    // Keep the URL truthful without retriggering the router.
+    if (location.hash === '#/board' || location.hash === '') {
+      try { history.replaceState(null, '', '#/board/' + state.currentProjectId); } catch (e) { /* ignore */ }
+    }
+
+    var scoped = state.tasks.filter(function (t) {
+      return String(t.project_id) === String(state.currentProjectId);
+    });
     scoped.forEach(function (t) {
       var s = t.status || 'todo';
       if (grouped[s]) {
@@ -627,8 +655,6 @@
         + (space ? '<span class="board-crumb-space" style="--space-color: ' + esc(space.color || '#bf5af2') + '">' + esc(space.name) + '</span><span class="board-crumb-sep">/</span>' : '')
         + '<span class="board-crumb-project" style="--project-color: ' + esc(project.color || '#0a84ff') + '">' + esc(project.name) + '</span>'
         + '</div>';
-    } else {
-      crumb = '<div class="board-crumb"><span class="board-crumb-all">All tasks (no project selected)</span></div>';
     }
 
     var html = '<div class="board-header">'
@@ -1985,9 +2011,15 @@
       return '<option value="' + esc(a.id) + '">' + esc(a.name) + ' - ' + esc(a.role) + '</option>';
     }).join('');
 
+    // Tasks are always created on the currently selected project board.
+    var targetProject = (state.projects || []).find(function (p) {
+      return String(p.id) === String(state.currentProjectId);
+    });
+
     // Form HTML uses only escaped content and static strings
     overlay.innerHTML = '<div class="overlay-content">'
       + '<h2>New Task</h2>'
+      + (targetProject ? '<div class="text-muted" style="margin: -10px 0 14px;">Creating in <strong style="color: ' + esc(targetProject.color || '#0a84ff') + '">' + esc(targetProject.name) + '</strong></div>' : '')
       + '<form id="create-task-form">'
       + '<div class="form-group">'
       + '<label>Title</label>'
@@ -2051,7 +2083,8 @@
         title: form.title.value.trim(),
         description: form.description.value.trim(),
         priority: form.priority.value,
-        agent_id: form.agent_id.value || null
+        agent_id: form.agent_id.value || null,
+        project_id: state.currentProjectId || null
       };
 
       if (!body.title) {

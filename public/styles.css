@@ -889,7 +889,6 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
   color: var(--text-secondary);
   margin-bottom: var(--space-md);
 }
-.board-crumb-all { color: var(--accent); cursor: pointer; }
 .board-crumb-sep { color: var(--text-quaternary); }
 .board-crumb-space { color: var(--space-color, var(--text-secondary)); font-weight: 600; }
 .board-crumb-project { color: var(--project-color, var(--text-primary)); font-weight: 600; }
