@@ -5,7 +5,10 @@
   "description": "Local desktop agent operating system for Jarvis and the Visionary mission control stack.",
   "main": "electron.js",
   "scripts": {
+    "ensure-native": "node scripts/ensure-native.js",
+    "prestart": "node scripts/ensure-native.js",
     "start": "node server.js",
+    "predev": "node scripts/ensure-native.js",
     "dev": "node --watch server.js",
     "bridge": ".venv/bin/python3 bridge.py",
     "watchdog": "python3 watchdog.py",
