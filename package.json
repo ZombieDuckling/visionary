@@ -35,6 +35,7 @@
     "productName": "Visionary",
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "public/icons/icon.icns",
       "target": [
         "dmg"
       ]
