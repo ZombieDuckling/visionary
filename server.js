@@ -42,19 +42,19 @@ const MIME_TYPES = {
 //   ollama   = ollama run <model> "<message>"
 //   hermes   = hermes --yolo chat -q "<message>"
 const agentConfigs = [
-  { id: 'main',       name: 'Jarvis',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'GPT-5.4',            runtime: 'openclaw', color: '#3b8bff' },
-  { id: 'scout',      name: 'Scout',      icon: '\uD83D\uDD2D',       role: 'Morning Intelligence — news, signals',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#06b6d4' },
-  { id: 'analyst',    name: 'Analyst',     icon: '\uD83D\uDD2C',       role: 'Research Deep-Diver — OpenClaw tools',         model: 'GPT-5.4',            runtime: 'openclaw', color: '#7c5cff' },
-  { id: 'forge',      name: 'Forge',      icon: '\uD83D\uDD28',       role: 'Builder — OpenClaw workspace projects',        model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#f59e0b' },
-  { id: 'sentinel',   name: 'Sentinel',   icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor — audits, health',           model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#ef4444' },
-  { id: 'broker',     name: 'Broker',     icon: '\uD83D\uDCC8',       role: 'Investment & Financial Intelligence',           model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#22c55e' },
-  { id: 'ops',        name: 'Ops',        icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps',                      model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#8b5cf6' },
-  { id: 'hunter',     name: 'Hunter',     icon: '\uD83C\uDFAF',       role: 'Career & Opportunities',                       model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ec4899' },
-  { id: 'reviewer',   name: 'Reviewer',   icon: '\uD83D\uDD0D',       role: 'Quality Gate & Review',                        model: 'GPT-5.4',            runtime: 'openclaw', color: '#f97316' },
-  { id: 'coder',      name: 'Coder',      icon: '\uD83E\uDDD1\u200D\uD83D\uDCBB', role: 'Deep coding — debug, refactor, architecture', model: 'Claude Opus 4.6',  runtime: 'claude',   color: '#d97706' },
-  { id: 'researcher', name: 'Researcher', icon: '\uD83C\uDF10',       role: 'Multi-source research — long context',          model: 'Gemini 2.5 Pro',     runtime: 'gemini',   color: '#4285f4' },
-  { id: 'designer',   name: 'Designer',   icon: '\uD83C\uDFA8',       role: 'UI/UX — design systems, visual polish',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#e879f9' },
-  { id: 'hermes',     name: 'Hermes',     icon: '\uD83E\uDDED',       role: 'Persistent orchestrator — overnight build loop', model: 'Hermes Agent',       runtime: 'hermes',   color: '#00ff88' },
+  { id: 'main',       name: 'Jarvis',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'GPT-5.4',            runtime: 'openclaw', color: '#0a84ff' },
+  { id: 'scout',      name: 'Scout',      icon: '\uD83D\uDD2D',       role: 'Morning Intelligence — news, signals',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#32ade6' },
+  { id: 'analyst',    name: 'Analyst',     icon: '\uD83D\uDD2C',       role: 'Research Deep-Diver — OpenClaw tools',         model: 'GPT-5.4',            runtime: 'openclaw', color: '#5e5ce6' },
+  { id: 'forge',      name: 'Forge',      icon: '\uD83D\uDD28',       role: 'Builder — OpenClaw workspace projects',        model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ff9f0a' },
+  { id: 'sentinel',   name: 'Sentinel',   icon: '\uD83D\uDEE1\uFE0F', role: 'Security Monitor — audits, health',           model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#ff453a' },
+  { id: 'broker',     name: 'Broker',     icon: '\uD83D\uDCC8',       role: 'Investment & Financial Intelligence',           model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#30d158' },
+  { id: 'ops',        name: 'Ops',        icon: '\uD83D\uDDA5\uFE0F', role: 'Infrastructure & DevOps',                      model: 'llama3.2:3b (local)', runtime: 'openclaw', color: '#30b0c7' },
+  { id: 'hunter',     name: 'Hunter',     icon: '\uD83C\uDFAF',       role: 'Career & Opportunities',                       model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ff375f' },
+  { id: 'reviewer',   name: 'Reviewer',   icon: '\uD83D\uDD0D',       role: 'Quality Gate & Review',                        model: 'GPT-5.4',            runtime: 'openclaw', color: '#8e8e93' },
+  { id: 'coder',      name: 'Coder',      icon: '\uD83E\uDDD1\u200D\uD83D\uDCBB', role: 'Deep coding — debug, refactor, architecture', model: 'Claude Opus 4.6',  runtime: 'claude',   color: '#a2845e' },
+  { id: 'researcher', name: 'Researcher', icon: '\uD83C\uDF10',       role: 'Multi-source research — long context',          model: 'Gemini 2.5 Pro',     runtime: 'gemini',   color: '#00c7be' },
+  { id: 'designer',   name: 'Designer',   icon: '\uD83C\uDFA8',       role: 'UI/UX — design systems, visual polish',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#bf5af2' },
+  { id: 'hermes',     name: 'Hermes',     icon: '\uD83E\uDDED',       role: 'Persistent orchestrator — overnight build loop', model: 'Hermes Agent',       runtime: 'hermes',   color: '#00c7be' },
 ];
 const agentAliases = { jarvis: 'main' };
 const validAgentIds = agentConfigs.map(a => a.id).concat(['jarvis']);
@@ -77,7 +77,7 @@ function getAppSettings() {
 
 function saveAppSettings(input) {
   const current = getAppSettings();
-  const runtimeIds = runtimes.listRuntimes().map(r => r.id);
+  const runtimeIds = runtimes.listRuntimeIds();
   const next = {
     port: Number(input.port || current.port || DEFAULT_SETTINGS.port),
     workspace_path: String(input.workspace_path || current.workspace_path || DEFAULT_SETTINGS.workspace_path),
@@ -111,14 +111,6 @@ function resolveAgentConfig(agentId) {
     id: canonical,
     runtime: (dbRuntime && dbRuntime.runtime) || cfg.runtime || settings.default_runtime || 'openclaw'
   };
-}
-
-// Build CLI command per runtime through the adapter registry.
-function buildDispatchCommand(agentId, message) {
-  const cfg = resolveAgentConfig(agentId);
-  const runtimeName = cfg ? cfg.runtime : 'openclaw';
-  const runtime = runtimes.getRuntime(runtimeName);
-  return runtime.buildCommand({ agentId: cfg ? cfg.id : agentId, message, model: cfg && cfg.model, agent: cfg });
 }
 
 // INTEL-02: Jarvis auto-routing — keyword matching to select best agent
@@ -376,7 +368,73 @@ function cleanCliOutput(raw) {
     .trim();
 }
 
-// Dispatch an agent via OpenClaw CLI
+// Older agent_runs rows stored the raw OpenClaw JSON envelope in result_text.
+// Extract the human text before any truncation so previews stay readable.
+function extractResultText(raw) {
+  const text = String(raw || '').trim();
+  if (text.charAt(0) !== '{' && text.charAt(0) !== '[') return text;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && Array.isArray(parsed.payloads)) {
+      return parsed.payloads.map(p => (p && p.text) || '').join('\n').trim() || text;
+    }
+    if (parsed && parsed.result) {
+      return typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+    }
+  } catch { /* not JSON — fall through */ }
+  return text;
+}
+
+function cap(s) { return String(s).charAt(0).toUpperCase() + String(s).slice(1); }
+
+// Agent personality / charter injection. Each dispatch is prefixed with the
+// agent's charter so it behaves per its role instead of as a blank assistant.
+const PERSONALITY_DIR = path.join(__dirname, 'personalities', 'agents');
+const personalityCache = new Map();
+const PERSONALITY_MAX_CHARS = 6000;
+function loadPersonality(agentId) {
+  const fileId = agentId === 'main' ? 'jarvis' : agentId;
+  if (personalityCache.has(fileId)) return personalityCache.get(fileId);
+  let text = '';
+  try {
+    const p = path.join(PERSONALITY_DIR, fileId + '.md');
+    if (fs.existsSync(p)) {
+      text = fs.readFileSync(p, 'utf8');
+      if (text.length > PERSONALITY_MAX_CHARS) text = text.slice(0, PERSONALITY_MAX_CHARS) + '\n…[charter truncated]';
+    }
+  } catch { text = ''; }
+  personalityCache.set(fileId, text);
+  return text;
+}
+function buildAgentPrompt(agentId, message) {
+  const cfg = resolveAgentConfig(agentId);
+  const persona = loadPersonality(agentId);
+  if (!persona) return message;
+  const name = (cfg && cfg.name) || agentId;
+  const role = (cfg && cfg.role) || '';
+  return '[SYSTEM — you are ' + name + (role ? ', ' + role : '') + '. Operate per your charter below.]\n'
+    + persona.trim() + '\n\n[TASK]\n' + message;
+}
+
+// Resolve the org-chart row that owns this agent's harness_chain (for failover +
+// conversation history + health bookkeeping). Falls back to a synthesized row
+// built from the flat agent config so dispatch always has at least one harness.
+function resolveAgentRow(agentId) {
+  const tableId = agentId === 'main' ? 'jarvis' : agentId;
+  let row = null;
+  try { row = stmts.getAgentById.get(tableId); } catch { row = null; }
+  if (row && row.harness_chain) return row;
+  const cfg = resolveAgentConfig(agentId);
+  const runtime = (cfg && cfg.runtime) || 'openclaw';
+  return {
+    id: (row && row.id) || (cfg && cfg.id) || agentId,
+    name: (cfg && cfg.name) || agentId,
+    harness_chain: JSON.stringify([runtime]),
+    current_harness: (row && row.current_harness) || runtime
+  };
+}
+
+// Dispatch an agent through the full failover chain, streaming output over SSE.
 function dispatchAgent(taskId, agentId, message) {
   const startTime = Date.now();
 
@@ -414,168 +472,192 @@ function dispatchAgent(taskId, agentId, message) {
   if (updatedTask) bus.emit('task:updated', updatedTask);
   bus.emit('activity:new', { event_type: 'agent.dispatched', agent_id: agentId, task_id: taskId, summary: 'Dispatched ' + agentId + ' for task #' + taskId });
 
-  // Spawn CLI process via runtime-specific command (execFile -- no shell, prevents injection)
-  const cmd = buildDispatchCommand(agentId, message);
+  // Resolve the org-chart row (harness chain + bookkeeping) and display config.
+  const agentRow = resolveAgentRow(agentId);
   const cfg = resolveAgentConfig(agentId);
-  const runtimeLabel = cfg ? cfg.runtime : 'openclaw';
-  stmts.insertActivity.run({
-    event_type: 'dispatch.runtime', agent_id: agentId, task_id: taskId,
-    project_id: null, summary: agentId + ' dispatched via ' + runtimeLabel + ' (' + cmd.bin + ')',
-    detail_json: JSON.stringify({ runtime: runtimeLabel, bin: cmd.bin })
-  });
+  const ctx = {
+    message: buildAgentPrompt(agentId, message),
+    agentId: cfg ? cfg.id : agentId,
+    model: cfg && cfg.model,
+    agent: cfg,
+    // Trusted local automation: let headless claude actually use its tools
+    // instead of blocking on permission prompts. Adapters that don't support
+    // this flag simply ignore it.
+    dangerouslySkipPermissions: true
+  };
 
-  const child = execFile(cmd.bin, cmd.args, {
+  // Track the run before dispatch so the kill switch can find + terminate the
+  // live child (the child is supplied via the onChild hook below).
+  activeDispatches.set(runId, { process: null, agentId, taskId, startTime, cancelled: false });
+
+  const env = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
+  const failoverOpts = {
     timeout: 660000,
-    maxBuffer: 10 * 1024 * 1024,
-    env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' },
-    cwd: __dirname
-  }, (error, stdout, stderr) => {
-    const durationMs = Date.now() - startTime;
-    const runInfo = activeDispatches.get(runId);
-
-    if (runInfo && runInfo.cancelled) {
-      activeDispatches.delete(runId);
-      return;
-    }
-
-    if (!error) {
-      // Success
-      const cleaned = cleanCliOutput(stdout);
-      let resultText = cleaned;
-      try {
-        const parsed = JSON.parse(cleaned);
-        if (parsed.payloads && Array.isArray(parsed.payloads)) {
-          resultText = parsed.payloads.map(p => p.text).join('\n');
-        } else if (parsed.result) {
-          resultText = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
-        }
-      } catch {
-        // Not valid JSON -- use cleaned stdout as-is
-      }
-
-      stmts.completeRun.run({
-        id: runId, status: 'completed', result_json: cleaned,
-        result_text: resultText, error: null, duration_ms: durationMs
-      });
-
-      // INTEL-04: Parse token usage from CLI JSON output and estimate cost
-      try {
-        const parsed = JSON.parse(cleaned);
-        const usage = parsed.usage || parsed.token_usage || (parsed.metrics && parsed.metrics);
-        if (usage && (usage.input_tokens || usage.output_tokens)) {
-          const inputTok = usage.input_tokens || 0;
-          const outputTok = usage.output_tokens || 0;
-          const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
-          const isLlama = agentCfg && agentCfg.model && agentCfg.model.indexOf('llama') !== -1;
-          const cost = isLlama
-            ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
-            : (inputTok * 0.003 + outputTok * 0.015) / 1000;
-          stmts.updateRunTokens.run({ id: runId, input_tokens: inputTok, output_tokens: outputTok, estimated_cost_usd: cost });
-        }
-      } catch (_tokenErr) { /* not valid JSON or no usage data */ }
-
-      // Create notification for completed run
-      const notifResult = stmts.insertNotification.run({
-        agent_run_id: runId,
-        type: 'info',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' completed task #' + taskId,
-        body: resultText ? resultText.substring(0, 500) : 'No output',
-        action_type: 'view_run',
-        action_data: JSON.stringify({ run_id: runId, task_id: taskId })
-      });
-      bus.emit('notification:created', {
-        id: Number(notifResult.lastInsertRowid),
-        agent_id: agentId, task_id: taskId, type: 'info',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' completed task #' + taskId
-      });
-
-      // Update task to review
-      const currentTask = stmts.getTaskById.get(taskId);
-      if (currentTask) {
-        stmts.updateTask.run({
-          id: taskId, title: currentTask.title, description: currentTask.description,
-          status: 'review', priority: currentTask.priority,
-          agent_id: currentTask.agent_id, sort_order: currentTask.sort_order
-        });
-        const reviewTask = stmts.getTaskById.get(taskId);
-        bus.emit('task:updated', reviewTask);
-      }
-
+    env,
+    cwd: __dirname,
+    onChunk: function (harness, chunk, stream) {
+      bus.emit('agent:output', { run_id: runId, agent_id: agentId, task_id: taskId, harness, stream, chunk });
+    },
+    onHarnessStart: function (harness, idx, total) {
       stmts.insertActivity.run({
-        event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
-        project_id: null, summary: agentId + ' completed task #' + taskId + ' (' + Math.round(durationMs / 1000) + 's)',
-        detail_json: JSON.stringify({ run_id: runId, duration_ms: durationMs })
+        event_type: 'dispatch.runtime', agent_id: agentId, task_id: taskId,
+        project_id: null, summary: agentId + ' dispatching via ' + harness + ' (' + (idx + 1) + '/' + total + ')',
+        detail_json: JSON.stringify({ harness, attempt: idx + 1, total })
       });
-
-      bus.emit('agent:completed', {
-        run_id: runId, agent_id: agentId, task_id: taskId,
-        duration_ms: durationMs, result_text: resultText ? resultText.substring(0, 200) : ''
-      });
-
-      // Auto-trigger Reviewer on completed tasks
-      if (agentId !== 'reviewer') {
-        triggerReview(taskId, runId, agentId, resultText);
-      }
-      bus.emit('activity:new', {
-        event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
-        summary: agentId + ' completed task #' + taskId + ' (' + Math.round(durationMs / 1000) + 's)'
-      });
-    } else {
-      // Error / timeout
-      const status = error.killed ? 'timeout' : 'failed';
-      stmts.completeRun.run({
-        id: runId, status, result_json: null, result_text: null,
-        error: error.message, duration_ms: durationMs
-      });
-
-      // Create notification for failed/timed-out run
-      const failNotifResult = stmts.insertNotification.run({
-        agent_run_id: runId,
-        type: status === 'timeout' ? 'warning' : 'error',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' ' + status + ' on task #' + taskId,
-        body: error.message.substring(0, 500),
-        action_type: 'view_run',
-        action_data: JSON.stringify({ run_id: runId, task_id: taskId })
-      });
-      bus.emit('notification:created', {
-        id: Number(failNotifResult.lastInsertRowid),
-        agent_id: agentId, task_id: taskId, type: status === 'timeout' ? 'warning' : 'error',
-        title: agentId.charAt(0).toUpperCase() + agentId.slice(1) + ' ' + status + ' on task #' + taskId
-      });
-
-      // Return failed/timeout dispatches to todo so the board does not get stuck in_progress.
-      const failedTask = stmts.getTaskById.get(taskId);
-      if (failedTask && failedTask.status === 'in_progress') {
-        stmts.updateTask.run({
-          id: taskId, title: failedTask.title, description: failedTask.description,
-          status: 'todo', priority: failedTask.priority,
-          agent_id: failedTask.agent_id, sort_order: failedTask.sort_order
-        });
-        bus.emit('task:updated', stmts.getTaskById.get(taskId));
-      }
-
-      const errSummary = agentId + ' ' + status + ' on task #' + taskId + ': ' + error.message.substring(0, 100);
-      stmts.insertActivity.run({
-        event_type: 'agent.' + status, agent_id: agentId, task_id: taskId,
-        project_id: null, summary: errSummary,
-        detail_json: JSON.stringify({ run_id: runId, error: error.message, duration_ms: durationMs })
-      });
-
-      bus.emit('agent:failed', {
-        run_id: runId, agent_id: agentId, task_id: taskId,
-        error: error.message, duration_ms: durationMs
-      });
-      bus.emit('activity:new', {
-        event_type: 'agent.' + status, agent_id: agentId, task_id: taskId, summary: errSummary
-      });
+      bus.emit('agent:harness', { run_id: runId, agent_id: agentId, task_id: taskId, harness, attempt: idx + 1, total });
+    },
+    onChild: function (child) {
+      const inf = activeDispatches.get(runId);
+      if (inf) inf.process = child;
+    },
+    isCancelled: function () {
+      const inf = activeDispatches.get(runId);
+      return !!(inf && inf.cancelled);
     }
+  };
 
-    // Cleanup
-    activeDispatches.delete(runId);
+  runtimes.executeWithFailover(
+    { getRuntime: runtimes.getRuntime, stmts, db },
+    agentRow, ctx, failoverOpts
+  ).then(function (result) {
+    finishDispatch(runId, agentId, taskId, startTime, result);
+  }).catch(function (err) {
+    finishDispatch(runId, agentId, taskId, startTime, {
+      status: 'error', harness: null, stdout: '', stderr: (err && err.message) || String(err)
+    });
   });
 
-  activeDispatches.set(runId, { process: child, agentId, taskId, startTime, cancelled: false });
   return runId;
+}
+
+// Apply terminal run state + side effects after a (possibly multi-harness)
+// dispatch settles. Split out of dispatchAgent so the streaming failover call
+// reads cleanly.
+function finishDispatch(runId, agentId, taskId, startTime, result) {
+  const durationMs = Date.now() - startTime;
+  const info = activeDispatches.get(runId);
+
+  // Cancelled by the kill switch — that route already finalized the run row and
+  // emitted events; don't double-apply completion state.
+  if (result.status === 'cancelled' || (info && info.cancelled)) {
+    activeDispatches.delete(runId);
+    return;
+  }
+
+  if (result.status === 'ok') {
+    const cleaned = cleanCliOutput(result.stdout || '');
+    let resultText = cleaned;
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (parsed.payloads && Array.isArray(parsed.payloads)) {
+        resultText = parsed.payloads.map(p => p.text).join('\n');
+      } else if (parsed.result) {
+        resultText = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+      }
+    } catch { /* not JSON -- use cleaned stdout */ }
+
+    stmts.completeRun.run({
+      id: runId, status: 'completed', result_json: cleaned,
+      result_text: resultText, error: null, duration_ms: durationMs
+    });
+
+    // INTEL-04: parse token usage from CLI JSON output and estimate cost
+    try {
+      const parsed = JSON.parse(cleaned);
+      const usage = parsed.usage || parsed.token_usage || (parsed.metrics && parsed.metrics);
+      if (usage && (usage.input_tokens || usage.output_tokens)) {
+        const inputTok = usage.input_tokens || 0;
+        const outputTok = usage.output_tokens || 0;
+        const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
+        const isLlama = agentCfg && agentCfg.model && agentCfg.model.indexOf('llama') !== -1;
+        const cost = isLlama
+          ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
+          : (inputTok * 0.003 + outputTok * 0.015) / 1000;
+        stmts.updateRunTokens.run({ id: runId, input_tokens: inputTok, output_tokens: outputTok, estimated_cost_usd: cost });
+      }
+    } catch (_tokenErr) { /* no usage data */ }
+
+    const harnessLabel = result.harness ? ' via ' + result.harness : '';
+
+    const notifResult = stmts.insertNotification.run({
+      agent_run_id: runId, type: 'info',
+      title: cap(agentId) + ' completed task #' + taskId,
+      body: resultText ? resultText.substring(0, 500) : 'No output',
+      action_type: 'view_run', action_data: JSON.stringify({ run_id: runId, task_id: taskId })
+    });
+    bus.emit('notification:created', {
+      id: Number(notifResult.lastInsertRowid), agent_id: agentId, task_id: taskId,
+      type: 'info', title: cap(agentId) + ' completed task #' + taskId
+    });
+
+    const currentTask = stmts.getTaskById.get(taskId);
+    if (currentTask) {
+      stmts.updateTask.run({
+        id: taskId, title: currentTask.title, description: currentTask.description,
+        status: 'review', priority: currentTask.priority,
+        agent_id: currentTask.agent_id, sort_order: currentTask.sort_order
+      });
+      bus.emit('task:updated', stmts.getTaskById.get(taskId));
+    }
+
+    stmts.insertActivity.run({
+      event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
+      project_id: null, summary: agentId + ' completed task #' + taskId + harnessLabel + ' (' + Math.round(durationMs / 1000) + 's)',
+      detail_json: JSON.stringify({ run_id: runId, harness: result.harness, attempts: result.attempts, replayed: result.replayed, duration_ms: durationMs })
+    });
+
+    bus.emit('agent:completed', {
+      run_id: runId, agent_id: agentId, task_id: taskId, harness: result.harness,
+      duration_ms: durationMs, result_text: resultText ? resultText.substring(0, 200) : ''
+    });
+
+    if (agentId !== 'reviewer') triggerReview(taskId, runId, agentId, resultText);
+    bus.emit('activity:new', {
+      event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
+      summary: agentId + ' completed task #' + taskId + harnessLabel + ' (' + Math.round(durationMs / 1000) + 's)'
+    });
+  } else {
+    // Failure: all-exhausted / rate-limited / error.
+    const status = 'failed';
+    const errMsg = (result.stderr && String(result.stderr).slice(0, 1000))
+      || ('All harnesses exhausted (' + result.status + ')');
+    stmts.completeRun.run({
+      id: runId, status, result_json: null, result_text: null,
+      error: errMsg, duration_ms: durationMs
+    });
+
+    const failNotifResult = stmts.insertNotification.run({
+      agent_run_id: runId, type: 'error',
+      title: cap(agentId) + ' ' + status + ' on task #' + taskId,
+      body: errMsg.substring(0, 500),
+      action_type: 'view_run', action_data: JSON.stringify({ run_id: runId, task_id: taskId })
+    });
+    bus.emit('notification:created', {
+      id: Number(failNotifResult.lastInsertRowid), agent_id: agentId, task_id: taskId,
+      type: 'error', title: cap(agentId) + ' ' + status + ' on task #' + taskId
+    });
+
+    const failedTask = stmts.getTaskById.get(taskId);
+    if (failedTask && failedTask.status === 'in_progress') {
+      stmts.updateTask.run({
+        id: taskId, title: failedTask.title, description: failedTask.description,
+        status: 'todo', priority: failedTask.priority,
+        agent_id: failedTask.agent_id, sort_order: failedTask.sort_order
+      });
+      bus.emit('task:updated', stmts.getTaskById.get(taskId));
+    }
+
+    const errSummary = agentId + ' ' + status + ' on task #' + taskId + ': ' + errMsg.substring(0, 100);
+    stmts.insertActivity.run({
+      event_type: 'agent.' + status, agent_id: agentId, task_id: taskId,
+      project_id: null, summary: errSummary,
+      detail_json: JSON.stringify({ run_id: runId, error: errMsg, attempts: result.attempts, duration_ms: durationMs })
+    });
+    bus.emit('agent:failed', { run_id: runId, agent_id: agentId, task_id: taskId, error: errMsg, duration_ms: durationMs });
+    bus.emit('activity:new', { event_type: 'agent.' + status, agent_id: agentId, task_id: taskId, summary: errSummary });
+  }
+
+  activeDispatches.delete(runId);
 }
 
 // Helper: read request body and JSON.parse it
@@ -1188,7 +1270,7 @@ const server = http.createServer(async (req, res) => {
 
       // GET /api/settings + PUT /api/settings
       if (method === 'GET' && pathname === '/api/settings') {
-        res.json({ settings: getAppSettings(), runtimes: runtimes.listRuntimes() });
+        res.json({ settings: getAppSettings(), runtimes: await runtimes.listRuntimes() });
         return;
       }
       if (method === 'PUT' && pathname === '/api/settings') {
@@ -1210,13 +1292,13 @@ const server = http.createServer(async (req, res) => {
 
       // GET /api/runtimes
       if (method === 'GET' && pathname === '/api/runtimes') {
-        res.json({ runtimes: runtimes.listRuntimes() });
+        res.json({ runtimes: await runtimes.listRuntimes() });
         return;
       }
 
       // GET /api/cookbook — model inventory per available harness
       if (method === 'GET' && pathname === '/api/cookbook') {
-        const inventory = await cookbook.inventory(runtimes.listRuntimes());
+        const inventory = await cookbook.inventory(await runtimes.listRuntimes());
         res.json({ inventory });
         return;
       }
@@ -1340,8 +1422,11 @@ const server = http.createServer(async (req, res) => {
           if (node.reports_to && byId[node.reports_to]) byId[node.reports_to].reports.push(node);
         });
         const ceo = Object.values(byId).find((n) => n.role === 'ceo');
-        const orphans = Object.values(byId).filter((n) => !n.reports_to && n.role !== 'ceo');
-        res.json({ ceo: ceo || null, orphans, all: Object.values(byId) });
+        // Role-less rows are legacy flat-registry duplicates (e.g. the old
+        // "main"/"hermes" seeds) that the org chart shouldn't render as stray nodes.
+        const isOrgNode = (n) => !!n.role;
+        const orphans = Object.values(byId).filter((n) => !n.reports_to && n.role && n.role !== 'ceo');
+        res.json({ ceo: ceo || null, orphans, all: Object.values(byId).filter(isOrgNode) });
         return;
       }
 
@@ -1477,7 +1562,7 @@ const server = http.createServer(async (req, res) => {
             last_activity: run ? (run.completed_at || run.started_at) : null,
             last_run_status: run ? run.status : null,
             last_run_duration_ms: run ? run.duration_ms : null,
-            last_run_summary: run && run.result_text ? run.result_text.substring(0, 120) : null,
+            last_run_summary: run && run.result_text ? extractResultText(run.result_text).substring(0, 120) : null,
             last_run_cost: costRow ? costRow.estimated_cost_usd : null
           };
         });
@@ -2302,6 +2387,15 @@ setInterval(bootAndDailyCleanup, 24 * 60 * 60 * 1000);
 const PORT = parseInt(process.env.VISIONARY_PORT, 10) || 3333;
 server.listen(PORT, '127.0.0.1', () => {
   console.log('Visionary Mission Control running at http://127.0.0.1:' + PORT);
+  const settings = getAppSettings();
+  console.log('[boot] workspace: ' + settings.workspace_path);
+  // Probe each harness once at boot so the operator sees what is actually wired.
+  Promise.resolve(runtimes.listRuntimes()).then(function (list) {
+    const ok = list.filter(function (r) { return r.health && r.health.ok; }).map(function (r) { return r.id; });
+    const down = list.filter(function (r) { return !(r.health && r.health.ok); }).map(function (r) { return r.id; });
+    console.log('[boot] harnesses available: ' + (ok.join(', ') || 'none'));
+    if (down.length) console.log('[boot] harnesses unavailable: ' + down.join(', '));
+  }).catch(function () { /* non-fatal */ });
 });
 
 // Heartbeat: broadcast progress for active dispatches every 5 seconds

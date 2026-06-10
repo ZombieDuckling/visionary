@@ -17,7 +17,15 @@ function kill(child) {
 }
 
 function healthcheck() {
-  return { ok: true, command: 'openclaw agent --local --agent <id>' };
+  return new Promise((resolve) => {
+    execFile('openclaw', ['--version'], { timeout: 3000 }, (err, stdout) => {
+      if (err) {
+        resolve({ ok: false, runtime: 'openclaw', error: err.code === 'ENOENT' ? 'not-installed' : err.message });
+      } else {
+        resolve({ ok: true, runtime: 'openclaw', version: String(stdout || '').trim() });
+      }
+    });
+  });
 }
 
 module.exports = { name: 'openclaw', buildCommand, dispatch, kill, healthcheck };

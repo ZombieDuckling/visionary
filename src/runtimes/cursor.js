@@ -7,7 +7,10 @@ const NAME = 'cursor';
 const BIN = process.env.CURSOR_BIN || 'cursor-agent';
 
 function buildCommand(ctx) {
-  return { bin: BIN, args: ['--message', ctx.message] };
+  // cursor-agent takes the prompt as a positional argument; `-p`/`--print`
+  // is required for non-interactive (headless/script) use. There is no
+  // `--message` flag, so the old invocation never dispatched correctly.
+  return { bin: BIN, args: ['-p', ctx.message] };
 }
 
 function dispatch(ctx, options, callback) {

@@ -147,9 +147,9 @@
 
   // --- Agent Color Map ---
   var AGENT_COLORS = {
-    main: '#3b8bff', jarvis: '#3b8bff', scout: '#06b6d4', analyst: '#7c5cff', forge: '#f59e0b',
-    sentinel: '#ef4444', broker: '#22c55e', ops: '#8b5cf6', hunter: '#ec4899', reviewer: '#f97316',
-    coder: '#d97706', researcher: '#4285f4', designer: '#e879f9', hermes: '#00ff88'
+    main: '#0a84ff', jarvis: '#0a84ff', scout: '#32ade6', analyst: '#5e5ce6', forge: '#ff9f0a',
+    sentinel: '#ff453a', broker: '#30d158', ops: '#30b0c7', hunter: '#ff375f', reviewer: '#8e8e93',
+    coder: '#a2845e', researcher: '#00c7be', designer: '#bf5af2', hermes: '#00c7be'
   };
 
   // --- Agent Emoji Map ---
@@ -624,8 +624,8 @@
     var crumb = '';
     if (project) {
       crumb = '<div class="board-crumb">'
-        + (space ? '<span class="board-crumb-space" style="--space-color: ' + esc(space.color || '#FF2EC4') + '">' + esc(space.name) + '</span><span class="board-crumb-sep">/</span>' : '')
-        + '<span class="board-crumb-project" style="--project-color: ' + esc(project.color || '#00F0FF') + '">' + esc(project.name) + '</span>'
+        + (space ? '<span class="board-crumb-space" style="--space-color: ' + esc(space.color || '#bf5af2') + '">' + esc(space.name) + '</span><span class="board-crumb-sep">/</span>' : '')
+        + '<span class="board-crumb-project" style="--project-color: ' + esc(project.color || '#0a84ff') + '">' + esc(project.name) + '</span>'
         + '</div>';
     } else {
       crumb = '<div class="board-crumb"><span class="board-crumb-all">All tasks (no project selected)</span></div>';
@@ -814,7 +814,7 @@
     if (harness) meta += '<span class="drawer-msg-harness">' + esc(harness) + '</span>';
     if (ts) meta += '<span class="drawer-msg-ts">' + timeAgo(ts) + '</span>';
     bubble.innerHTML = (meta ? '<div class="drawer-msg-meta">' + meta + '</div>' : '')
-      + '<div class="drawer-msg-body">' + renderMarkdown(content) + '</div>';
+      + '<div class="drawer-msg-body">' + renderMarkdown(previewText(content)) + '</div>';
     streamEl.insertBefore(bubble, streamEl.firstChild);
   }
 
@@ -843,7 +843,7 @@
     var agentObj = (state.agents || []).find(function (a) { return a.id === agentId; })
       || AGENTS.find(function (a) { return a.id === agentId; })
       || { id: agentId, name: agentId };
-    var agentColor = agentObj.color || AGENT_COLORS[agentId] || '#00F0FF';
+    var agentColor = AGENT_COLORS[agentId] || agentObj.color || '#0a84ff';
     var icon = agentObj.icon || AGENT_ICONS[agentId] || '';
     var agentName = agentObj.name || agentId;
     var nd = nodeData || {};
@@ -880,7 +880,7 @@
       +   '<textarea class="drawer-dispatch-input" id="drawer-dispatch-input" rows="3" placeholder="Message ' + esc(agentName) + '\u2026"></textarea>'
       +   '<div class="drawer-dispatch-row">'
       +     '<div id="drawer-dispatch-error" class="drawer-dispatch-error hidden"></div>'
-      +     '<button class="btn btn-primary drawer-dispatch-btn" id="drawer-dispatch-btn">\u25B6 Dispatch</button>'
+      +     '<button class="btn btn-primary drawer-dispatch-btn" id="drawer-dispatch-btn">Dispatch</button>'
       +   '</div>'
       + '</div>'
       + '<div class="drawer-section-label">LIVE STREAM <span id="drawer-stream-indicator" class="drawer-stream-dot hidden"></span></div>'
@@ -960,7 +960,7 @@
             existing.className = 'drawer-stream-event drawer-stream-progress';
             streamEl.appendChild(existing);
           }
-          existing.textContent = '\u25B6 Running \u00B7 ' + formatElapsed(d.elapsed_ms || 0);
+          existing.textContent = 'Running \u00B7 ' + formatElapsed(d.elapsed_ms || 0);
         } else if (eventType === 'agent:completed') {
           streamIndicator.classList.add('hidden');
           var doneBubble = document.createElement('div');
@@ -982,11 +982,34 @@
           failBubble.className = 'drawer-stream-event drawer-stream-fail';
           failBubble.textContent = '\u2715 Failed' + (d.error ? ': ' + d.error : '');
           streamEl.appendChild(failBubble);
+        } else if (eventType === 'agent:harness') {
+          // Which harness is currently running (and the failover position).
+          var hb = streamEl.querySelector('.drawer-stream-harness');
+          if (!hb) {
+            hb = document.createElement('div');
+            hb.className = 'drawer-stream-event drawer-stream-harness';
+            streamEl.appendChild(hb);
+          }
+          hb.textContent = '\u2699 ' + (d.harness || '?') + ' \u00b7 attempt ' + (d.attempt || 1) + '/' + (d.total || 1);
+        } else if (eventType === 'agent:output') {
+          // Live token/line stream from the running harness.
+          var live = streamEl.querySelector('.drawer-stream-live');
+          if (!live) {
+            live = document.createElement('pre');
+            live.className = 'drawer-stream-live';
+            streamEl.appendChild(live);
+          }
+          live.textContent += (d.chunk || '');
+          // Keep the live buffer bounded so a chatty agent can't grow the DOM forever.
+          if (live.textContent.length > 20000) live.textContent = live.textContent.slice(-20000);
+          live.scrollTop = live.scrollHeight;
         }
       }
 
       drawerSSEListen('agent:started',   handleAgentEvent);
       drawerSSEListen('agent:progress',  handleAgentEvent);
+      drawerSSEListen('agent:harness',   handleAgentEvent);
+      drawerSSEListen('agent:output',    handleAgentEvent);
       drawerSSEListen('agent:completed', handleAgentEvent);
       drawerSSEListen('agent:failed',    handleAgentEvent);
     }
@@ -1011,12 +1034,12 @@
         .then(function () {
           dispatchInput.value = '';
           dispatchBtn.disabled = false;
-          dispatchBtn.textContent = '\u25B6 Dispatch';
+          dispatchBtn.textContent = 'Dispatch';
           showToast('Dispatched to ' + agentName);
         })
         .catch(function (err) {
           dispatchBtn.disabled = false;
-          dispatchBtn.textContent = '\u25B6 Dispatch';
+          dispatchBtn.textContent = 'Dispatch';
           streamIndicator.classList.add('hidden');
           var msg = (err.data && err.data.error) ? err.data.error : 'Dispatch failed';
           dispatchError.textContent = msg;
@@ -1102,13 +1125,33 @@
     return '<div class="org-tree">' + renderOrgNode(data.ceo, 0, agentsById, activeRunsById) + '</div>';
   }
 
+  // Some stored run outputs are raw OpenClaw JSON envelopes
+  // ({"payloads":[{"text":...}]} or {"result":...}). Extract the human text
+  // for previews/bubbles; fall back to the raw string. Optional maxLen truncates.
+  function previewText(raw, maxLen) {
+    var text = String(raw == null ? '' : raw);
+    var trimmed = text.trim();
+    if (trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[') {
+      try {
+        var parsed = JSON.parse(trimmed);
+        if (parsed && parsed.payloads && Array.isArray(parsed.payloads)) {
+          text = parsed.payloads.map(function (p) { return p && p.text ? p.text : ''; }).join('\n').trim() || text;
+        } else if (parsed && parsed.result) {
+          text = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+        }
+      } catch (e) { /* not JSON — keep raw */ }
+    }
+    if (typeof maxLen === 'number' && text.length > maxLen) text = text.substring(0, maxLen) + '…';
+    return text;
+  }
+
   function renderOrgNode(node, depth, agentsById, activeRunsById) {
     var liveAgent = agentsById[node.id] || {};
     var activeRun = activeRunsById[node.id] || null;
     var icon = liveAgent.icon || AGENT_ICONS[node.id] || '';
-    var color = liveAgent.color || AGENT_COLORS[node.id] || '#00F0FF';
+    var color = AGENT_COLORS[node.id] || liveAgent.color || '#0a84ff';
     var model = liveAgent.model ? liveAgent.model.replace(/-\d{8}$/, '') : '';
-    var summary = liveAgent.last_run_summary ? liveAgent.last_run_summary.substring(0, 100) : '';
+    var summary = liveAgent.last_run_summary ? previewText(liveAgent.last_run_summary, 100) : '';
     var statusClass = 'health-' + (node.health_status || 'unknown');
     var lastActivity = node.last_activity_at ? timeAgo(node.last_activity_at) : 'no activity';
     var lastCheck = node.last_health_check ? timeAgo(node.last_health_check) : 'never';
@@ -1127,7 +1170,7 @@
       + '<div class="org-node-actions">'
       + (activeRun
         ? '<button class="btn btn-small btn-danger" data-action="kill-agent" data-run-id="' + esc(activeRun.run_id) + '">Kill</button>'
-        : '<button class="btn btn-small btn-dispatch" data-action="dispatch-agent" data-agent-id="' + esc(node.id) + '">\u25B6 Dispatch</button>'
+        : '<button class="btn btn-small btn-dispatch" data-action="dispatch-agent" data-agent-id="' + esc(node.id) + '">Dispatch</button>'
         )
       + '</div>'
       + '</div>'
@@ -1171,7 +1214,7 @@
       + '<div id="form-error" class="form-error hidden"></div>'
       + '<div class="form-actions">'
       + '<button type="button" class="btn" id="cancel-dispatch">Cancel</button>'
-      + '<button type="submit" class="btn btn-primary">\u25B6 Dispatch</button>'
+      + '<button type="submit" class="btn btn-primary">Dispatch</button>'
       + '</div></form></div>';
 
     document.body.appendChild(overlay);
@@ -2219,7 +2262,7 @@
         var p = data.project;
         var html = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
           + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-sm);">'
-          + '<span style="color: ' + esc(p.color || '#00ff41') + '">' + esc(p.name) + '</span>'
+          + '<span style="color: ' + esc(p.color || '#30d158') + '">' + esc(p.name) + '</span>'
           + ' <span class="badge badge-green">' + esc(p.status) + '</span></h2>'
           + '<p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-lg);">' + esc(p.description || '') + '</p>'
           + '<button class="btn" data-action="edit-project" data-pid="' + esc(p.id) + '" style="margin-bottom: var(--space-lg);">Edit Project</button>';
@@ -2304,7 +2347,7 @@
         projects.forEach(function (p) {
           var statusBadge = p.status === 'active' ? 'badge-green' : p.status === 'paused' ? 'badge-orange' : 'text-muted';
           html += '<div class="project-card" data-action="view-project" data-pid="' + esc(p.id) + '">'
-            + '<div class="project-name" style="color: ' + esc(p.color || '#00ff41') + '">' + esc(p.name) + '</div>'
+            + '<div class="project-name" style="color: ' + esc(p.color || '#30d158') + '">' + esc(p.name) + '</div>'
             + '<div class="project-desc">' + esc(p.description || '') + '</div>'
             + '<div class="project-stats">'
             + '<span>' + esc(p.active_task_count) + ' active / ' + esc(p.task_count) + ' total tasks</span>'
@@ -2363,7 +2406,7 @@
     var overlay = document.createElement('div');
     overlay.className = 'overlay';
 
-    var presetColors = ['#00ff41', '#00aaff', '#ff8800', '#ff4444', '#aa77ff', '#00ddff'];
+    var presetColors = ['#0a84ff', '#30d158', '#ff9f0a', '#ff453a', '#bf5af2', '#30b0c7'];
     var swatchHtml = presetColors.map(function (c, i) {
       return '<div class="color-swatch' + (i === 0 ? ' selected' : '') + '" data-color="' + c + '" style="background: ' + c + '"></div>';
     }).join('');
@@ -2422,7 +2465,7 @@
       var overlay = document.createElement('div');
       overlay.className = 'overlay';
 
-      var presetColors = ['#00ff41', '#00aaff', '#ff8800', '#ff4444', '#aa77ff', '#00ddff'];
+      var presetColors = ['#0a84ff', '#30d158', '#ff9f0a', '#ff453a', '#bf5af2', '#30b0c7'];
       var swatchHtml = presetColors.map(function (c) {
         return '<div class="color-swatch' + (c === p.color ? ' selected' : '') + '" data-color="' + c + '" style="background: ' + c + '"></div>';
       }).join('');
@@ -2437,7 +2480,7 @@
         + '<div class="form-group"><label>Name</label><input class="input" type="text" name="name" required value="' + esc(p.name) + '" /></div>'
         + '<div class="form-group"><label>Description</label><textarea class="input" name="description" rows="2">' + esc(p.description || '') + '</textarea></div>'
         + '<div class="form-group"><label>Status</label><select name="status">' + statusOpts + '</select></div>'
-        + '<div class="form-group"><label>Color</label><div class="color-swatches">' + swatchHtml + '</div><input type="hidden" name="color" value="' + esc(p.color || '#00ff41') + '" /></div>'
+        + '<div class="form-group"><label>Color</label><div class="color-swatches">' + swatchHtml + '</div><input type="hidden" name="color" value="' + esc(p.color || '#30d158') + '" /></div>'
         + '<div id="form-error" class="form-error hidden"></div>'
         + '<div class="form-actions"><button type="button" class="btn" id="cancel-edit-project">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
         + '</form></div>';
@@ -2510,9 +2553,9 @@
     spaces.forEach(function (space) {
       var spaceProjects = projects.filter(function (p) { return p.space_id === space.id; });
       var isCollapsed = collapsed[space.id];
-      html += '<div class="sidebar-space" data-space-id="' + esc(space.id) + '" style="--space-color: ' + esc(space.color || '#FF2EC4') + '">'
+      html += '<div class="sidebar-space" data-space-id="' + esc(space.id) + '" style="--space-color: ' + esc(space.color || '#bf5af2') + '">'
         + '<div class="sidebar-space-header" data-action="toggle-space" data-space-id="' + esc(space.id) + '">'
-        + '<span class="sidebar-space-chev">' + (isCollapsed ? '▶' : '▼') + '</span>'
+        + '<span class="sidebar-space-chev">' + (isCollapsed ? '›' : '⌄') + '</span>'
         + '<span class="sidebar-space-dot"></span>'
         + '<span class="sidebar-space-name">' + esc(space.name) + '</span>'
         + '<span class="sidebar-space-count">' + spaceProjects.length + '</span>'
@@ -2529,7 +2572,7 @@
             html += '<a class="sidebar-project' + (isActive ? ' active' : '') + '"'
               + ' href="#/board/' + esc(project.id) + '"'
               + ' data-project-id="' + esc(project.id) + '"'
-              + ' style="--project-color: ' + esc(project.color || '#00F0FF') + '">'
+              + ' style="--project-color: ' + esc(project.color || '#0a84ff') + '">'
               + '<span class="sidebar-project-dot"></span>'
               + '<span class="sidebar-project-name">' + esc(project.name) + '</span>'
               + (project.active_task_count ? '<span class="sidebar-project-count">' + esc(project.active_task_count) + '</span>' : '')
@@ -2939,10 +2982,10 @@
     var el = document.getElementById('sse-status');
     if (!el) return;
     if (connected) {
-      el.textContent = 'LIVE';
+      el.textContent = 'Live';
       el.className = 'badge badge-green';
     } else {
-      el.textContent = 'OFFLINE';
+      el.textContent = 'Offline';
       el.className = 'badge badge-red';
     }
   });
@@ -3274,7 +3317,7 @@
         chatPanel.classList.toggle('collapsed');
       }
       var isCollapsed = chatPanel.classList.contains('collapsed');
-      chatToggle.textContent = isCollapsed ? '\u25B6' : '\u25C0';
+      chatToggle.textContent = isCollapsed ? '\u2039' : '\u203A';
       if (chatReopen) {
         if (isCollapsed) { chatReopen.classList.add('visible'); }
         else { chatReopen.classList.remove('visible'); }
