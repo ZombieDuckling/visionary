@@ -143,14 +143,32 @@ Left sidebar shows the Space → Project tree (sets `state.currentSpaceId` and `
 - CRT scanline overlay via `body::before`. Hard borders, glow via `box-shadow` + `text-shadow`, no rounded corners.
 - Whenever you change `public/styles.css` or `public/index.html`, **bump `CACHE_NAME` in `public/sw.js`** so the PWA reloads.
 
+## Working-core release (2026-06-10)
+
+The dispatch→harness→stream critical path is now real end-to-end. See
+`docs/superpowers/specs/2026-06-10-working-core-design.md`. Shipped on branch
+`feat/working-core`:
+
+- **Deterministic launch** — `scripts/ensure-native.js` (prestart/predev/presmoke)
+  self-heals the better-sqlite3 ABI; `npm start`/`npm run verify` work from a clean checkout.
+- **Real harness healthchecks** — all 7 adapters probe `--version`; `listRuntimes()` is async,
+  `listRuntimeIds()` added. Boot banner logs which harnesses are available. Fixed `cursor-agent -p`.
+- **Streaming dispatch through failover** — `dispatchAgent` now runs `executeWithFailover` against
+  the agent's `harness_chain`, streaming stdout/stderr over new SSE events `agent:output` +
+  `agent:harness`; the dispatch drawer renders them live. Kill switch cancels without failing over.
+- **Agents actually do work** — each dispatch injects the agent's personality charter; headless
+  `claude` defaults to skip-permissions and runs with stdin closed (no 3s stall).
+- **Org chart** — legacy `main`/`hermes` rows hidden; clean CEO → 4 directors → 11 ICs.
+- Verified live: forge/openclaw (13 streamed chunks) and coder/claude-code (clean `pong`) both complete.
+
 ## Open threads (not blocking — pick up if relevant)
 
-- **Rate limiter** — per-agent dispatch throttle (token bucket). Pattern from odysseus's `rate_limiter.py`.
 - **Document ingestion** — accept PDF/docx, convert to text for agent inputs. Pattern from odysseus's `markitdown_runtime`.
 - **MCP server integration** — biggest remaining lift. Stub at `src/mcp.js`. Needs `@modelcontextprotocol/sdk` (would be the second runtime dep — go/no-go decision).
-- **Per-agent dispatch in the UI** — Org chart has dispatch buttons but no result-streaming view. Next: an SSE-fed conversation drawer when you click a node.
-- **Automated stale-activity nudge** — Watchdog currently only logs stale agents. Auto-dispatch their `watchdog_role` prompt would close the loop.
-- **Token-aware replay** — `failover.js` replays a fixed N turns. Use `guardrails.selectForReplay` instead so big conversations don't blow context budgets.
+- **Token/cost capture** — `agent_runs.input_tokens/output_tokens/estimated_cost_usd` columns exist but stay NULL; the dispatch path only fills them when a harness emits usage JSON (most don't).
+- **Reviewer loop** — the auto-Reviewer historically rejected ~98% of work (bounded by `MAX_REVIEW_RETRIES`); the permission/personality fixes should help, but the prompt/gate logic still deserves a hard look.
+- **Registry unification** — the flat `agentConfigs` (server.js) and the org-chart `agents` table are still two registries; directors aren't dispatchable via `/api/dispatch` (use `/api/agents/:id/dispatch`).
+- **Python backend** — frozen at phase 2 on port 3344. Decision: ship Node. Resume the migration (phases 1c/3/4) only if consolidating to one language becomes worth it.
 
 ## Conventions when you make changes
 
