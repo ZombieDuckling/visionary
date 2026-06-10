@@ -20,7 +20,8 @@
     "rebuild:node": "npm rebuild better-sqlite3",
     "check": "node --check server.js && node --check db.js && node --check sse.js && node --check electron.js && node --check public/app.js",
     "smoke": "node --test tests/smoke.mjs",
-    "verify": "npm run check && npm run smoke"
+    "test:stream": "node scripts/stream-smoke.mjs",
+    "verify": "npm run check && npm run smoke && npm run test:stream"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0"
