@@ -1405,8 +1405,11 @@ const server = http.createServer(async (req, res) => {
           if (node.reports_to && byId[node.reports_to]) byId[node.reports_to].reports.push(node);
         });
         const ceo = Object.values(byId).find((n) => n.role === 'ceo');
-        const orphans = Object.values(byId).filter((n) => !n.reports_to && n.role !== 'ceo');
-        res.json({ ceo: ceo || null, orphans, all: Object.values(byId) });
+        // Role-less rows are legacy flat-registry duplicates (e.g. the old
+        // "main"/"hermes" seeds) that the org chart shouldn't render as stray nodes.
+        const isOrgNode = (n) => !!n.role;
+        const orphans = Object.values(byId).filter((n) => !n.reports_to && n.role && n.role !== 'ceo');
+        res.json({ ceo: ceo || null, orphans, all: Object.values(byId).filter(isOrgNode) });
         return;
       }
 
@@ -2367,6 +2370,15 @@ setInterval(bootAndDailyCleanup, 24 * 60 * 60 * 1000);
 const PORT = parseInt(process.env.VISIONARY_PORT, 10) || 3333;
 server.listen(PORT, '127.0.0.1', () => {
   console.log('Visionary Mission Control running at http://127.0.0.1:' + PORT);
+  const settings = getAppSettings();
+  console.log('[boot] workspace: ' + settings.workspace_path);
+  // Probe each harness once at boot so the operator sees what is actually wired.
+  Promise.resolve(runtimes.listRuntimes()).then(function (list) {
+    const ok = list.filter(function (r) { return r.health && r.health.ok; }).map(function (r) { return r.id; });
+    const down = list.filter(function (r) { return !(r.health && r.health.ok); }).map(function (r) { return r.id; });
+    console.log('[boot] harnesses available: ' + (ok.join(', ') || 'none'));
+    if (down.length) console.log('[boot] harnesses unavailable: ' + down.join(', '));
+  }).catch(function () { /* non-fatal */ });
 });
 
 // Heartbeat: broadcast progress for active dispatches every 5 seconds
