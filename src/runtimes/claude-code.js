@@ -20,7 +20,8 @@ const DEFAULT_ALLOWED_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 
 const DEFAULT_MAX_TURNS = 20;
 
 function buildCommand(ctx) {
-  const args = ['-p', ctx.message, '--max-turns', String(ctx.maxTurns || DEFAULT_MAX_TURNS)];
+  // JSON output carries usage + total_cost_usd so runs get real cost data.
+  const args = ['-p', ctx.message, '--output-format', 'json', '--max-turns', String(ctx.maxTurns || DEFAULT_MAX_TURNS)];
   if (ctx.dangerouslySkipPermissions === true) {
     args.push('--dangerously-skip-permissions');
   } else {

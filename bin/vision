@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # vision — launch Visionary Mission Control from anywhere.
 #
-#   vision              open the dashboard (starts the server if needed)
-#   vision start        start the server in the background
-#   vision stop         stop the server
+#   vision              open the dashboard in your browser (starts it if needed)
+#   vision start        start the server (+ watchdog)
+#   vision stop         stop the server (+ watchdog)
+#   vision restart      restart the server
 #   vision status       show server status
-#   vision app          launch the Electron desktop app
 #   vision logs         tail the server log
+#   vision app          launch the Electron desktop app (legacy)
 #   vision help         this help
+#
+# When the launchd service (ai.visionary.server) is installed, all lifecycle
+# commands drive launchd so the server stays supervised and survives reboots.
+# Without it, vision falls back to a plain background process.
 set -euo pipefail
 
 # Resolve the repo root through any symlink chain (install.sh symlinks this file).
@@ -25,6 +30,14 @@ URL="http://${HOST}:${PORT}"
 LOG_DIR="${HOME}/.visionary"
 LOG="${LOG_DIR}/server.log"
 
+UID_N=$(id -u)
+SERVER_PLIST="${HOME}/Library/LaunchAgents/ai.visionary.server.plist"
+WATCHDOG_PLIST="${HOME}/Library/LaunchAgents/ai.visionary.watchdog.plist"
+SERVER_SVC="gui/${UID_N}/ai.visionary.server"
+WATCHDOG_SVC="gui/${UID_N}/ai.visionary.watchdog"
+
+launchd_managed() { [ -f "$SERVER_PLIST" ]; }
+
 port_open() {
   (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
 }
@@ -33,24 +46,57 @@ server_pid() {
   lsof -ti tcp:"${PORT}" -sTCP:LISTEN 2>/dev/null | head -1 || true
 }
 
+wait_for_port() {
+  for _ in $(seq 1 40); do
+    if port_open; then return 0; fi
+    sleep 0.5
+  done
+  return 1
+}
+
 start_server() {
   if port_open; then
     echo "vision: server already running at ${URL}"
     return 0
   fi
   mkdir -p "$LOG_DIR"
-  echo "vision: starting server from ${REPO} (log: ${LOG})"
-  (cd "$REPO" && nohup npm start >>"$LOG" 2>&1 &)
-  # Wait up to 20s for the port (the prestart preflight may rebuild the native module).
-  for _ in $(seq 1 40); do
-    if port_open; then
-      echo "vision: running at ${URL}"
-      return 0
+  if launchd_managed; then
+    echo "vision: starting via launchd (${SERVER_SVC})"
+    launchctl bootstrap "gui/${UID_N}" "$SERVER_PLIST" 2>/dev/null \
+      || launchctl kickstart "$SERVER_SVC" 2>/dev/null || true
+    if [ -f "$WATCHDOG_PLIST" ]; then
+      launchctl bootstrap "gui/${UID_N}" "$WATCHDOG_PLIST" 2>/dev/null \
+        || launchctl kickstart "$WATCHDOG_SVC" 2>/dev/null || true
     fi
-    sleep 0.5
-  done
-  echo "vision: server did not come up — check ${LOG}" >&2
-  return 1
+  else
+    echo "vision: starting server from ${REPO} (log: ${LOG})"
+    (cd "$REPO" && nohup npm start >>"$LOG" 2>&1 &)
+  fi
+  if wait_for_port; then
+    echo "vision: running at ${URL}"
+  else
+    echo "vision: server did not come up — check ${LOG}" >&2
+    return 1
+  fi
+}
+
+stop_server() {
+  if launchd_managed; then
+    launchctl bootout "$SERVER_SVC" 2>/dev/null \
+      && echo "vision: server stopped (launchd unloaded — won't auto-restart until 'vision start')" \
+      || echo "vision: server service was not loaded"
+    if [ -f "$WATCHDOG_PLIST" ]; then
+      launchctl bootout "$WATCHDOG_SVC" 2>/dev/null || true
+    fi
+  else
+    PID=$(server_pid)
+    if [ -n "$PID" ]; then
+      kill "$PID" 2>/dev/null || true
+      echo "vision: stopped (pid ${PID})"
+    else
+      echo "vision: nothing listening on port ${PORT}"
+    fi
+  fi
 }
 
 case "${1:-open}" in
@@ -62,12 +108,17 @@ case "${1:-open}" in
     start_server
     ;;
   stop)
-    PID=$(server_pid)
-    if [ -n "$PID" ]; then
-      kill "$PID" 2>/dev/null || true
-      echo "vision: stopped (pid ${PID})"
+    stop_server
+    ;;
+  restart)
+    if launchd_managed; then
+      launchctl kickstart -k "$SERVER_SVC" 2>/dev/null \
+        || { launchctl bootstrap "gui/${UID_N}" "$SERVER_PLIST" 2>/dev/null || true; }
+      wait_for_port && echo "vision: restarted at ${URL}" || echo "vision: restart failed — check ${LOG}" >&2
     else
-      echo "vision: nothing listening on port ${PORT}"
+      stop_server
+      sleep 1
+      start_server
     fi
     ;;
   status)
@@ -76,9 +127,16 @@ case "${1:-open}" in
     else
       echo "vision: not running (port ${PORT})"
     fi
+    if launchd_managed; then
+      if launchctl print "$SERVER_SVC" >/dev/null 2>&1; then
+        echo "vision: launchd service loaded (supervised — restarts on crash/reboot)"
+      else
+        echo "vision: launchd service installed but not loaded — 'vision start' to load"
+      fi
+    fi
     ;;
   app)
-    echo "vision: launching desktop app"
+    echo "vision: launching desktop app (legacy — the browser dashboard is the primary UI)"
     (cd "$REPO" && npm run app)
     ;;
   logs)
@@ -86,7 +144,7 @@ case "${1:-open}" in
     tail -f "$LOG"
     ;;
   help|-h|--help)
-    sed -n '2,10p' "$SOURCE" | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "$SOURCE" | sed 's/^# \{0,1\}//'
     ;;
   *)
     echo "vision: unknown command '$1' — try: vision help" >&2
