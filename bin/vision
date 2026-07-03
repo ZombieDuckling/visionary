@@ -20,7 +20,8 @@ done
 REPO=$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)
 
 PORT="${VISIONARY_PORT:-3333}"
-URL="http://127.0.0.1:${PORT}"
+HOST="${VISIONARY_HOST:-127.0.0.1}"
+URL="http://${HOST}:${PORT}"
 LOG_DIR="${HOME}/.visionary"
 LOG="${LOG_DIR}/server.log"
 

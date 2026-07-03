@@ -147,14 +147,14 @@
 
   // --- Agent Color Map ---
   var AGENT_COLORS = {
-    main: '#0a84ff', jarvis: '#0a84ff', scout: '#32ade6', analyst: '#5e5ce6', forge: '#ff9f0a',
+    main: '#0a84ff', argus: '#0a84ff', scout: '#32ade6', analyst: '#5e5ce6', forge: '#ff9f0a',
     sentinel: '#ff453a', broker: '#30d158', ops: '#30b0c7', hunter: '#ff375f', reviewer: '#8e8e93',
     coder: '#a2845e', researcher: '#00c7be', designer: '#bf5af2', hermes: '#00c7be'
   };
 
   // --- Agent Emoji Map ---
   var AGENT_ICONS = {
-    jarvis: '\u2699\uFE0F', scout: '\uD83D\uDD2D', analyst: '\uD83D\uDD2C', forge: '\uD83D\uDD28',
+    argus: '\u2699\uFE0F', scout: '\uD83D\uDD2D', analyst: '\uD83D\uDD2C', forge: '\uD83D\uDD28',
     sentinel: '\uD83D\uDEE1\uFE0F', broker: '\uD83D\uDCC8', ops: '\uD83D\uDDA5\uFE0F', hunter: '\uD83C\uDFAF', hermes: '\uD83E\uDDED'
   };
 
@@ -378,7 +378,7 @@
 
   // --- Agent List ---
   var AGENTS = [
-    { id: 'jarvis', name: 'Jarvis', role: 'Main orchestrator' },
+    { id: 'argus', name: 'Argus', role: 'Main orchestrator' },
     { id: 'scout', name: 'Scout', role: 'Research & briefs' },
     { id: 'analyst', name: 'Analyst', role: 'Data analysis' },
     { id: 'forge', name: 'Forge', role: 'Builder & coder' },
@@ -1886,9 +1886,13 @@
       + '</div>'
       + '</div>'
       + '</form>'
+      + '<div class="task-runs" id="task-runs"></div>'
       + '</div>';
 
     document.body.appendChild(overlay);
+
+    // Run history + artifacts (async — doesn't block the form)
+    loadTaskRuns(overlay.querySelector('#task-runs'), task.id);
 
     // Close on overlay background click
     overlay.addEventListener('click', function (e) {
@@ -1997,6 +2001,60 @@
     if (titleInput) titleInput.focus();
   }
 
+  // --- Task run history + artifacts (inside task detail) ---
+  function loadTaskRuns(container, taskId) {
+    if (!container) return;
+    container.innerHTML = '<div class="task-runs-empty">Loading runs…</div>';
+    api('/runs?task_id=' + taskId).then(function (data) {
+      var runs = (data && data.runs) || [];
+      if (!runs.length) {
+        container.innerHTML = '<div class="task-runs-empty">No runs yet — dispatch this task to see output and files here.</div>';
+        return;
+      }
+      container.innerHTML = '<h3 class="task-runs-title">Runs &amp; Artifacts</h3>' + runs.map(function (r) {
+        var artifacts = [];
+        try { artifacts = JSON.parse(r.artifacts_json || '[]'); } catch (e) { artifacts = []; }
+        var newFiles = artifacts.filter(function (a) { return a.new; });
+        var files = newFiles.length ? newFiles : artifacts;
+        var statusClass = r.status === 'completed' ? 'ok' : (r.status === 'running' ? 'running' : 'fail');
+        var fileRows = files.slice(0, 20).map(function (f) {
+          return '<div class="run-file" data-run-id="' + r.id + '" data-path="' + esc(f.path) + '" title="Open file">'
+            + '<span class="run-file-name">' + esc(f.path) + '</span>'
+            + '<span class="run-file-size">' + Math.max(1, Math.round((f.size || 0) / 1024)) + ' KB</span>'
+            + '</div>';
+        }).join('');
+        return '<div class="run-item">'
+          + '<div class="run-head">'
+          + '<span class="run-badge run-badge-' + statusClass + '">' + esc(r.status) + '</span>'
+          + '<span class="run-meta">#' + r.id
+          + (r.completed_at ? ' · ' + timeAgo(r.completed_at) : '')
+          + (r.duration_ms ? ' · ' + Math.round(r.duration_ms / 1000) + 's' : '') + '</span>'
+          + (r.workdir ? '<button type="button" class="btn btn-small run-open-btn" data-run-id="' + r.id + '">Open Folder</button>' : '')
+          + '</div>'
+          + (r.result_text ? '<div class="run-result">' + esc(String(r.result_text).substring(0, 400)) + '</div>' : '')
+          + (r.error ? '<div class="run-error">' + esc(String(r.error).substring(0, 300)) + '</div>' : '')
+          + (r.workdir ? '<div class="run-workdir">' + esc(r.workdir) + '</div>' : '')
+          + fileRows
+          + '</div>';
+      }).join('');
+
+      container.querySelectorAll('.run-open-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          api('/runs/' + btn.getAttribute('data-run-id') + '/open', { method: 'POST', body: {} })
+            .catch(function (err) { showToast((err.data && err.data.error) || 'Open failed'); });
+        });
+      });
+      container.querySelectorAll('.run-file').forEach(function (row) {
+        row.addEventListener('click', function () {
+          api('/runs/' + row.getAttribute('data-run-id') + '/open', { method: 'POST', body: { path: row.getAttribute('data-path') } })
+            .catch(function (err) { showToast((err.data && err.data.error) || 'Open failed'); });
+        });
+      });
+    }).catch(function () {
+      container.innerHTML = '<div class="task-runs-empty">Could not load runs.</div>';
+    });
+  }
+
   // --- Create Task Form ---
   function showCreateTaskForm() {
     // Remove existing overlay if present
@@ -2047,7 +2105,7 @@
       + '</div>'
       + '<div id="form-error" class="form-error hidden"></div>'
       + '<div class="form-actions">'
-      + '<button type="button" class="btn btn-shape" id="shape-task-btn">Shape with Jarvis</button>'
+      + '<button type="button" class="btn btn-shape" id="shape-task-btn">Shape with Argus</button>'
       + '<button type="button" class="btn" id="cancel-task">Cancel</button>'
       + '<button type="submit" class="btn btn-primary">Create Task</button>'
       + '</div>'
@@ -2066,7 +2124,7 @@
       overlay.remove();
     });
 
-    // Shape with Jarvis button
+    // Shape with Argus button
     overlay.querySelector('#shape-task-btn').addEventListener('click', function () {
       overlay.remove();
       showInterviewOverlay(null);
@@ -2134,11 +2192,11 @@
 
     overlay.innerHTML = '<div class="overlay-content">'
       + '<div class="interview-header">'
-      + '<h2 style="color: var(--accent-green); font-size: var(--font-size-lg);">Shape Task with Jarvis</h2>'
+      + '<h2 style="color: var(--accent-green); font-size: var(--font-size-lg);">Shape Task with Argus</h2>'
       + '<button class="btn" id="interview-close">Close</button>'
       + '</div>'
       + '<div class="interview-messages" id="interview-messages">'
-      + '<div class="interview-typing"><div class="spinner"></div> Jarvis is thinking...</div>'
+      + '<div class="interview-typing"><div class="spinner"></div> Argus is thinking...</div>'
       + '</div>'
       + '<div id="interview-ready-area"></div>'
       + '<div class="interview-input-area">'
@@ -2174,7 +2232,7 @@
       var el = document.createElement('div');
       el.className = 'interview-typing';
       el.id = 'interview-typing-indicator';
-      el.innerHTML = '<div class="spinner"></div> Jarvis is thinking...';
+      el.innerHTML = '<div class="spinner"></div> Argus is thinking...';
       messagesDiv.appendChild(el);
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
@@ -2223,7 +2281,7 @@
             inputEl.disabled = true;
             sendBtn.disabled = true;
             // Show ready banner
-            var agentName = data.suggested_agent || 'jarvis';
+            var agentName = data.suggested_agent || 'argus';
             var agentDisplay = AGENTS.find(function (a) { return a.id === agentName; });
             var displayName = agentDisplay ? agentDisplay.name : agentName;
 
@@ -2848,9 +2906,9 @@
           if (match) {
             var agentId = match[1];
             var message = match[2];
-            // INTEL-02: @jarvis route: triggers auto-routing
+            // INTEL-02: @argus route: triggers auto-routing
             var dispatchBody = { agent_id: agentId, message: message };
-            if (agentId === 'jarvis' && message.toLowerCase().indexOf('route:') === 0) {
+            if (agentId === 'argus' && message.toLowerCase().indexOf('route:') === 0) {
               dispatchBody.message = message.substring(6).trim();
               dispatchBody.auto_route = true;
             }
@@ -2876,7 +2934,7 @@
         if (value.length > 20) {
           hint.textContent = 'Auto-routing...';
           input.disabled = true;
-          api('/dispatch', { method: 'POST', body: { agent_id: 'jarvis', message: value, auto_route: true } })
+          api('/dispatch', { method: 'POST', body: { agent_id: 'argus', message: value, auto_route: true } })
             .then(function (result) {
               overlay.remove();
               if (result.routed) {
@@ -3125,7 +3183,7 @@
     // Update status bar "last event" periodically
     setInterval(updateStatusBar, 10000);
 
-    // ── Jarvis Chat Panel ──────────────────────────────────
+    // ── Argus Chat Panel ──────────────────────────────────
     var chatMessages = document.getElementById('chat-messages');
     var chatInput = document.getElementById('chat-input');
     var chatSend = document.getElementById('chat-send');
@@ -3169,7 +3227,7 @@
       window.speechSynthesis.cancel();
       var utter = new SpeechSynthesisUtterance(text);
       utter.onstart = function () {
-        setVoiceState('speaking', 'Jarvis is replying out loud');
+        setVoiceState('speaking', 'Argus is replying out loud');
       };
       utter.onend = function () {
         setVoiceState('idle', 'Push to talk');
@@ -3186,7 +3244,7 @@
       if (type === 'agent') {
         var name = document.createElement('div');
         name.className = 'chat-agent-name';
-        name.textContent = 'Jarvis';
+        name.textContent = 'Argus';
         msg.appendChild(name);
         var body = document.createElement('div');
         body.textContent = text;
@@ -3212,7 +3270,7 @@
 
       var thinking = document.createElement('div');
       thinking.className = 'chat-msg thinking';
-      thinking.textContent = 'Jarvis is thinking';
+      thinking.textContent = 'Argus is thinking';
       chatMessages.appendChild(thinking);
       chatMessages.scrollTop = chatMessages.scrollHeight;
 
@@ -3222,7 +3280,7 @@
       if (chatVoiceBtn) chatVoiceBtn.disabled = true;
       if (options && options.fromVoice) {
         chatVoiceReplyPending = true;
-        setVoiceState('thinking', 'Sending your spoken prompt to Jarvis');
+        setVoiceState('thinking', 'Sending your spoken prompt to Argus');
       }
 
       fetch('/api/chat', {

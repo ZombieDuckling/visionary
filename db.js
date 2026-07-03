@@ -215,6 +215,29 @@ const migrations = [
   `
   ALTER TABLE agents ADD COLUMN last_nudge_at TEXT;
   INSERT OR IGNORE INTO settings (key, value_json) VALUES ('watchdog', '{"auto_nudge_enabled":false,"nudge_cooldown_seconds":900}');
+  `,
+
+  // Migration 7 -> 8: placeholder. Live databases were found already at
+  // version 8 (bumped by a since-removed migration on an old branch), so this
+  // slot is reserved as a no-op to keep fresh and existing DBs in step.
+  `
+  SELECT 1;
+  `,
+
+  // Migration 8 -> 9: Task artifacts (per-run working dir + produced files) and
+  // the Jarvis -> Argus orchestrator rename (id carries history with it).
+  `
+  ALTER TABLE agent_runs ADD COLUMN workdir TEXT;
+  ALTER TABLE agent_runs ADD COLUMN artifacts_json TEXT;
+
+  UPDATE OR IGNORE agents SET id = 'argus' WHERE id = 'jarvis';
+  DELETE FROM agents WHERE id = 'jarvis';
+  UPDATE agents SET reports_to = 'argus' WHERE reports_to = 'jarvis';
+  UPDATE agents SET current_harness = 'hermes', runtime = 'hermes' WHERE id = 'argus';
+  UPDATE agent_messages SET agent_id = 'argus' WHERE agent_id = 'jarvis';
+  UPDATE agent_health_log SET agent_id = 'argus' WHERE agent_id = 'jarvis';
+  UPDATE tasks SET agent_id = 'argus' WHERE agent_id = 'jarvis';
+  UPDATE agent_runs SET agent_id = 'argus' WHERE agent_id = 'jarvis';
   `
 ];
 
@@ -287,7 +310,7 @@ function bootstrapOrgChart() {
 
   const tx = db.transaction(() => {
     if (chart.ceo) seed(chart.ceo, null, 'ceo');
-    (chart.directors || []).forEach((d) => seed(d, d.reports_to || 'jarvis', 'director'));
+    (chart.directors || []).forEach((d) => seed(d, d.reports_to || 'argus', 'director'));
     (chart.agents || []).forEach((a) => seed(a, a.reports_to || null, 'ic'));
   });
   tx();
@@ -428,6 +451,10 @@ const stmts = {
     SELECT ar.* FROM agent_runs ar JOIN tasks t ON ar.task_id = t.id
     WHERE t.project_id = ? ORDER BY ar.created_at DESC LIMIT 20
   `),
+
+  // Artifact statements
+  setRunWorkdir: db.prepare(`UPDATE agent_runs SET workdir = @workdir WHERE id = @id`),
+  setRunArtifacts: db.prepare(`UPDATE agent_runs SET artifacts_json = @artifacts_json WHERE id = @id`),
 
   // Token/cost statements
   updateRunTokens: db.prepare(`
