@@ -8,11 +8,11 @@
     "replay_turns_on_failover": 10
   },
   "ceo": {
-    "id": "jarvis",
-    "name": "Jarvis",
+    "id": "argus",
+    "name": "Argus",
     "title": "Chief of Staff",
-    "personality_path": "personalities/agents/jarvis.md",
-    "harness_chain": ["openclaw", "claude-code", "hermes", "codex"],
+    "personality_path": "personalities/agents/argus.md",
+    "harness_chain": ["hermes", "claude-code", "codex"],
     "watchdog": {
       "role": "orchestrate work, route tasks, talk to the operator",
       "check_interval_seconds": 60,
@@ -25,7 +25,7 @@
       "name": "Intelligence",
       "personality_path": "personalities/agents/director-intelligence.md",
       "harness_chain": ["openclaw", "claude-code", "codex"],
-      "reports_to": "jarvis",
+      "reports_to": "argus",
       "members": ["scout", "analyst", "researcher"],
       "watchdog": { "role": "coordinate intel pod", "check_interval_seconds": 120 }
     },
@@ -34,7 +34,7 @@
       "name": "Engineering",
       "personality_path": "personalities/agents/director-engineering.md",
       "harness_chain": ["openclaw", "claude-code", "codex", "cursor"],
-      "reports_to": "jarvis",
+      "reports_to": "argus",
       "members": ["forge", "coder", "designer"],
       "watchdog": { "role": "ship code, design surfaces, builder pod", "check_interval_seconds": 120 }
     },
@@ -43,7 +43,7 @@
       "name": "Security",
       "personality_path": "personalities/agents/director-security.md",
       "harness_chain": ["openclaw", "claude-code", "codex"],
-      "reports_to": "jarvis",
+      "reports_to": "argus",
       "members": ["sentinel", "hunter"],
       "watchdog": { "role": "audits, threat intel, hunting", "check_interval_seconds": 120 }
     },
@@ -52,7 +52,7 @@
       "name": "Operations",
       "personality_path": "personalities/agents/director-operations.md",
       "harness_chain": ["openclaw", "claude-code", "codex"],
-      "reports_to": "jarvis",
+      "reports_to": "argus",
       "members": ["ops", "broker", "reviewer"],
       "watchdog": { "role": "infra, money, QA gate", "check_interval_seconds": 120 }
     }

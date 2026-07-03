@@ -3,7 +3,7 @@ const { execFile } = require('node:child_process');
 function buildCommand(ctx) {
   return {
     bin: 'hermes',
-    args: ['--yolo', 'chat', '-q', ctx.message, '--toolsets', 'terminal,file,web,browser,cronjob', '--source', 'visionary']
+    args: ['--yolo', 'chat', '-Q', '-q', ctx.message, '--toolsets', 'terminal,file,web,browser,cronjob', '--source', 'visionary']
   };
 }
 

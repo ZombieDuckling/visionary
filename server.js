@@ -42,7 +42,7 @@ const MIME_TYPES = {
 //   ollama   = ollama run <model> "<message>"
 //   hermes   = hermes --yolo chat -q "<message>"
 const agentConfigs = [
-  { id: 'main',       name: 'Jarvis',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'GPT-5.4',            runtime: 'openclaw', color: '#0a84ff' },
+  { id: 'main',       name: 'Argus',     icon: '\u2699\uFE0F',       role: 'Chief of Staff — orchestration, triage',       model: 'Hermes Agent',       runtime: 'hermes',   color: '#0a84ff' },
   { id: 'scout',      name: 'Scout',      icon: '\uD83D\uDD2D',       role: 'Morning Intelligence — news, signals',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#32ade6' },
   { id: 'analyst',    name: 'Analyst',     icon: '\uD83D\uDD2C',       role: 'Research Deep-Diver — OpenClaw tools',         model: 'GPT-5.4',            runtime: 'openclaw', color: '#5e5ce6' },
   { id: 'forge',      name: 'Forge',      icon: '\uD83D\uDD28',       role: 'Builder — OpenClaw workspace projects',        model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#ff9f0a' },
@@ -56,8 +56,8 @@ const agentConfigs = [
   { id: 'designer',   name: 'Designer',   icon: '\uD83C\uDFA8',       role: 'UI/UX — design systems, visual polish',         model: 'GPT-5.4-mini',       runtime: 'openclaw', color: '#bf5af2' },
   { id: 'hermes',     name: 'Hermes',     icon: '\uD83E\uDDED',       role: 'Persistent orchestrator — overnight build loop', model: 'Hermes Agent',       runtime: 'hermes',   color: '#00c7be' },
 ];
-const agentAliases = { jarvis: 'main' };
-const validAgentIds = agentConfigs.map(a => a.id).concat(['jarvis']);
+const agentAliases = { argus: 'main', jarvis: 'main' };
+const validAgentIds = agentConfigs.map(a => a.id).concat(['argus', 'jarvis']);
 const DEFAULT_SETTINGS = {
   port: Number(process.env.VISIONARY_PORT || 3333),
   workspace_path: process.env.VISIONARY_WORKSPACE || path.join(process.env.HOME || '', '.openclaw', 'workspace'),
@@ -136,7 +136,7 @@ function routeToAgent(description) {
       };
     }
   }
-  return { agent_id: 'jarvis', confidence: 'low', matched_keywords: [] };
+  return { agent_id: 'argus', confidence: 'low', matched_keywords: [] };
 }
 
 // Track running agent processes for kill switch
@@ -393,7 +393,7 @@ const PERSONALITY_DIR = path.join(__dirname, 'personalities', 'agents');
 const personalityCache = new Map();
 const PERSONALITY_MAX_CHARS = 6000;
 function loadPersonality(agentId) {
-  const fileId = agentId === 'main' ? 'jarvis' : agentId;
+  const fileId = (agentId === 'main' || agentId === 'jarvis') ? 'argus' : agentId;
   if (personalityCache.has(fileId)) return personalityCache.get(fileId);
   let text = '';
   try {
@@ -406,21 +406,61 @@ function loadPersonality(agentId) {
   personalityCache.set(fileId, text);
   return text;
 }
-function buildAgentPrompt(agentId, message) {
+function buildAgentPrompt(agentId, message, workdir) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
-  if (!persona) return message;
+  const workdirNote = workdir
+    ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
+    : '';
+  if (!persona) return message + workdirNote;
   const name = (cfg && cfg.name) || agentId;
   const role = (cfg && cfg.role) || '';
   return '[SYSTEM — you are ' + name + (role ? ', ' + role : '') + '. Operate per your charter below.]\n'
-    + persona.trim() + '\n\n[TASK]\n' + message;
+    + persona.trim() + workdirNote + '\n\n[TASK]\n' + message;
+}
+
+// Task artifact workspace: every dispatch runs inside ~/Visionary/<project>/task-<id>
+// so the operator can always find what an agent produced.
+const ARTIFACT_ROOT = process.env.VISIONARY_ARTIFACTS || path.join(process.env.HOME || '', 'Visionary');
+function slugify(name) {
+  return String(name || 'inbox').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'inbox';
+}
+function prepareWorkdir(taskId) {
+  const task = stmts.getTaskById.get(taskId);
+  const projectName = task && task.project_name ? task.project_name : 'inbox';
+  const dir = path.join(ARTIFACT_ROOT, slugify(projectName), 'task-' + taskId);
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { return null; }
+  return dir;
+}
+function collectArtifacts(workdir, sinceMs) {
+  const files = [];
+  function walk(dir, depth) {
+    if (depth > 6 || files.length >= 500) return;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const ent of entries) {
+      if (ent.name.startsWith('.') || ent.name === 'node_modules') continue;
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) { walk(full, depth + 1); continue; }
+      let st;
+      try { st = fs.statSync(full); } catch { continue; }
+      files.push({
+        path: path.relative(workdir, full),
+        size: st.size,
+        modified_at: st.mtime.toISOString(),
+        new: st.mtimeMs >= sinceMs
+      });
+    }
+  }
+  if (workdir) walk(workdir, 0);
+  return files;
 }
 
 // Resolve the org-chart row that owns this agent's harness_chain (for failover +
 // conversation history + health bookkeeping). Falls back to a synthesized row
 // built from the flat agent config so dispatch always has at least one harness.
 function resolveAgentRow(agentId) {
-  const tableId = agentId === 'main' ? 'jarvis' : agentId;
+  const tableId = (agentId === 'main' || agentId === 'jarvis') ? 'argus' : agentId;
   let row = null;
   try { row = stmts.getAgentById.get(tableId); } catch { row = null; }
   if (row && row.harness_chain) return row;
@@ -475,8 +515,10 @@ function dispatchAgent(taskId, agentId, message) {
   // Resolve the org-chart row (harness chain + bookkeeping) and display config.
   const agentRow = resolveAgentRow(agentId);
   const cfg = resolveAgentConfig(agentId);
+  const workdir = prepareWorkdir(taskId);
+  if (workdir) stmts.setRunWorkdir.run({ id: runId, workdir });
   const ctx = {
-    message: buildAgentPrompt(agentId, message),
+    message: buildAgentPrompt(agentId, message, workdir),
     agentId: cfg ? cfg.id : agentId,
     model: cfg && cfg.model,
     agent: cfg,
@@ -494,7 +536,7 @@ function dispatchAgent(taskId, agentId, message) {
   const failoverOpts = {
     timeout: 660000,
     env,
-    cwd: __dirname,
+    cwd: workdir || __dirname,
     onChunk: function (harness, chunk, stream) {
       bus.emit('agent:output', { run_id: runId, agent_id: agentId, task_id: taskId, harness, stream, chunk });
     },
@@ -561,6 +603,18 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
       result_text: resultText, error: null, duration_ms: durationMs
     });
 
+    // Record what the run produced so the operator can find + open it from the UI.
+    let artifacts = [];
+    let runWorkdir = null;
+    try {
+      const runRow = stmts.getRunById.get(runId);
+      runWorkdir = runRow && runRow.workdir;
+      if (runWorkdir) {
+        artifacts = collectArtifacts(runWorkdir, startTime);
+        stmts.setRunArtifacts.run({ id: runId, artifacts_json: JSON.stringify(artifacts) });
+      }
+    } catch { /* artifact scan must never fail the run */ }
+
     // INTEL-04: parse token usage from CLI JSON output and estimate cost
     try {
       const parsed = JSON.parse(cleaned);
@@ -579,11 +633,14 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
 
     const harnessLabel = result.harness ? ' via ' + result.harness : '';
 
+    const artifactNote = runWorkdir
+      ? '\n\n' + artifacts.filter(a => a.new).length + ' file(s) produced in ' + runWorkdir
+      : '';
     const notifResult = stmts.insertNotification.run({
       agent_run_id: runId, type: 'info',
       title: cap(agentId) + ' completed task #' + taskId,
-      body: resultText ? resultText.substring(0, 500) : 'No output',
-      action_type: 'view_run', action_data: JSON.stringify({ run_id: runId, task_id: taskId })
+      body: (resultText ? resultText.substring(0, 500) : 'No output') + artifactNote,
+      action_type: 'view_run', action_data: JSON.stringify({ run_id: runId, task_id: taskId, workdir: runWorkdir })
     });
     bus.emit('notification:created', {
       id: Number(notifResult.lastInsertRowid), agent_id: agentId, task_id: taskId,
@@ -608,7 +665,9 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
 
     bus.emit('agent:completed', {
       run_id: runId, agent_id: agentId, task_id: taskId, harness: result.harness,
-      duration_ms: durationMs, result_text: resultText ? resultText.substring(0, 200) : ''
+      duration_ms: durationMs, result_text: resultText ? resultText.substring(0, 200) : '',
+      workdir: runWorkdir, artifact_count: artifacts.length,
+      new_artifact_count: artifacts.filter(a => a.new).length
     });
 
     if (agentId !== 'reviewer') triggerReview(taskId, runId, agentId, resultText);
@@ -1162,19 +1221,25 @@ const server = http.createServer(async (req, res) => {
           + 'Current tasks: ' + boardTasks.map(function(t) { return '#' + t.id + ' "' + t.title + '" [' + t.status + ']'; }).join(', ') + '. '
           + msg;
 
-        // Dispatch to Jarvis via OpenClaw (async)
-        // Use --local here so the dashboard chat is not blocked by gateway/config drift.
+        // Dispatch through Argus's full harness chain (hermes → claude-code →
+        // codex) with failover, instead of a hardcoded OpenClaw CLI call.
         const chatEnv = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
-        const chatArgs = ['agent', '--local', '--agent', 'main', '--message', chatMsg, '--json', '--timeout', '120'];
-
-        const chatChild = execFile('openclaw', chatArgs, {
-          timeout: 130000, maxBuffer: 4 * 1024 * 1024, env: chatEnv
-        }, function(error, stdout, stderr) {
-          activeChats = Math.max(0, activeChats - 1);
-          if (res.writableEnded) return; // response already sent
-
-          if (!error && stdout) {
-            const cleaned = cleanCliOutput(stdout);
+        const ceoRow = resolveAgentRow('argus');
+        let chatResult;
+        try {
+          chatResult = await runtimes.executeWithFailover(
+            { getRuntime: runtimes.getRuntime, stmts, db },
+            ceoRow,
+            { message: buildAgentPrompt('argus', chatMsg), agentId: 'argus', dangerouslySkipPermissions: true },
+            { timeout: 120000, env: chatEnv }
+          );
+        } catch (err) {
+          chatResult = { status: 'error', stdout: '', stderr: (err && err.message) || String(err) };
+        }
+        activeChats = Math.max(0, activeChats - 1);
+        if (!res.writableEnded) {
+          if (chatResult.status === 'ok' && chatResult.stdout) {
+            const cleaned = cleanCliOutput(chatResult.stdout);
             let responseText = cleaned;
             try {
               const parsed = JSON.parse(cleaned);
@@ -1188,7 +1253,14 @@ const server = http.createServer(async (req, res) => {
             // Parse task actions from Jarvis response
             const createdTasks = [];
             const createMatch = responseText.match(/CREATE_TASK:\s*(.+?)\s*\|\s*(.+?)(?:\s*\|\s*(.+?))?(?:\s*\|\s*(.+?))?(?:\n|$)/i);
-            if (createMatch) {
+            // Guard: harnesses that echo the prompt reflect the instruction
+            // template itself ("CREATE_TASK: title | description | …") — never
+            // create a task from the template literal.
+            if (createMatch && createMatch[1].trim().toLowerCase() === 'title'
+              && createMatch[2].trim().toLowerCase() === 'description') {
+              createMatch.length = 0;
+            }
+            if (createMatch && createMatch.length) {
               const title = createMatch[1].trim();
               const desc = createMatch[2].trim();
               const agent = (createMatch[3] || '').trim() || null;
@@ -1203,13 +1275,13 @@ const server = http.createServer(async (req, res) => {
               });
               const task = stmts.getTaskById.get(result.lastInsertRowid);
               stmts.insertActivity.run({
-                event_type: 'task.created', agent_id: 'main', task_id: task.id,
-                summary: 'Jarvis created task: ' + task.title,
+                event_type: 'task.created', agent_id: 'argus', task_id: task.id,
+                project_id: null, summary: 'Argus created task: ' + task.title,
                 detail_json: JSON.stringify(task)
               });
               bus.emit('task:created', task);
-              bus.emit('activity:new', { event_type: 'task.created', summary: 'Jarvis created task: ' + task.title, task_id: task.id });
-              bridgePublish('task.created', { task: task }, 'jarvis');
+              bus.emit('activity:new', { event_type: 'task.created', summary: 'Argus created task: ' + task.title, task_id: task.id });
+              bridgePublish('task.created', { task: task }, 'argus');
               createdTasks.push(task);
             }
 
@@ -1227,23 +1299,23 @@ const server = http.createServer(async (req, res) => {
                 });
                 const moved = stmts.getTaskById.get(moveId);
                 bus.emit('task:updated', moved);
-                bridgePublish('task.updated', { task: moved, previous_status: existing.status }, 'jarvis');
+                bridgePublish('task.updated', { task: moved, previous_status: existing.status }, 'argus');
                 movedTasks.push(moved);
               }
             }
 
             stmts.insertActivity.run({
-              event_type: 'chat.agent', agent_id: 'main', task_id: createdTasks.length ? createdTasks[0].id : null,
-              project_id: null, summary: 'Jarvis: ' + responseText.substring(0, 100),
+              event_type: 'chat.agent', agent_id: 'argus', task_id: createdTasks.length ? createdTasks[0].id : null,
+              project_id: null, summary: 'Argus: ' + responseText.substring(0, 100),
               detail_json: JSON.stringify({ response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks })
             });
-            bus.emit('activity:new', { event_type: 'chat.agent', agent_id: 'main', summary: 'Jarvis responded' });
+            bus.emit('activity:new', { event_type: 'chat.agent', agent_id: 'argus', summary: 'Argus responded' });
 
-            res.json({ agent: 'jarvis', response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks });
+            res.json({ agent: 'argus', response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks, harness: chatResult.harness });
           } else {
-            res.json({ agent: 'jarvis', response: 'Error: ' + ((error || {}).message || 'unknown').substring(0, 200) }, 500);
+            res.json({ agent: 'argus', response: 'Error: ' + String(chatResult.stderr || chatResult.status || 'unknown').substring(0, 200) }, 500);
           }
-        });
+        }
         return;
       }
 
@@ -1616,7 +1688,7 @@ const server = http.createServer(async (req, res) => {
         if (!agentId) {
           routing = routeToAgent(message);
           agentId = routing.agent_id;
-        } else if (body.auto_route === true && agentId === 'jarvis') {
+        } else if (body.auto_route === true && (agentId === 'argus' || agentId === 'jarvis')) {
           routing = routeToAgent(message);
           agentId = routing.agent_id;
         }
@@ -1686,6 +1758,43 @@ const server = http.createServer(async (req, res) => {
           runs = stmts.getRecentRuns.all(20);
         }
         res.json({ runs });
+        return;
+      }
+
+      // GET /api/runs/:id -- single run with parsed artifacts
+      if (method === 'GET' && /^\/api\/runs\/(\d+)$/.test(pathname)) {
+        const runId = parseInt(pathname.match(/^\/api\/runs\/(\d+)$/)[1], 10);
+        const run = stmts.getRunById.get(runId);
+        if (!run) { res.json({ error: 'Run not found' }, 404); return; }
+        let artifacts = [];
+        try { artifacts = JSON.parse(run.artifacts_json || '[]'); } catch { artifacts = []; }
+        res.json({ run, artifacts });
+        return;
+      }
+
+      // POST /api/runs/:id/open -- open the run's workdir (or a file inside it)
+      // in Finder / the default app. Paths are confined to the run's workdir.
+      if (method === 'POST' && /^\/api\/runs\/(\d+)\/open$/.test(pathname)) {
+        const runId = parseInt(pathname.match(/^\/api\/runs\/(\d+)\/open$/)[1], 10);
+        const run = stmts.getRunById.get(runId);
+        if (!run) { res.json({ error: 'Run not found' }, 404); return; }
+        if (!run.workdir) { res.json({ error: 'Run has no working directory recorded' }, 404); return; }
+        const body = (await readBody(req)) || {};
+        let target = run.workdir;
+        if (body.path) {
+          const resolved = path.resolve(run.workdir, String(body.path));
+          if (!resolved.startsWith(path.resolve(run.workdir) + path.sep) && resolved !== path.resolve(run.workdir)) {
+            res.json({ error: 'Path escapes the run workdir' }, 400);
+            return;
+          }
+          target = resolved;
+        }
+        if (!fs.existsSync(target)) { res.json({ error: 'Not found on disk: ' + target }, 404); return; }
+        const openArgs = body.reveal ? ['-R', target] : [target];
+        execFile('open', openArgs, (err) => {
+          if (err) { res.json({ error: 'open failed: ' + err.message }, 500); return; }
+          res.json({ ok: true, opened: target });
+        });
         return;
       }
 
@@ -2037,7 +2146,7 @@ const server = http.createServer(async (req, res) => {
 
         const body = await readBody(req);
         const agentOverride = body && body.agent_id ? body.agent_id : null;
-        const useAgent = agentOverride || session.suggested_agent || 'jarvis';
+        const useAgent = agentOverride || session.suggested_agent || 'argus';
 
         if (validAgentIds.indexOf(useAgent) === -1) {
           res.json({ error: 'Unknown agent: ' + useAgent }, 400); return;
@@ -2385,8 +2494,9 @@ setTimeout(bootAndDailyCleanup, 10000);
 setInterval(bootAndDailyCleanup, 24 * 60 * 60 * 1000);
 
 const PORT = parseInt(process.env.VISIONARY_PORT, 10) || 3333;
-server.listen(PORT, '127.0.0.1', () => {
-  console.log('Visionary Mission Control running at http://127.0.0.1:' + PORT);
+const HOST = process.env.VISIONARY_HOST || '127.0.0.1';
+server.listen(PORT, HOST, () => {
+  console.log('Visionary Mission Control running at http://' + HOST + ':' + PORT);
   const settings = getAppSettings();
   console.log('[boot] workspace: ' + settings.workspace_path);
   // Probe each harness once at boot so the operator sees what is actually wired.
