@@ -1230,7 +1230,9 @@ const server = http.createServer(async (req, res) => {
           chatResult = await runtimes.executeWithFailover(
             { getRuntime: runtimes.getRuntime, stmts, db },
             ceoRow,
-            { message: buildAgentPrompt('argus', chatMsg), agentId: 'argus', dangerouslySkipPermissions: true },
+            // Chat is conversational: task actions go through the CREATE_TASK/
+            // MOVE_TASK parser below, so the harness gets read-only tools.
+            { message: buildAgentPrompt('argus', chatMsg), agentId: 'argus', allowedTools: ['Read', 'Glob', 'Grep', 'WebFetch'] },
             { timeout: 120000, env: chatEnv }
           );
         } catch (err) {
@@ -1783,11 +1785,21 @@ const server = http.createServer(async (req, res) => {
         let target = run.workdir;
         if (body.path) {
           const resolved = path.resolve(run.workdir, String(body.path));
-          if (!resolved.startsWith(path.resolve(run.workdir) + path.sep) && resolved !== path.resolve(run.workdir)) {
+          let realTarget, realRoot;
+          try {
+            realTarget = fs.realpathSync(resolved);
+            realRoot = fs.realpathSync(run.workdir);
+          } catch { res.json({ error: 'Not found on disk: ' + resolved }, 404); return; }
+          // Compare realpaths so a symlink inside the workdir can't escape it.
+          if (realTarget !== realRoot && !realTarget.startsWith(realRoot + path.sep)) {
             res.json({ error: 'Path escapes the run workdir' }, 400);
             return;
           }
-          target = resolved;
+          if (/\.(app|command|tool|sh|zsh|scpt|terminal|pkg|dmg)$/i.test(realTarget)) {
+            res.json({ error: 'Refusing to open executable bundles from the dashboard' }, 400);
+            return;
+          }
+          target = realTarget;
         }
         if (!fs.existsSync(target)) { res.json({ error: 'Not found on disk: ' + target }, 404); return; }
         const openArgs = body.reveal ? ['-R', target] : [target];
