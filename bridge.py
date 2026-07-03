@@ -65,14 +65,14 @@ def get_db() -> sqlite3.Connection:
 def write_activity(event_type: str, agent_id: str | None, task_id: int | None,
                    summary: str, detail: dict | None = None) -> int:
     db = get_db()
-    db.execute(
+    cur = db.execute(
         "INSERT INTO activity_log (event_type, agent_id, task_id, summary, detail_json) "
         "VALUES (?, ?, ?, ?, ?)",
         (event_type, agent_id, task_id, summary[:500],
          json.dumps(detail) if detail else None)
     )
     db.commit()
-    return db.lastrowid
+    return cur.lastrowid
 
 # ── Topic Matcher ───────────────────────────────────────────────────
 def topic_matches(subscription: str, topic: str) -> bool:
