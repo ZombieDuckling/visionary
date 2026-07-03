@@ -165,8 +165,9 @@ const activeReviews = new Set();
 const reviewRetries = new Map();
 const MAX_REVIEW_RETRIES = 3;
 
-// Auto-review: dispatch Reviewer agent to evaluate completed work
-function triggerReview(taskId, runId, originalAgent, resultText) {
+// Auto-review: run the Reviewer through its failover chain to evaluate
+// completed work, with the original run's artifact list as evidence.
+async function triggerReview(taskId, runId, originalAgent, resultText) {
   // Prevent concurrent reviews on same task
   if (activeReviews.has(taskId)) return;
   activeReviews.add(taskId);
@@ -174,17 +175,30 @@ function triggerReview(taskId, runId, originalAgent, resultText) {
   const task = stmts.getTaskById.get(taskId);
   if (!task) { activeReviews.delete(taskId); return; }
 
-  const reviewPrompt = 'Review the output from agent "' + originalAgent + '" on task #' + taskId + ': "' + (task.title || '').replace(/"/g, '\\"') + '".\n\n'
-    + 'Task description: ' + (task.description || 'None').replace(/"/g, '\\"') + '\n\n'
-    + 'Agent output (first 2000 chars):\n' + (resultText || 'No output captured').substring(0, 2000).replace(/"/g, '\\"') + '\n\n'
-    + 'Evaluate for completeness, quality, correctness, and actionability.\n'
-    + 'Respond with EXACTLY one of these formats:\n'
-    + 'APPROVE: [one-line summary of what was delivered]\n'
-    + 'REJECT: [specific issues that need fixing]\n\n'
-    + 'Be strict. Only approve work that the user can use immediately.';
+  // Artifact evidence from the original run so the reviewer judges real
+  // deliverables instead of guessing from prose.
+  let workdir = null;
+  let artifactBlock = 'No files were recorded for this run.';
+  try {
+    const origRun = stmts.getRunById.get(runId);
+    workdir = origRun && origRun.workdir;
+    const artifacts = JSON.parse((origRun && origRun.artifacts_json) || '[]');
+    if (workdir && artifacts.length) {
+      artifactBlock = 'Files produced in ' + workdir + ':\n'
+        + artifacts.slice(0, 50).map(function (a) { return '- ' + a.path + ' (' + (a.size || 0) + ' bytes)'; }).join('\n');
+    }
+  } catch { /* keep default */ }
 
-  const args = ['agent', '--local', '--agent', 'reviewer', '--message', reviewPrompt, '--json', '--timeout', '120'];
-  const env = Object.assign({}, process.env, { PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' });
+  const reviewPrompt = 'You are reviewing the output of agent "' + originalAgent + '" on task #' + taskId + ': "' + (task.title || '') + '".\n\n'
+    + 'Task description: ' + (task.description || 'None') + '\n\n'
+    + artifactBlock + '\n\n'
+    + 'Agent report (first 2000 chars):\n' + (resultText || 'No output captured').substring(0, 2000) + '\n\n'
+    + 'You may read the produced files to verify them.\n'
+    + 'APPROVE when the deliverable does what the task asked, even if imperfect. '
+    + 'REJECT only for concrete, fixable defects — name each one specifically.\n'
+    + 'The FIRST line of your reply must be exactly one of:\n'
+    + 'APPROVE: <one-line summary of what was delivered>\n'
+    + 'REJECT: <specific issues that need fixing>';
 
   const reviewRun = stmts.insertRun.run({
     task_id: taskId, agent_id: 'reviewer', session_id: null,
@@ -200,93 +214,87 @@ function triggerReview(taskId, runId, originalAgent, resultText) {
   });
   bus.emit('activity:new', { event_type: 'review.started', agent_id: 'reviewer', task_id: taskId, summary: 'Reviewing ' + originalAgent + ' output' });
 
+  const env = Object.assign({}, process.env, { PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' });
   const startTime = Date.now();
-  const child = execFile('openclaw', args, { env, timeout: 130000, maxBuffer: 4 * 1024 * 1024 }, function (error, stdout, stderr) {
-    const durationMs = Date.now() - startTime;
-    const output = cleanCliOutput(stdout || '');
+  let result;
+  try {
+    result = await runtimes.executeWithFailover(
+      { getRuntime: runtimes.getRuntime, stmts, db },
+      resolveAgentRow('reviewer'),
+      // Read-only tools: the reviewer verifies, it does not fix.
+      { message: buildAgentPrompt('reviewer', reviewPrompt), agentId: 'reviewer', allowedTools: ['Read', 'Glob', 'Grep'] },
+      { timeout: 180000, env, cwd: workdir || __dirname }
+    );
+  } catch (err) {
+    result = { status: 'error', stdout: '', stderr: (err && err.message) || String(err) };
+  }
+  const durationMs = Date.now() - startTime;
+  const output = result.status === 'ok' ? extractResultText(cleanCliOutput(result.stdout || '')) : '';
 
-    if (!error && output) {
-      stmts.completeRun.run({ id: reviewRunId, status: 'completed', result_json: null, result_text: output, error: null, duration_ms: durationMs });
+  if (!output) {
+    stmts.completeRun.run({ id: reviewRunId, status: 'failed', result_json: null, result_text: null, error: (result.stderr || result.status || 'unknown').substring(0, 500), duration_ms: durationMs });
+    activeReviews.delete(taskId);
+    return;
+  }
 
-      const upperOutput = output.toUpperCase();
-      if (upperOutput.indexOf('APPROVE') !== -1) {
-        // Move task to done
-        stmts.updateTask.run({
-          id: taskId, title: task.title, description: task.description,
-          status: 'done', priority: task.priority,
-          agent_id: task.agent_id, sort_order: task.sort_order
-        });
-        const doneTask = stmts.getTaskById.get(taskId);
-        bus.emit('task:updated', doneTask);
+  stmts.completeRun.run({ id: reviewRunId, status: 'completed', result_json: null, result_text: output, error: null, duration_ms: durationMs });
 
-        const approveMatch = output.match(/APPROVE[:\s]*(.*)/i);
-        const summary = approveMatch ? approveMatch[1].trim().substring(0, 200) : 'Work approved';
+  // First structured verdict line wins — never keyword-anywhere matching,
+  // which false-fired on the rubric echoed back in the reply.
+  const verdictMatch = output.match(/\b(APPROVE|REJECT)\s*:\s*([^\n]*)/i);
+  if (!verdictMatch) {
+    // Inconclusive: leave the task in review for the operator instead of churning.
+    stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Review inconclusive for task #' + taskId, body: 'Reviewer gave no APPROVE/REJECT verdict — check the run output.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+    bus.emit('activity:new', { event_type: 'review.inconclusive', agent_id: 'reviewer', task_id: taskId, summary: 'Review inconclusive on "' + task.title + '"' });
+    activeReviews.delete(taskId);
+    return;
+  }
+  const verdict = verdictMatch[1].toUpperCase();
+  const detail = (verdictMatch[2] || '').trim().substring(0, 500);
 
-        stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'info', title: 'Reviewer approved task #' + taskId, body: summary, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
-        stmts.insertActivity.run({ event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Approved: ' + task.title + ' — ' + summary, detail_json: null });
-        bus.emit('activity:new', { event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, summary: 'Approved: ' + summary });
-        activeReviews.delete(taskId);
+  if (verdict === 'APPROVE') {
+    stmts.updateTask.run({
+      id: taskId, title: task.title, description: task.description,
+      status: 'done', priority: task.priority,
+      agent_id: task.agent_id, sort_order: task.sort_order
+    });
+    bus.emit('task:updated', stmts.getTaskById.get(taskId));
 
-      } else if (upperOutput.indexOf('REJECT') !== -1) {
-        // Move task back to todo and redeploy original agent
-        stmts.updateTask.run({
-          id: taskId, title: task.title, description: task.description,
-          status: 'todo', priority: task.priority,
-          agent_id: task.agent_id, sort_order: task.sort_order
-        });
-        const todoTask = stmts.getTaskById.get(taskId);
-        bus.emit('task:updated', todoTask);
+    const summary = detail || 'Work approved';
+    stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'info', title: 'Reviewer approved task #' + taskId, body: summary, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+    stmts.insertActivity.run({ event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Approved: ' + task.title + ' — ' + summary, detail_json: null });
+    bus.emit('activity:new', { event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, summary: 'Approved: ' + summary });
+    reviewRetries.delete(taskId);
+    activeReviews.delete(taskId);
+    return;
+  }
 
-        const rejectMatch = output.match(/REJECT[:\s]*(.*)/i);
-        const feedback = rejectMatch ? rejectMatch[1].trim().substring(0, 500) : 'Quality issues found';
+  // REJECT
+  const feedback = detail || 'Quality issues found';
+  stmts.insertActivity.run({ event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Rejected: ' + task.title + ' — ' + feedback, detail_json: null });
+  bus.emit('activity:new', { event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, summary: 'Rejected: ' + feedback });
+  activeReviews.delete(taskId);
 
-        stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Reviewer rejected task #' + taskId, body: feedback + ' — Redeploying ' + originalAgent, action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
-        stmts.insertActivity.run({ event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, project_id: task.project_id, summary: 'Rejected: ' + task.title + ' — ' + feedback, detail_json: null });
-        bus.emit('activity:new', { event_type: 'review.rejected', agent_id: 'reviewer', task_id: taskId, summary: 'Rejected: ' + feedback });
-        activeReviews.delete(taskId);
+  const retries = reviewRetries.get(taskId) || 0;
+  if (retries >= MAX_REVIEW_RETRIES) {
+    // Give up gracefully: leave it in review for the operator, don't loop.
+    stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'error', title: 'Review max retries reached for task #' + taskId, body: 'Task rejected ' + retries + ' times. Latest feedback: ' + feedback + ' — manual intervention needed.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
+    reviewRetries.delete(taskId);
+    return;
+  }
+  reviewRetries.set(taskId, retries + 1);
 
-        // Redeploy original agent with review feedback (with retry limit)
-        const retries = reviewRetries.get(taskId) || 0;
-        if (retries >= MAX_REVIEW_RETRIES) {
-          stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'error', title: 'Review max retries reached for task #' + taskId, body: 'Task rejected ' + retries + ' times. Manual intervention needed.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
-          reviewRetries.delete(taskId);
-          return;
-        }
-        reviewRetries.set(taskId, retries + 1);
+  stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Reviewer rejected task #' + taskId, body: feedback + ' — Redeploying ' + originalAgent + ' (attempt ' + (retries + 1) + '/' + MAX_REVIEW_RETRIES + ')', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
 
-        setTimeout(function () {
-          const redeployMsg = 'Your previous work on task "' + task.title + '" was reviewed and rejected. Feedback: ' + feedback + '\n\nOriginal task: ' + (task.description || task.title) + '\n\nThis is attempt ' + (retries + 1) + ' of ' + MAX_REVIEW_RETRIES + '. Please fix the issues and redo the work.';
-          const redeployArgs = ['agent', '--local', '--agent', originalAgent, '--message', redeployMsg, '--json', '--timeout', '600'];
-
-          const redeployRun = stmts.insertRun.run({ task_id: taskId, agent_id: originalAgent, session_id: null, message: 'Redeploy after review rejection', status: 'running' });
-          const redeployRunId = Number(redeployRun.lastInsertRowid);
-
-          stmts.updateTask.run({ id: taskId, title: task.title, description: task.description, status: 'in_progress', priority: task.priority, agent_id: originalAgent, sort_order: task.sort_order });
-          bus.emit('task:updated', stmts.getTaskById.get(taskId));
-          bus.emit('activity:new', { event_type: 'agent.redeployed', agent_id: originalAgent, task_id: taskId, summary: originalAgent + ' redeployed on "' + task.title + '" after review rejection' });
-
-          const redeployStart = Date.now();
-          execFile('openclaw', redeployArgs, { env, timeout: 610000, maxBuffer: 4 * 1024 * 1024 }, function (err2, stdout2) {
-            const dur2 = Date.now() - redeployStart;
-            const out2 = cleanCliOutput(stdout2 || '');
-            if (!err2 && out2) {
-              stmts.completeRun.run({ id: redeployRunId, status: 'completed', result_json: null, result_text: out2, error: null, duration_ms: dur2 });
-              stmts.updateTask.run({ id: taskId, title: task.title, description: task.description, status: 'review', priority: task.priority, agent_id: originalAgent, sort_order: task.sort_order });
-              bus.emit('task:updated', stmts.getTaskById.get(taskId));
-              // Trigger review again
-              triggerReview(taskId, redeployRunId, originalAgent, out2);
-            } else {
-              stmts.completeRun.run({ id: redeployRunId, status: 'failed', result_json: null, result_text: null, error: (err2 || {}).message || 'unknown', duration_ms: dur2 });
-            }
-          });
-        }, 2000);
-      }
-    } else {
-      stmts.completeRun.run({ id: reviewRunId, status: 'failed', result_json: null, result_text: null, error: (error || {}).message || 'unknown', duration_ms: durationMs });
-      activeReviews.delete(taskId);
-    }
-  });
-  child.unref();
+  setTimeout(function () {
+    const redeployMsg = 'Your previous work on task "' + task.title + '" was reviewed and rejected. Feedback: ' + feedback
+      + '\n\nOriginal task: ' + (task.description || task.title)
+      + '\n\nThis is attempt ' + (retries + 1) + ' of ' + MAX_REVIEW_RETRIES + '. Please fix the issues and redo the work.';
+    bus.emit('activity:new', { event_type: 'agent.redeployed', agent_id: originalAgent, task_id: taskId, summary: originalAgent + ' redeployed on "' + task.title + '" after review rejection' });
+    // dispatchAgent reuses the workdir/failover/artifact machinery and its
+    // completion path re-enters triggerReview for the next round.
+    dispatchAgent(taskId, originalAgent, redeployMsg);
+  }, 2000);
 }
 
 // Inter-agent messaging: agents can leave messages for each other via the activity_log
@@ -624,9 +632,13 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
         const outputTok = usage.output_tokens || 0;
         const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
         const isLlama = agentCfg && agentCfg.model && agentCfg.model.indexOf('llama') !== -1;
-        const cost = isLlama
-          ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
-          : (inputTok * 0.003 + outputTok * 0.015) / 1000;
+        // Prefer the harness's own cost figure (claude --output-format json
+        // emits total_cost_usd); fall back to a rough per-token estimate.
+        const cost = typeof parsed.total_cost_usd === 'number'
+          ? parsed.total_cost_usd
+          : isLlama
+            ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
+            : (inputTok * 0.003 + outputTok * 0.015) / 1000;
         stmts.updateRunTokens.run({ id: runId, input_tokens: inputTok, output_tokens: outputTok, estimated_cost_usd: cost });
       }
     } catch (_tokenErr) { /* no usage data */ }
@@ -670,7 +682,12 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
       new_artifact_count: artifacts.filter(a => a.new).length
     });
 
-    if (agentId !== 'reviewer') triggerReview(taskId, runId, agentId, resultText);
+    if (agentId !== 'reviewer') {
+      triggerReview(taskId, runId, agentId, resultText).catch(function (err) {
+        console.error('[review] failed for task #' + taskId + ':', (err && err.message) || err);
+        activeReviews.delete(taskId);
+      });
+    }
     bus.emit('activity:new', {
       event_type: 'agent.completed', agent_id: agentId, task_id: taskId,
       summary: agentId + ' completed task #' + taskId + harnessLabel + ' (' + Math.round(durationMs / 1000) + 's)'

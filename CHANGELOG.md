@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Argus takes over: a trustworthy orchestrator with visible work
+
+The orchestrator formerly known as Jarvis is now **Argus**, running Hermes-first with failover, and every task finally leaves a paper trail: a working directory you can open in Finder, a recorded file list, and a run history on the task card.
+
+### Added
+- **Task artifacts** — every dispatch runs inside `~/Visionary/<project>/task-<id>`; runs record the workdir and every file produced (`agent_runs.workdir`, `artifacts_json`). Task detail shows a Runs & Artifacts panel with output, file list, Open Folder, and click-to-open files (`GET /api/runs/:id`, `POST /api/runs/:id/open` with realpath containment).
+- **Cost capture (claude)** — the claude adapter dispatches with `--output-format json`; runs store real `input_tokens`/`output_tokens` and the harness's own `total_cost_usd` instead of estimates.
+- **launchd lifecycle** — `ai.visionary.server` + `ai.visionary.watchdog` KeepAlive services; `vision start|stop|restart|status` drive launchd when installed (plain background process otherwise). New `vision restart`.
+
+### Changed
+- **Jarvis → Argus** — new identity (`personalities/agents/argus.md`), harness chain `hermes → claude-code → codex`; DB migration carries messages/health/tasks history to the new id.
+- **Chat rides the failover engine** — `/api/chat` routes through `executeWithFailover` with read-only tools instead of a hardcoded `openclaw agent --local` call; Hermes adapter uses `-Q` quiet mode.
+- **Reviewer rebuilt** — reviews run through the reviewer's harness chain with the run's artifact list as evidence and read-only tools; verdicts parse the structured first `APPROVE:`/`REJECT:` line (no more keyword-anywhere false verdicts); inconclusive reviews stay in Review for the operator; rejection redeploys go through the normal dispatch path (workdir + failover); max-retry tasks stay in Review instead of bouncing to todo.
+
+### Fixed
+- `bridge.py` heartbeat crash (`sqlite3.Connection` has no `lastrowid`).
+- Chat `CREATE_TASK` parser no longer fires on the instruction template echoed back by harnesses; missing `project_id` in chat task-creation activity writes.
+- `/api/runs/:id/open` rejects symlink escapes and executable bundles.
+
 ## [2.1.0] — 2026-06-10
 
 ### The working-core release: agents actually run
