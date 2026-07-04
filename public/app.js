@@ -482,12 +482,20 @@
         html += renderOrchestratorPanel(orchestrator);
       }
 
+      var recentSpend = 0;
+      recentRuns.forEach(function (r) {
+        if (r.estimated_cost_usd != null) recentSpend += Number(r.estimated_cost_usd);
+      });
+      var spendDetail = recentRuns.length ? 'recent ' + recentRuns.length + ' runs' : 'recent runs';
+      var spendValue = recentSpend > 0 ? '$' + recentSpend.toFixed(4) : '$0.00';
+
       html += '<div class="overview-metrics">'
         + overviewMetric('Open tasks', (tasks.todo || 0) + (tasks.in_progress || 0) + (tasks.review || 0), 'todo ' + (tasks.todo || 0) + ' · active ' + (tasks.in_progress || 0) + ' · review ' + (tasks.review || 0))
         + overviewMetric('Done', tasks.done || 0, 'completed tasks')
         + overviewMetric('Agents running', counts.active_dispatches || 0, 'db running ' + (runs.running || 0))
         + overviewMetric('Projects', projects.active || 0, 'active')
         + overviewMetric('Unread', counts.unread_notifications || 0, 'notifications')
+        + overviewMetric('Spend', spendValue, spendDetail)
         + '</div>';
 
       if (staleRuns.length) {
@@ -877,6 +885,7 @@
     var healthCls = 'health-' + healthStatus;
     var model = (agentObj.model || '').replace(/-\d{8}$/, '');
     var runtime = agentObj.runtime || '';
+    var lastRunCost = (agentObj.last_run_cost != null) ? agentObj.last_run_cost : null;
     var chain = (nd.harness_chain || []).map(function (h) {
       var active = h === nd.current_harness;
       return '<span class="org-harness' + (active ? ' active' : '') + '">' + esc(h) + '</span>';
@@ -898,6 +907,7 @@
       +     (runtime  ? '<span class="drawer-meta-key">Runtime</span><span class="drawer-meta-val">' + esc(runtime) + '</span>' : '')
       +     '<span class="drawer-meta-key">Health</span><span class="drawer-meta-val drawer-health-' + esc(healthStatus) + '">' + esc(healthStatus) + '</span>'
       +     (chain    ? '<span class="drawer-meta-key">Harness</span><div class="org-harness-chain drawer-harness-chain">' + chain + '</div>' : '')
+      +     (lastRunCost != null ? '<span class="drawer-meta-key">Last run cost</span><span class="drawer-meta-val drawer-meta-cost">$' + Number(lastRunCost).toFixed(4) + '</span>' : '')
       +     '<span class="drawer-meta-key">Watchdog</span>' + watchdogInfo
       +   '</div>'
       + '</div>'
@@ -2023,12 +2033,23 @@
             + '<span class="run-file-size">' + Math.max(1, Math.round((f.size || 0) / 1024)) + ' KB</span>'
             + '</div>';
         }).join('');
+        var costStr = '';
+        if (r.estimated_cost_usd != null) {
+          costStr = ' · <span class="run-cost">$' + Number(r.estimated_cost_usd).toFixed(4) + '</span>';
+        }
+        var tokStr = '';
+        if (r.input_tokens != null || r.output_tokens != null) {
+          tokStr = ' · <span class="run-tokens">' + (r.input_tokens != null ? esc(String(r.input_tokens)) + ' in' : '') + (r.input_tokens != null && r.output_tokens != null ? ' / ' : '') + (r.output_tokens != null ? esc(String(r.output_tokens)) + ' out' : '') + '</span>';
+        }
         return '<div class="run-item">'
           + '<div class="run-head">'
           + '<span class="run-badge run-badge-' + statusClass + '">' + esc(r.status) + '</span>'
           + '<span class="run-meta">#' + r.id
           + (r.completed_at ? ' · ' + timeAgo(r.completed_at) : '')
-          + (r.duration_ms ? ' · ' + Math.round(r.duration_ms / 1000) + 's' : '') + '</span>'
+          + (r.duration_ms ? ' · ' + Math.round(r.duration_ms / 1000) + 's' : '')
+          + costStr
+          + tokStr
+          + '</span>'
           + (r.workdir ? '<button type="button" class="btn btn-small run-open-btn" data-run-id="' + r.id + '">Open Folder</button>' : '')
           + '</div>'
           + (r.result_text ? '<div class="run-result">' + esc(String(r.result_text).substring(0, 400)) + '</div>' : '')
