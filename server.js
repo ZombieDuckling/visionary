@@ -166,6 +166,21 @@ const activeReviews = new Set();
 const reviewRetries = new Map();
 const MAX_REVIEW_RETRIES = 3;
 
+// A run that completes while another run of the same task is under review is
+// skipped by the activeReviews guard — after a review settles, catch up on
+// the newest completed run so no work goes unreviewed.
+function reviewLatestIfNewer(taskId, reviewedRunId) {
+  try {
+    const latest = stmts.getRunsByTask.all(taskId).find(function (r) {
+      return r.status === 'completed' && r.agent_id !== 'reviewer';
+    });
+    if (latest && latest.id > reviewedRunId) {
+      triggerReview(taskId, latest.id, latest.agent_id, extractResultText(latest.result_text || ''))
+        .catch(function () { /* logged inside */ });
+    }
+  } catch { /* never block the settled review */ }
+}
+
 // Auto-review: run the Reviewer through its failover chain to evaluate
 // completed work, with the original run's artifact list as evidence.
 async function triggerReview(taskId, runId, originalAgent, resultText) {
@@ -248,6 +263,7 @@ async function triggerReview(taskId, runId, originalAgent, resultText) {
     stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Review inconclusive for task #' + taskId, body: 'Reviewer gave no APPROVE/REJECT verdict — check the run output.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
     bus.emit('activity:new', { event_type: 'review.inconclusive', agent_id: 'reviewer', task_id: taskId, summary: 'Review inconclusive on "' + task.title + '"' });
     activeReviews.delete(taskId);
+    reviewLatestIfNewer(taskId, runId);
     return;
   }
   const verdict = parsed.verdict;
@@ -267,6 +283,7 @@ async function triggerReview(taskId, runId, originalAgent, resultText) {
     bus.emit('activity:new', { event_type: 'review.approved', agent_id: 'reviewer', task_id: taskId, summary: 'Approved: ' + summary });
     reviewRetries.delete(taskId);
     activeReviews.delete(taskId);
+    reviewLatestIfNewer(taskId, runId);
     return;
   }
 
@@ -281,6 +298,7 @@ async function triggerReview(taskId, runId, originalAgent, resultText) {
     // Give up gracefully: leave it in review for the operator, don't loop.
     stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'error', title: 'Review max retries reached for task #' + taskId, body: 'Task rejected ' + retries + ' times. Latest feedback: ' + feedback + ' — manual intervention needed.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
     reviewRetries.delete(taskId);
+    reviewLatestIfNewer(taskId, runId);
     return;
   }
   reviewRetries.set(taskId, retries + 1);
@@ -449,10 +467,13 @@ function collectArtifacts(workdir, sinceMs) {
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const ent of entries) {
       if (ent.name.startsWith('.') || ent.name === 'node_modules') continue;
+      // Never follow symlinks — an agent could plant one pointing outside
+      // the task workdir and leak arbitrary paths into the artifact list.
+      if (ent.isSymbolicLink()) continue;
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) { walk(full, depth + 1); continue; }
       let st;
-      try { st = fs.statSync(full); } catch { continue; }
+      try { st = fs.lstatSync(full); } catch { continue; }
       files.push({
         path: path.relative(workdir, full),
         size: st.size,
@@ -884,6 +905,25 @@ const server = http.createServer(async (req, res) => {
     const pathname = url.pathname;
     const method = req.method;
 
+    // Local-only hardening for the API: block DNS-rebinding (Host header must
+    // be loopback unless the operator explicitly bound elsewhere) and reject
+    // cross-site browser writes (Origin) — several POSTs trigger OS actions.
+    if (pathname.startsWith('/api/')) {
+      const loopbackRe = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i;
+      const customHost = process.env.VISIONARY_HOST && process.env.VISIONARY_HOST !== '127.0.0.1';
+      if (!customHost && !loopbackRe.test(String(req.headers.host || ''))) {
+        res.json({ error: 'Forbidden host' }, 403);
+        return;
+      }
+      if (method !== 'GET' && method !== 'HEAD') {
+        const origin = req.headers.origin;
+        if (origin && !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) {
+          res.json({ error: 'Cross-origin request rejected' }, 403);
+          return;
+        }
+      }
+    }
+
     // GET / -> serve index HTML
     if (method === 'GET' && pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -1214,37 +1254,36 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         activeChats++;
-
-        const msg = body.message;
-
-        // Log user message to activity
-        stmts.insertActivity.run({
-          event_type: 'chat.user', agent_id: 'user', task_id: null,
-          project_id: null, summary: 'User: ' + msg.substring(0, 100),
-          detail_json: JSON.stringify({ message: msg })
-        });
-
-        // Build context-aware prompt for Jarvis
-        // Read current dashboard state to give Jarvis awareness
-        const boardTasks = stmts.getAllTasks.all();
-        const counts = { todo: 0, in_progress: 0, review: 0, done: 0 };
-        boardTasks.forEach(function(t) { counts[t.status] = (counts[t.status] || 0) + 1; });
-
-        const recentAct = stmts.getRecentActivity.all(5);
-        const actSummary = recentAct.map(function(a) { return a.summary; }).join('; ');
-
-        const chatMsg = '[Dashboard] Board: ' + counts.todo + ' todo, ' + counts.in_progress + ' wip, ' + counts.review + ' review, ' + counts.done + ' done. '
-          + 'You can create tasks on the kanban board. To create a task, include CREATE_TASK: title | description | agent_id | priority in your response. '
-          + 'To move a task, include MOVE_TASK: task_id | new_status. '
-          + 'Current tasks: ' + boardTasks.map(function(t) { return '#' + t.id + ' "' + t.title + '" [' + t.status + ']'; }).join(', ') + '. '
-          + msg;
-
-        // Dispatch through Argus's full harness chain (hermes → claude-code →
-        // codex) with failover, instead of a hardcoded OpenClaw CLI call.
-        const chatEnv = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
-        const ceoRow = resolveAgentRow('argus');
+        // Everything between the increment and the finally below may throw
+        // (DB writes, prompt build) — the finally guarantees the slot is
+        // released so chat can't wedge itself at MAX_CHATS.
         let chatResult;
         try {
+          const msg = body.message;
+
+          // Log user message to activity
+          stmts.insertActivity.run({
+            event_type: 'chat.user', agent_id: 'user', task_id: null,
+            project_id: null, summary: 'User: ' + msg.substring(0, 100),
+            detail_json: JSON.stringify({ message: msg })
+          });
+
+          // Build context-aware prompt for Argus
+          // Read current dashboard state to give Argus awareness
+          const boardTasks = stmts.getAllTasks.all();
+          const counts = { todo: 0, in_progress: 0, review: 0, done: 0 };
+          boardTasks.forEach(function(t) { counts[t.status] = (counts[t.status] || 0) + 1; });
+
+          const chatMsg = '[Dashboard] Board: ' + counts.todo + ' todo, ' + counts.in_progress + ' wip, ' + counts.review + ' review, ' + counts.done + ' done. '
+            + 'You can create tasks on the kanban board. To create a task, include CREATE_TASK: title | description | agent_id | priority in your response. '
+            + 'To move a task, include MOVE_TASK: task_id | new_status. '
+            + 'Current tasks: ' + boardTasks.map(function(t) { return '#' + t.id + ' "' + t.title + '" [' + t.status + ']'; }).join(', ') + '. '
+            + msg;
+
+          // Dispatch through Argus's full harness chain (hermes → claude-code →
+          // codex) with failover, instead of a hardcoded OpenClaw CLI call.
+          const chatEnv = { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' };
+          const ceoRow = resolveAgentRow('argus');
           chatResult = await runtimes.executeWithFailover(
             { getRuntime: runtimes.getRuntime, stmts, db },
             ceoRow,
@@ -1255,8 +1294,9 @@ const server = http.createServer(async (req, res) => {
           );
         } catch (err) {
           chatResult = { status: 'error', stdout: '', stderr: (err && err.message) || String(err) };
+        } finally {
+          activeChats = Math.max(0, activeChats - 1);
         }
-        activeChats = Math.max(0, activeChats - 1);
         if (!res.writableEnded) {
           if (chatResult.status === 'ok' && chatResult.stdout) {
             const cleaned = cleanCliOutput(chatResult.stdout);
@@ -1799,15 +1839,28 @@ const server = http.createServer(async (req, res) => {
         const run = stmts.getRunById.get(runId);
         if (!run) { res.json({ error: 'Run not found' }, 404); return; }
         if (!run.workdir) { res.json({ error: 'Run has no working directory recorded' }, 404); return; }
+        // Pin the root: the recorded workdir must be a real (non-symlink)
+        // directory living under ARTIFACT_ROOT before anything is opened.
+        let realRoot;
+        try {
+          if (fs.lstatSync(run.workdir).isSymbolicLink()) {
+            res.json({ error: 'Workdir is a symlink — refusing to open' }, 400);
+            return;
+          }
+          realRoot = fs.realpathSync(run.workdir);
+          const rootBase = fs.realpathSync(ARTIFACT_ROOT);
+          if (realRoot !== rootBase && !realRoot.startsWith(rootBase + path.sep)) {
+            res.json({ error: 'Workdir is outside the artifact root' }, 400);
+            return;
+          }
+        } catch { res.json({ error: 'Workdir missing on disk' }, 404); return; }
         const body = (await readBody(req)) || {};
-        let target = run.workdir;
+        let target = realRoot;
         if (body.path) {
-          const resolved = path.resolve(run.workdir, String(body.path));
-          let realTarget, realRoot;
-          try {
-            realTarget = fs.realpathSync(resolved);
-            realRoot = fs.realpathSync(run.workdir);
-          } catch { res.json({ error: 'Not found on disk: ' + resolved }, 404); return; }
+          const resolved = path.resolve(realRoot, String(body.path));
+          let realTarget;
+          try { realTarget = fs.realpathSync(resolved); }
+          catch { res.json({ error: 'Not found on disk: ' + resolved }, 404); return; }
           // Compare realpaths so a symlink inside the workdir can't escape it.
           if (realTarget !== realRoot && !realTarget.startsWith(realRoot + path.sep)) {
             res.json({ error: 'Path escapes the run workdir' }, 400);

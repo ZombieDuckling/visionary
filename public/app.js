@@ -2405,7 +2405,7 @@
               + '<span class="badge ' + statusCls + '">' + esc(r.status) + '</span>'
               + '<span>' + esc(r.agent_id) + ' - Task #' + esc(r.task_id) + '</span>'
               + '<span class="text-muted">' + timeAgo(r.created_at) + '</span>'
-              + (r.estimated_cost_usd ? '<span class="agent-cost">$' + r.estimated_cost_usd.toFixed(4) + '</span>' : '')
+              + (Number.isFinite(Number(r.estimated_cost_usd)) && Number(r.estimated_cost_usd) > 0 ? '<span class="agent-cost">$' + Number(r.estimated_cost_usd).toFixed(4) + '</span>' : '')
               + '</div>';
           });
           html += '</div>';
