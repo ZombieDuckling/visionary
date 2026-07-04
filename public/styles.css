@@ -1670,3 +1670,8 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
   font-size: var(--font-size-xl);
   font-family: var(--font-mono);
 }
+
+/* ── Chat sessions (persistent multi-chat) ───────────────────────── */
+.chat-session-select { flex: 1; min-width: 0; margin: 0 var(--space-xs); font-size: var(--font-size-xs); background: transparent; color: var(--text-secondary); border: 1px solid var(--separator); border-radius: 6px; padding: 2px 4px; }
+.chat-new { background: none; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 6px; line-height: 1; }
+.chat-new:hover { background: rgba(120, 120, 128, 0.1); color: var(--text-primary); }

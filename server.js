@@ -1243,6 +1243,41 @@ const server = http.createServer(async (req, res) => {
       }
 
       // POST /api/chat — send message to Jarvis orchestrator, get response
+      // GET /api/chat/sessions — list chat sessions (newest first)
+      if (method === 'GET' && pathname === '/api/chat/sessions') {
+        res.json({ sessions: stmts.getChatSessions.all() });
+        return;
+      }
+
+      // POST /api/chat/sessions — start a new chat session
+      if (method === 'POST' && pathname === '/api/chat/sessions') {
+        const body = (await readBody(req)) || {};
+        const created = stmts.insertChatSession.run({ title: String(body.title || 'New chat').substring(0, 60) });
+        res.json({ session: stmts.getChatSessionById.get(Number(created.lastInsertRowid)) }, 201);
+        return;
+      }
+
+      // GET /api/chat/sessions/:id — session + full message history
+      if (method === 'GET' && /^\/api\/chat\/sessions\/(\d+)$/.test(pathname)) {
+        const sid = parseInt(pathname.match(/^\/api\/chat\/sessions\/(\d+)$/)[1], 10);
+        const chatSession = stmts.getChatSessionById.get(sid);
+        if (!chatSession) { res.json({ error: 'Session not found' }, 404); return; }
+        res.json({ session: chatSession, messages: stmts.getChatMessages.all(sid) });
+        return;
+      }
+
+      // DELETE /api/chat/sessions/:id — remove a session and its messages
+      if (method === 'DELETE' && /^\/api\/chat\/sessions\/(\d+)$/.test(pathname)) {
+        const sid = parseInt(pathname.match(/^\/api\/chat\/sessions\/(\d+)$/)[1], 10);
+        const wipe = db.transaction(function () {
+          stmts.deleteChatMessagesBySession.run(sid);
+          stmts.deleteChatSession.run(sid);
+        });
+        wipe();
+        res.json({ ok: true });
+        return;
+      }
+
       if (method === 'POST' && pathname === '/api/chat') {
         const body = await readBody(req);
         if (!body || !body.message) {
@@ -1253,6 +1288,17 @@ const server = http.createServer(async (req, res) => {
           res.json({ error: 'too many concurrent chats, try again soon' }, 429);
           return;
         }
+
+        // Resolve the persistent session: reuse the provided id, or start a
+        // new session titled from the first message.
+        let session = null;
+        if (body.session_id) session = stmts.getChatSessionById.get(parseInt(body.session_id, 10));
+        if (!session) {
+          const title = String(body.message).replace(/\s+/g, ' ').trim().substring(0, 48) || 'New chat';
+          const created = stmts.insertChatSession.run({ title });
+          session = stmts.getChatSessionById.get(Number(created.lastInsertRowid));
+        }
+
         activeChats++;
         // Everything between the increment and the finally below may throw
         // (DB writes, prompt build) — the finally guarantees the slot is
@@ -1265,20 +1311,37 @@ const server = http.createServer(async (req, res) => {
           stmts.insertActivity.run({
             event_type: 'chat.user', agent_id: 'user', task_id: null,
             project_id: null, summary: 'User: ' + msg.substring(0, 100),
-            detail_json: JSON.stringify({ message: msg })
+            detail_json: JSON.stringify({ message: msg, session_id: session.id })
           });
 
-          // Build context-aware prompt for Argus
-          // Read current dashboard state to give Argus awareness
+          // Persist the operator's turn, then replay this session's recent
+          // history so Argus keeps context across restarts and failovers.
+          stmts.insertChatMessage.run({ session_id: session.id, role: 'user', content: msg, harness: null });
+          const priorTurns = stmts.getRecentChatMessages.all(session.id, 13)
+            .slice(1) // exclude the message just persisted
+            .reverse();
+          const historyBlock = priorTurns.length
+            ? '[CONVERSATION SO FAR]\n' + priorTurns.map(function (m) { return '<' + m.role + '> ' + String(m.content).substring(0, 1500); }).join('\n') + '\n\n'
+            : '';
+
+          // Situational awareness: where it is, what it commands, how to act.
           const boardTasks = stmts.getAllTasks.all();
           const counts = { todo: 0, in_progress: 0, review: 0, done: 0 };
           boardTasks.forEach(function(t) { counts[t.status] = (counts[t.status] || 0) + 1; });
 
-          const chatMsg = '[Dashboard] Board: ' + counts.todo + ' todo, ' + counts.in_progress + ' wip, ' + counts.review + ' review, ' + counts.done + ' done. '
-            + 'You can create tasks on the kanban board. To create a task, include CREATE_TASK: title | description | agent_id | priority in your response. '
-            + 'To move a task, include MOVE_TASK: task_id | new_status. '
-            + 'Current tasks: ' + boardTasks.map(function(t) { return '#' + t.id + ' "' + t.title + '" [' + t.status + ']'; }).join(', ') + '. '
-            + msg;
+          const chatMsg = '[VISIONARY CONTEXT]\n'
+            + 'You are chatting with your operator inside the Visionary Mission Control dashboard — the kanban + agent-org UI you run (local, single operator). You are Argus, the orchestrator: you get things done by commanding your agents, not by doing the work in this chat.\n'
+            + 'Your agents (dispatch ids): scout, analyst, researcher (Intelligence pod) | forge, coder, designer (Engineering pod) | sentinel, hunter (Security pod) | ops, broker, reviewer (Operations pod).\n'
+            + 'Dispatched work runs in ~/Visionary/<project>/task-<id>; produced files appear on the task card, and the Reviewer checks completed work automatically.\n'
+            + 'Board: ' + counts.todo + ' todo, ' + counts.in_progress + ' wip, ' + counts.review + ' review, ' + counts.done + ' done. '
+            + 'Tasks: ' + boardTasks.map(function(t) { return '#' + t.id + ' "' + t.title + '" [' + t.status + ']'; }).join(', ') + '.\n'
+            + 'ACTIONS — to make something happen, put one of these markers on its own line in your reply and the dashboard executes it:\n'
+            + 'CREATE_TASK: title | description | agent_id | priority\n'
+            + 'MOVE_TASK: task_id | todo|in_progress|review|done\n'
+            + 'DISPATCH_TASK: task_id | agent_id   (immediately puts that agent to work on the task)\n'
+            + 'Use an action only when the operator wants work done; otherwise just answer concisely.\n\n'
+            + historyBlock
+            + '[OPERATOR MESSAGE]\n' + msg;
 
           // Dispatch through Argus's full harness chain (hermes → claude-code →
           // codex) with failover, instead of a hardcoded OpenClaw CLI call.
@@ -1364,16 +1427,34 @@ const server = http.createServer(async (req, res) => {
               }
             }
 
+            // DISPATCH_TASK: task_id | agent_id — Argus putting an agent to work.
+            const dispatchedTasks = [];
+            const dispatchMatch = responseText.match(/\bDISPATCH_TASK:\s*(\d+)\s*\|\s*([\w-]+)/i);
+            if (dispatchMatch) {
+              const dTaskId = parseInt(dispatchMatch[1], 10);
+              const dAgent = dispatchMatch[2].trim().toLowerCase();
+              const dTask = stmts.getTaskById.get(dTaskId);
+              if (dTask && validAgentIds.indexOf(dAgent) !== -1 && dAgent !== 'agent_id') {
+                const dRunId = dispatchAgent(dTaskId, dAgent, dTask.title + (dTask.description ? ': ' + dTask.description : ''));
+                dispatchedTasks.push({ task_id: dTaskId, agent_id: dAgent, run_id: dRunId });
+                bus.emit('activity:new', { event_type: 'agent.dispatched', agent_id: dAgent, task_id: dTaskId, summary: 'Argus dispatched ' + dAgent + ' on task #' + dTaskId });
+              }
+            }
+
+            // Persist the assistant turn so the session survives restarts.
+            stmts.insertChatMessage.run({ session_id: session.id, role: 'assistant', content: responseText, harness: chatResult.harness || null });
+            stmts.touchChatSession.run(session.id);
+
             stmts.insertActivity.run({
               event_type: 'chat.agent', agent_id: 'argus', task_id: createdTasks.length ? createdTasks[0].id : null,
               project_id: null, summary: 'Argus: ' + responseText.substring(0, 100),
-              detail_json: JSON.stringify({ response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks })
+              detail_json: JSON.stringify({ response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks, dispatched_tasks: dispatchedTasks, session_id: session.id })
             });
             bus.emit('activity:new', { event_type: 'chat.agent', agent_id: 'argus', summary: 'Argus responded' });
 
-            res.json({ agent: 'argus', response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks, harness: chatResult.harness });
+            res.json({ agent: 'argus', session_id: session.id, response: responseText, created_tasks: createdTasks, moved_tasks: movedTasks, dispatched_tasks: dispatchedTasks, harness: chatResult.harness });
           } else {
-            res.json({ agent: 'argus', response: 'Error: ' + String(chatResult.stderr || chatResult.status || 'unknown').substring(0, 200) }, 500);
+            res.json({ agent: 'argus', session_id: session.id, response: 'Error: ' + String(chatResult.stderr || chatResult.status || 'unknown').substring(0, 200) }, 500);
           }
         }
         return;

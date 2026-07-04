@@ -238,6 +238,26 @@ const migrations = [
   UPDATE agent_health_log SET agent_id = 'argus' WHERE agent_id = 'jarvis';
   UPDATE tasks SET agent_id = 'argus' WHERE agent_id = 'jarvis';
   UPDATE agent_runs SET agent_id = 'argus' WHERE agent_id = 'jarvis';
+  `,
+
+  // Migration 9 -> 10: Persistent multi-session orchestrator chat
+  `
+  CREATE TABLE IF NOT EXISTS chat_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL DEFAULT 'New chat',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES chat_sessions(id),
+    role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+    content TEXT NOT NULL,
+    harness TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, id);
   `
 ];
 
@@ -523,6 +543,26 @@ const stmts = {
   markScheduleRun: db.prepare(`
     UPDATE schedules SET last_run_at = datetime('now'), last_status = ?, last_detail = ? WHERE id = ?
   `),
+
+  // Chat session statements
+  insertChatSession: db.prepare(`INSERT INTO chat_sessions (title) VALUES (@title)`),
+  getChatSessions: db.prepare(`
+    SELECT s.*,
+      (SELECT content FROM chat_messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_message,
+      (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id) AS message_count
+    FROM chat_sessions s ORDER BY s.updated_at DESC
+  `),
+  getChatSessionById: db.prepare(`SELECT * FROM chat_sessions WHERE id = ?`),
+  touchChatSession: db.prepare(`UPDATE chat_sessions SET updated_at = datetime('now') WHERE id = ?`),
+  renameChatSession: db.prepare(`UPDATE chat_sessions SET title = @title, updated_at = datetime('now') WHERE id = @id`),
+  deleteChatSession: db.prepare(`DELETE FROM chat_sessions WHERE id = ?`),
+  insertChatMessage: db.prepare(`
+    INSERT INTO chat_messages (session_id, role, content, harness)
+    VALUES (@session_id, @role, @content, @harness)
+  `),
+  getChatMessages: db.prepare(`SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id`),
+  getRecentChatMessages: db.prepare(`SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id DESC LIMIT ?`),
+  deleteChatMessagesBySession: db.prepare(`DELETE FROM chat_messages WHERE session_id = ?`),
 
   // Cleanup statements
   pruneAgentMessages: db.prepare(`DELETE FROM agent_messages WHERE created_at < datetime('now', ?)`),
