@@ -20,8 +20,9 @@
     "rebuild:node": "npm rebuild better-sqlite3",
     "check": "node --check server.js && node --check db.js && node --check sse.js && node --check electron.js && node --check public/app.js",
     "smoke": "node --test tests/smoke.mjs",
+    "test:unit": "node --test tests/*.test.mjs",
     "test:stream": "node scripts/stream-smoke.mjs",
-    "verify": "npm run ensure-native && npm run check && npm run smoke && npm run test:stream"
+    "verify": "npm run ensure-native && npm run check && npm run smoke && npm run test:stream && npm run test:unit"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0"
@@ -35,6 +36,7 @@
     "productName": "Visionary",
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
       "target": [
         "dmg"
       ]

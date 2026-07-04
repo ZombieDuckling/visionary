@@ -12,6 +12,7 @@ const deepResearch = require('./src/deep-research');
 const scheduler = require('./src/scheduler');
 const cleanup = require('./src/cleanup');
 const rateLimiter = require('./src/rate-limiter');
+const { parseVerdict } = require('./src/review-verdict');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -241,16 +242,16 @@ async function triggerReview(taskId, runId, originalAgent, resultText) {
 
   // First structured verdict line wins — never keyword-anywhere matching,
   // which false-fired on the rubric echoed back in the reply.
-  const verdictMatch = output.match(/\b(APPROVE|REJECT)\s*:\s*([^\n]*)/i);
-  if (!verdictMatch) {
+  const parsed = parseVerdict(output);
+  if (!parsed.verdict) {
     // Inconclusive: leave the task in review for the operator instead of churning.
     stmts.insertNotification.run({ agent_run_id: reviewRunId, type: 'warning', title: 'Review inconclusive for task #' + taskId, body: 'Reviewer gave no APPROVE/REJECT verdict — check the run output.', action_type: 'view_task', action_data: JSON.stringify({ task_id: taskId }) });
     bus.emit('activity:new', { event_type: 'review.inconclusive', agent_id: 'reviewer', task_id: taskId, summary: 'Review inconclusive on "' + task.title + '"' });
     activeReviews.delete(taskId);
     return;
   }
-  const verdict = verdictMatch[1].toUpperCase();
-  const detail = (verdictMatch[2] || '').trim().substring(0, 500);
+  const verdict = parsed.verdict;
+  const detail = parsed.detail;
 
   if (verdict === 'APPROVE') {
     stmts.updateTask.run({
