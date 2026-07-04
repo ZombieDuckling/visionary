@@ -75,6 +75,22 @@ fi
 npm run check >/dev/null
 echo "✓ server syntax check"
 
+# 7) launchd services (macOS only)
+if [[ "${1:-}" == "--launchd" ]]; then
+  if [[ "$(uname)" == "Darwin" ]]; then
+    bold "Installing launchd services…"
+    bash "$REPO/scripts/install-launchd.sh"
+  else
+    echo "– --launchd flag ignored (not macOS)"
+  fi
+else
+  if [[ "$(uname)" == "Darwin" ]]; then
+    echo ""
+    echo "  hint: run './install.sh --launchd' to install launchd services"
+    echo "        (ai.visionary.server + ai.visionary.watchdog, KeepAlive)"
+  fi
+fi
+
 bold "Done."
 echo "  vision           # open the dashboard (starts the server if needed)"
 echo "  vision app       # desktop app (Electron)"
