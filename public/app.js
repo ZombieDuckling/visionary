@@ -3278,6 +3278,61 @@
       return msg;
     }
 
+    // ── Persistent chat sessions ─────────────────────────
+    var chatSessionSelect = document.getElementById('chat-session-select');
+    var chatNewBtn = document.getElementById('chat-new');
+    var activeChatSession = parseInt(localStorage.getItem('visionary.chatSession'), 10) || null;
+
+    function saveActiveChatSession() {
+      if (activeChatSession) localStorage.setItem('visionary.chatSession', String(activeChatSession));
+      else localStorage.removeItem('visionary.chatSession');
+    }
+
+    function loadChatSessions() {
+      if (!chatSessionSelect) return Promise.resolve();
+      return api('/chat/sessions').then(function (data) {
+        var sessions = (data && data.sessions) || [];
+        if (activeChatSession && !sessions.some(function (s) { return s.id === activeChatSession; })) {
+          activeChatSession = null;
+          saveActiveChatSession();
+        }
+        if (!activeChatSession && sessions.length) {
+          activeChatSession = sessions[0].id;
+          saveActiveChatSession();
+        }
+        chatSessionSelect.innerHTML = sessions.map(function (s) {
+          return '<option value="' + s.id + '"' + (s.id === activeChatSession ? ' selected' : '') + '>' + esc(s.title) + '</option>';
+        }).join('');
+      }).catch(function () { /* sessions are progressive enhancement */ });
+    }
+
+    function loadChatHistory() {
+      if (!activeChatSession) { chatMessages.innerHTML = ''; return; }
+      api('/chat/sessions/' + activeChatSession).then(function (data) {
+        chatMessages.innerHTML = '';
+        ((data && data.messages) || []).forEach(function (m) {
+          addChatMsg(m.content, m.role === 'user' ? 'user' : 'agent');
+        });
+      }).catch(function () { /* keep whatever is shown */ });
+    }
+
+    if (chatSessionSelect) chatSessionSelect.addEventListener('change', function () {
+      activeChatSession = parseInt(chatSessionSelect.value, 10) || null;
+      saveActiveChatSession();
+      loadChatHistory();
+    });
+    if (chatNewBtn) chatNewBtn.addEventListener('click', function () {
+      api('/chat/sessions', { method: 'POST', body: {} }).then(function (data) {
+        activeChatSession = data.session.id;
+        saveActiveChatSession();
+        chatMessages.innerHTML = '';
+        loadChatSessions();
+        chatInput.focus();
+      }).catch(function () { showToast('Could not create chat'); });
+    });
+
+    loadChatSessions().then(loadChatHistory);
+
     function sendChat(overrideText, options) {
       if (chatBusy) return;
       var text = typeof overrideText === 'string' ? overrideText.trim() : chatInput.value.trim();
@@ -3307,13 +3362,21 @@
       fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({ message: text, session_id: activeChatSession })
       })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         thinking.remove();
         var reply = data.response || data.error || 'No response';
         addChatMsg(reply, 'agent');
+        if (data.session_id && data.session_id !== activeChatSession) {
+          activeChatSession = data.session_id;
+          saveActiveChatSession();
+          loadChatSessions();
+        }
+        if (data.dispatched_tasks && data.dispatched_tasks.length) {
+          showToast('Argus dispatched ' + data.dispatched_tasks.map(function (d) { return d.agent_id + ' → #' + d.task_id; }).join(', '));
+        }
         if (chatVoiceReplyPending) {
           speakChatReply(reply);
           chatVoiceReplyPending = false;
