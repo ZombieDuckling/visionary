@@ -138,7 +138,7 @@ visionary/
 └── tests/                 # node:test smoke tests
 ```
 
-For deeper detail — schema version history, SSE event types, failover signal taxonomy, frontend tab map — read [HANDOFF.md](HANDOFF.md).
+For deeper detail — schema version history, SSE event types, failover signal taxonomy, frontend tab map — read [HANDOFF.md](HANDOFF.md). For a front-desk map of the repo as an AI workbench — catalog, request slips, source material, durable state, review surfaces, and boundary layer — read [docs/WORKBENCH-CATALOG.md](docs/WORKBENCH-CATALOG.md).
 
 ## Roadmap
 
