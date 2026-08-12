@@ -53,3 +53,50 @@ test('workflow becomes a production candidate only when every required gate is c
   assert.equal(review.stage, 'production_candidate');
   assert.deepEqual(review.missing_gates, []);
 });
+
+test('truth deck validator requires representative cases with explicit expected behavior', () => {
+  const incomplete = readiness.validateTruthDeck({
+    goal: 'Protect daily briefing quality while changing models',
+    cases: [{ name: 'thin case', input: 'new notes' }],
+  });
+
+  assert.equal(incomplete.ready, false);
+  assert.equal(incomplete.stage, 'truth_deck_incomplete');
+  assert.ok(incomplete.missing_fields.includes('complete_cases'));
+  assert.deepEqual(incomplete.case_results[0].missing_fields, [
+    'expected_output',
+    'must_include',
+    'must_avoid',
+    'quality_threshold',
+  ]);
+});
+
+test('complete truth deck satisfies the evals readiness gate without stringly flags', () => {
+  const allButEvals = readiness.requiredGatesFor({ type: 'llm_call', risk: 'medium' })
+    .gates.map((g) => g.id)
+    .filter((id) => id !== 'evals');
+
+  const review = readiness.readinessReview({
+    type: 'llm_call',
+    risk: 'medium',
+    gates_done: allButEvals,
+    truth_deck: {
+      goal: 'Protect the quality, cost, and latency of task summary rewrites',
+      cases: [{
+        name: 'Noisy run log to concise operator summary',
+        input: 'raw dispatch log with errors, retries, and final artifact list',
+        expected_output: 'short status summary with result, evidence, and next action',
+        must_include: ['verification command', 'artifact path', 'commit status'],
+        must_avoid: ['invented outputs', 'raw secret values'],
+        quality_threshold: 'Human operator can decide whether to trust the run without opening the full log',
+        latency_target: '< 10s',
+        cost_target: '< $0.02',
+      }],
+    },
+  });
+
+  assert.equal(review.ready, true);
+  assert.equal(review.stage, 'production_candidate');
+  assert.equal(review.truth_deck.ready, true);
+  assert.deepEqual(review.missing_gates, []);
+});

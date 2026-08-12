@@ -22,6 +22,7 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 3. **Durable write-back matters.** Useful outcomes should land in SQLite, artifacts, docs, or personality/config files — not just chat history.
 4. **Every automation needs a review surface.** Add links, file lists, log snippets, test output, timestamps, or status rows so the operator can verify.
 5. **Model choice is contextual.** Match harness and agent role to the job-to-be-done, risk, cost, and data shape; do not assume the "best" model is always the right one.
+6. **Truth decks beat vibes.** Reusable AI workflows should carry a few representative input/output cases with must-include, must-avoid, quality, latency, and cost expectations before prompts or providers are treated as production-ready.
 
 ## Good background-improvement targets
 
@@ -34,6 +35,28 @@ When doing autonomous maintenance, prefer changes that strengthen one of these w
 - Secret isolation and local-first safety: path guards, env documentation, retention checks.
 - Reliability checks: focused tests, smoke scripts, route validation, syntax gates.
 - Onboarding UX: front-desk pages, empty-state copy, operator runbooks.
+
+## Truth deck sketch for reusable workflows
+
+Use `src/production-readiness.js#validateTruthDeck` as the deterministic baseline before making a workflow template, role, or prompt chain feel permanent:
+
+```js
+{
+  goal: 'Workflow outcome this deck protects',
+  cases: [{
+    name: 'Representative case name',
+    input: 'Input/context the workflow receives',
+    expected_output: 'Characteristics of a good result',
+    must_include: ['Evidence or fields that must appear'],
+    must_avoid: ['Failure modes, leaks, or unwanted behavior'],
+    quality_threshold: 'Human-readable pass condition',
+    latency_target: '< optional target',
+    cost_target: '< optional target'
+  }]
+}
+```
+
+This is intentionally small: start with handpicked examples, then expand only when regressions become costly.
 
 ## Quick verification path
 

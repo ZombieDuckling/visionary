@@ -32,6 +32,14 @@ const HIGH_RISK_GATES = [
   { id: 'incident_path', label: 'Incident reporting and containment path', required: true },
 ];
 
+const TRUTH_DECK_CASE_FIELDS = [
+  'input',
+  'expected_output',
+  'must_include',
+  'must_avoid',
+  'quality_threshold',
+];
+
 function cleanString(value) {
   return String(value == null ? '' : value).trim();
 }
@@ -74,8 +82,56 @@ function requiredGatesFor(input) {
   return { workflowType, riskLevel, gates };
 }
 
+function hasText(value) {
+  if (Array.isArray(value)) return value.some((item) => hasText(item));
+  return cleanString(value).length > 0;
+}
+
+function validateTruthDeck(deck) {
+  const missing = [];
+  const normalized = deck && typeof deck === 'object' ? deck : {};
+  if (!hasText(normalized.goal)) missing.push('goal');
+
+  const cases = Array.isArray(normalized.cases) ? normalized.cases : [];
+  if (cases.length === 0) {
+    missing.push('cases');
+  }
+
+  const case_results = cases.map((truthCase, index) => {
+    const caseMissing = [];
+    const item = truthCase && typeof truthCase === 'object' ? truthCase : {};
+    if (!hasText(item.name)) caseMissing.push('name');
+    for (const field of TRUTH_DECK_CASE_FIELDS) {
+      if (!hasText(item[field])) caseMissing.push(field);
+    }
+    return {
+      index,
+      name: cleanString(item.name) || 'Case ' + (index + 1),
+      ready: caseMissing.length === 0,
+      missing_fields: caseMissing,
+    };
+  });
+
+  const failedCases = case_results.filter((result) => !result.ready);
+  if (failedCases.length > 0) missing.push('complete_cases');
+
+  const ready = missing.length === 0;
+  return {
+    ready,
+    stage: ready ? 'truth_deck_ready' : 'truth_deck_incomplete',
+    required_case_fields: ['name', ...TRUTH_DECK_CASE_FIELDS],
+    missing_fields: missing,
+    case_results,
+    summary: ready
+      ? 'Truth deck has a goal and complete representative cases.'
+      : 'Truth deck missing: ' + missing.join(', '),
+  };
+}
+
 function readinessReview(input) {
   const provided = new Set((input && input.gates_done) || []);
+  const truthDeckReview = input && input.truth_deck ? validateTruthDeck(input.truth_deck) : null;
+  if (truthDeckReview && truthDeckReview.ready) provided.add('evals');
   const { workflowType, riskLevel, gates } = requiredGatesFor(input || {});
   const missing = gates.filter((gate) => gate.required && !provided.has(gate.id));
   const ready = missing.length === 0;
@@ -86,6 +142,7 @@ function readinessReview(input) {
     risk_level: riskLevel,
     required_gates: gates,
     missing_gates: missing,
+    truth_deck: truthDeckReview,
     summary: ready
       ? 'All required production-readiness gates are satisfied.'
       : missing.length + ' production-readiness gate(s) missing: ' + missing.map((g) => g.id).join(', '),
@@ -98,7 +155,9 @@ module.exports = {
   BASE_GATES,
   AGENTIC_GATES,
   HIGH_RISK_GATES,
+  TRUTH_DECK_CASE_FIELDS,
   classifyWorkflow,
   requiredGatesFor,
+  validateTruthDeck,
   readinessReview,
 };
