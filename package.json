@@ -18,7 +18,7 @@
     "build:unsigned": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir && npm run rebuild:node",
     "dist:unsigned": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg && npm run rebuild:node",
     "rebuild:node": "npm rebuild better-sqlite3",
-    "check": "node --check server.js && node --check db.js && node --check sse.js && node --check electron.js && node --check public/app.js",
+    "check": "node --check server.js && node --check db.js && node --check sse.js && node --check electron.js && node --check public/app.js && node scripts/validate-org-chart.mjs",
     "smoke": "node --test tests/smoke.mjs",
     "test:unit": "node --test tests/*.test.mjs",
     "test:stream": "node scripts/stream-smoke.mjs",
