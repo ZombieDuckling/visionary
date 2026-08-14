@@ -32,6 +32,16 @@ const HIGH_RISK_GATES = [
   { id: 'incident_path', label: 'Incident reporting and containment path', required: true },
 ];
 
+const VIBE_CODED_AUDIT_GATES = [
+  { id: 'current_secret_scan', label: 'Current files scanned for secrets and tokens', required: true },
+  { id: 'history_secret_scan', label: 'Git/tool/deployment history reviewed for leaked secrets', required: true },
+  { id: 'managed_auth_review', label: 'Auth/session/security primitives use managed provider APIs or documented verification', required: true },
+  { id: 'public_route_map', label: 'Public routes, methods, callbacks, and health checks enumerated', required: true },
+  { id: 'generated_artifact_review', label: 'Generated plans, prompts, markdown, and logs reviewed as executable context', required: true },
+  { id: 'provider_boundary_review', label: 'External provider/deployment configuration and warnings checked or limitation documented', required: true },
+  { id: 'human_threat_model', label: 'Human threat model completed for malicious, accidental, and client-context misuse', required: true },
+];
+
 const TRUTH_DECK_CASE_FIELDS = [
   'input',
   'expected_output',
@@ -149,15 +159,37 @@ function readinessReview(input) {
   };
 }
 
+function vibeCodedAudit(input) {
+  const provided = new Set((input && input.gates_done) || []);
+  const missing = VIBE_CODED_AUDIT_GATES.filter((gate) => gate.required && !provided.has(gate.id));
+  const limitations = Array.isArray(input && input.limitations)
+    ? input.limitations.map(cleanString).filter(Boolean)
+    : [];
+  const ready = missing.length === 0 && limitations.length === 0;
+  return {
+    ready,
+    stage: ready ? 'launch_review_complete' : 'needs_human_security_review',
+    required_gates: VIBE_CODED_AUDIT_GATES,
+    missing_gates: missing,
+    limitations,
+    summary: ready
+      ? 'Vibe-coded software audit gates are complete with no unresolved limitations.'
+      : missing.length + ' audit gate(s) missing: ' + missing.map((g) => g.id).join(', ')
+        + (limitations.length ? '; unresolved limitations: ' + limitations.join('; ') : ''),
+  };
+}
+
 module.exports = {
   WORKFLOW_TYPES,
   RISK_LEVELS,
   BASE_GATES,
   AGENTIC_GATES,
   HIGH_RISK_GATES,
+  VIBE_CODED_AUDIT_GATES,
   TRUTH_DECK_CASE_FIELDS,
   classifyWorkflow,
   requiredGatesFor,
   validateTruthDeck,
   readinessReview,
+  vibeCodedAudit,
 };

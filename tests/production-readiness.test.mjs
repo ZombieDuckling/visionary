@@ -100,3 +100,36 @@ test('complete truth deck satisfies the evals readiness gate without stringly fl
   assert.equal(review.truth_deck.ready, true);
   assert.deepEqual(review.missing_gates, []);
 });
+
+test('vibe-coded launch audit requires route, auth, secret, artifact, provider, and threat-model review', () => {
+  const audit = readiness.vibeCodedAudit({
+    gates_done: ['current_secret_scan', 'public_route_map'],
+    limitations: ['Deployment console not accessible from this machine'],
+  });
+
+  assert.equal(audit.ready, false);
+  assert.equal(audit.stage, 'needs_human_security_review');
+  assert.deepEqual(audit.limitations, ['Deployment console not accessible from this machine']);
+
+  const missingIds = audit.missing_gates.map((g) => g.id);
+  for (const required of [
+    'history_secret_scan',
+    'managed_auth_review',
+    'generated_artifact_review',
+    'provider_boundary_review',
+    'human_threat_model',
+  ]) {
+    assert.ok(missingIds.includes(required), `missing audit gates should include ${required}`);
+  }
+});
+
+test('vibe-coded launch audit completes only when all gates are done and no limitations remain', () => {
+  const audit = readiness.vibeCodedAudit({
+    gates_done: readiness.VIBE_CODED_AUDIT_GATES.map((g) => g.id),
+  });
+
+  assert.equal(audit.ready, true);
+  assert.equal(audit.stage, 'launch_review_complete');
+  assert.deepEqual(audit.missing_gates, []);
+  assert.deepEqual(audit.limitations, []);
+});
