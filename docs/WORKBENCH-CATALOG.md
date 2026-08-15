@@ -61,9 +61,12 @@ This is intentionally small: start with handpicked examples, then expand only wh
 ## Quick verification path
 
 ```bash
+npm run workspace-map
 npm run check
 npm run smoke
 npm run test:unit
 ```
+
+`npm run workspace-map` prints the position-addressed map of Visionary's front desk, role files, runtime adapters, durable state, UI, automation, review surface, and boundary layer. It exits non-zero if a mapped path disappears, so it is a cheap continuity check before deeper debugging.
 
 Run `npm run verify` when touching runtime paths or before releases. If the working tree already contains unrelated user changes, avoid overwriting them and commit only the files you changed.
