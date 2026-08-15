@@ -22,6 +22,7 @@
     "smoke": "node --test tests/smoke.mjs",
     "test:unit": "node --test tests/*.test.mjs",
     "test:stream": "node scripts/stream-smoke.mjs",
+    "workspace-map": "node scripts/workspace-map.mjs",
     "verify": "npm run ensure-native && npm run check && npm run smoke && npm run test:stream && npm run test:unit"
   },
   "dependencies": {
