@@ -48,7 +48,7 @@ const SURFACES = [
     id: 'automation',
     label: 'Automation and scheduled work',
     intent: 'Cron parsing, watchdog process, bridge, and deterministic helper scripts.',
-    paths: ['src/scheduler.js', 'watchdog.py', 'bridge.py', 'scripts'],
+    paths: ['docs/AUTOMATION-TIMING-RUBRIC.md', 'src/scheduler.js', 'watchdog.py', 'bridge.py', 'scripts'],
   },
   {
     id: 'review-surface',
