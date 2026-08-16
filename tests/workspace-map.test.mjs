@@ -33,6 +33,9 @@ test('workspace map catalogs the position-addressed workbench surfaces', () => {
   const frontDesk = map.surfaces.find((surface) => surface.id === 'front-desk');
   assert.ok(frontDesk.paths.some((entry) => entry.path === 'README.md' && entry.exists));
   assert.ok(frontDesk.paths.some((entry) => entry.path === 'docs/WORKBENCH-CATALOG.md' && entry.exists));
+
+  const automation = map.surfaces.find((surface) => surface.id === 'automation');
+  assert.ok(automation.paths.some((entry) => entry.path === 'docs/AUTOMATION-TIMING-RUBRIC.md' && entry.exists));
 });
 
 test('workspace map CLI emits valid JSON and fails on missing mapped paths', () => {

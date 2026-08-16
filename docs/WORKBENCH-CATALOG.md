@@ -23,6 +23,7 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 4. **Every automation needs a review surface.** Add links, file lists, log snippets, test output, timestamps, or status rows so the operator can verify.
 5. **Model choice is contextual.** Match harness and agent role to the job-to-be-done, risk, cost, and data shape; do not assume the "best" model is always the right one.
 6. **Truth decks beat vibes.** Reusable AI workflows should carry a few representative input/output cases with must-include, must-avoid, quality, latency, and cost expectations before prompts or providers are treated as production-ready.
+7. **Escalate automation deliberately.** Use `docs/AUTOMATION-TIMING-RUBRIC.md` before converting manual work into scripts, agents, crons, or first-class product integrations.
 
 ## Good background-improvement targets
 
@@ -35,6 +36,7 @@ When doing autonomous maintenance, prefer changes that strengthen one of these w
 - Secret isolation and local-first safety: path guards, env documentation, retention checks.
 - Reliability checks: focused tests, smoke scripts, route validation, syntax gates.
 - Onboarding UX: front-desk pages, empty-state copy, operator runbooks.
+- Automation timing: make the manual → copy/paste → script → agent → cron → productized integration ladder explicit so Visionary does not over-automate fragile workflows.
 
 ## Truth deck sketch for reusable workflows
 
@@ -68,5 +70,7 @@ npm run test:unit
 ```
 
 `npm run workspace-map` prints the position-addressed map of Visionary's front desk, role files, runtime adapters, durable state, UI, automation, review surface, and boundary layer. It exits non-zero if a mapped path disappears, so it is a cheap continuity check before deeper debugging.
+
+`docs/AUTOMATION-TIMING-RUBRIC.md` is the escalation checklist for deciding whether a workflow should remain manual, become a deterministic helper, be dispatched to an agent, run on a schedule, or become a first-class product integration.
 
 Run `npm run verify` when touching runtime paths or before releases. If the working tree already contains unrelated user changes, avoid overwriting them and commit only the files you changed.
