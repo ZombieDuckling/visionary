@@ -24,6 +24,7 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 5. **Model choice is contextual.** Match harness and agent role to the job-to-be-done, risk, cost, and data shape; do not assume the "best" model is always the right one.
 6. **Truth decks beat vibes.** Reusable AI workflows should carry a few representative input/output cases with must-include, must-avoid, quality, latency, and cost expectations before prompts or providers are treated as production-ready.
 7. **Escalate automation deliberately.** Use `docs/AUTOMATION-TIMING-RUBRIC.md` before converting manual work into scripts, agents, crons, or first-class product integrations.
+8. **Select the smallest effective interface layer.** Use `docs/INTERFACE-LAYER-SELECTION.md` before turning chat, co-work, IDE, terminal, or script-shaped work into custom orchestration.
 
 ## Good background-improvement targets
 
