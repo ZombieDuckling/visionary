@@ -1672,6 +1672,17 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 }
 
 /* ── Chat sessions (persistent multi-chat) ───────────────────────── */
-.chat-session-select { flex: 1; min-width: 0; margin: 0 var(--space-xs); font-size: var(--font-size-xs); background: transparent; color: var(--text-secondary); border: 1px solid var(--separator); border-radius: 6px; padding: 2px 4px; }
+.chat-header { position: relative; }
+.chat-session-btn { flex: 1; min-width: 0; margin: 0 var(--space-xs); display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); font-size: var(--font-size-xs); background: transparent; color: var(--text-secondary); border: 1px solid var(--separator); border-radius: 6px; padding: 3px 6px; cursor: pointer; }
+.chat-session-btn:hover { background: rgba(120, 120, 128, 0.1); color: var(--text-primary); }
+#chat-session-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-session-caret { flex: 0 0 auto; opacity: 0.7; }
+.chat-session-list { position: absolute; z-index: 30; top: calc(100% + 4px); left: 56px; right: 40px; max-height: 220px; overflow: auto; padding: 4px; border: 1px solid var(--separator); border-radius: 8px; background: var(--bg-secondary); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35); }
+.chat-session-list.hidden { display: none; }
+.chat-session-item { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs); align-items: center; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
+.chat-session-item:hover, .chat-session-item.active { background: rgba(10, 132, 255, 0.12); color: var(--text-primary); }
+.chat-session-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-session-meta, .chat-session-empty { color: var(--text-tertiary); font-size: 11px; }
+.chat-session-empty { padding: 8px; }
 .chat-new { background: none; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 6px; line-height: 1; }
 .chat-new:hover { background: rgba(120, 120, 128, 0.1); color: var(--text-primary); }

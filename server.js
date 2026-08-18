@@ -13,6 +13,7 @@ const scheduler = require('./src/scheduler');
 const cleanup = require('./src/cleanup');
 const rateLimiter = require('./src/rate-limiter');
 const { parseVerdict } = require('./src/review-verdict');
+const { parseChatActions } = require('./src/chat-actions');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -1266,6 +1267,19 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // PATCH /api/chat/sessions/:id — rename a session
+      if (method === 'PATCH' && /^\/api\/chat\/sessions\/(\d+)$/.test(pathname)) {
+        const sid = parseInt(pathname.match(/^\/api\/chat\/sessions\/(\d+)$/)[1], 10);
+        const chatSession = stmts.getChatSessionById.get(sid);
+        if (!chatSession) { res.json({ error: 'Session not found' }, 404); return; }
+        const body = (await readBody(req)) || {};
+        const title = String(body.title || '').replace(/\s+/g, ' ').trim().substring(0, 60);
+        if (!title) { res.json({ error: 'title required' }, 400); return; }
+        stmts.renameChatSession.run({ id: sid, title });
+        res.json({ session: stmts.getChatSessionById.get(sid) });
+        return;
+      }
+
       // DELETE /api/chat/sessions/:id — remove a session and its messages
       if (method === 'DELETE' && /^\/api\/chat\/sessions\/(\d+)$/.test(pathname)) {
         const sid = parseInt(pathname.match(/^\/api\/chat\/sessions\/(\d+)$/)[1], 10);
@@ -1373,28 +1387,15 @@ const server = http.createServer(async (req, res) => {
               }
             } catch { /* use raw */ }
 
-            // Parse task actions from Jarvis response
+            // Parse task actions from Argus response. The parser is tolerant and
+            // returns every marker, while still ignoring echoed instruction templates.
+            const actions = parseChatActions(responseText);
             const createdTasks = [];
-            const createMatch = responseText.match(/CREATE_TASK:\s*(.+?)\s*\|\s*(.+?)(?:\s*\|\s*(.+?))?(?:\s*\|\s*(.+?))?(?:\n|$)/i);
-            // Guard: harnesses that echo the prompt reflect the instruction
-            // template itself ("CREATE_TASK: title | description | …") — never
-            // create a task from the template literal.
-            if (createMatch && createMatch[1].trim().toLowerCase() === 'title'
-              && createMatch[2].trim().toLowerCase() === 'description') {
-              createMatch.length = 0;
-            }
-            if (createMatch && createMatch.length) {
-              const title = createMatch[1].trim();
-              const desc = createMatch[2].trim();
-              const agent = (createMatch[3] || '').trim() || null;
-              const priority = (createMatch[4] || 'medium').trim().toLowerCase();
-              const validPriorities = ['critical', 'high', 'medium', 'low'];
-              const finalPriority = validPriorities.includes(priority) ? priority : 'medium';
-              const validAgent = agent && validAgentIds.includes(agent) ? agent : null;
-
+            for (const createAction of actions.creates) {
+              const validAgent = createAction.agent && validAgentIds.includes(createAction.agent) ? createAction.agent : null;
               const result = stmts.insertTask.run({
-                title: title, description: desc === '-' ? null : desc, status: 'todo',
-                priority: finalPriority, agent_id: validAgent, project_id: null, sort_order: 0
+                title: createAction.title, description: createAction.description, status: 'todo',
+                priority: createAction.priority, agent_id: validAgent, project_id: null, sort_order: 0
               });
               const task = stmts.getTaskById.get(result.lastInsertRowid);
               stmts.insertActivity.run({
@@ -1409,10 +1410,9 @@ const server = http.createServer(async (req, res) => {
             }
 
             const movedTasks = [];
-            const moveMatch = responseText.match(/MOVE_TASK:\s*(\d+)\s*\|\s*(todo|in_progress|review|done)(?:\n|$)/i);
-            if (moveMatch) {
-              const moveId = parseInt(moveMatch[1], 10);
-              const newStatus = moveMatch[2].toLowerCase();
+            for (const moveAction of actions.moves) {
+              const moveId = moveAction.taskId;
+              const newStatus = moveAction.status;
               const existing = stmts.getTaskById.get(moveId);
               if (existing) {
                 stmts.updateTask.run({
@@ -1429,10 +1429,9 @@ const server = http.createServer(async (req, res) => {
 
             // DISPATCH_TASK: task_id | agent_id — Argus putting an agent to work.
             const dispatchedTasks = [];
-            const dispatchMatch = responseText.match(/\bDISPATCH_TASK:\s*(\d+)\s*\|\s*([\w-]+)/i);
-            if (dispatchMatch) {
-              const dTaskId = parseInt(dispatchMatch[1], 10);
-              const dAgent = dispatchMatch[2].trim().toLowerCase();
+            for (const dispatchAction of actions.dispatches) {
+              const dTaskId = dispatchAction.taskId;
+              const dAgent = dispatchAction.agent;
               const dTask = stmts.getTaskById.get(dTaskId);
               if (dTask && validAgentIds.indexOf(dAgent) !== -1 && dAgent !== 'agent_id') {
                 const dRunId = dispatchAgent(dTaskId, dAgent, dTask.title + (dTask.description ? ': ' + dTask.description : ''));
