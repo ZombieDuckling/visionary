@@ -21,10 +21,11 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 2. **Catalog before context flood.** Future agents should be able to read a map first, then the relevant source files, rather than loading the whole repo.
 3. **Durable write-back matters.** Useful outcomes should land in SQLite, artifacts, docs, or personality/config files — not just chat history.
 4. **Every automation needs a review surface.** Add links, file lists, log snippets, test output, timestamps, or status rows so the operator can verify.
-5. **Model choice is contextual.** Match harness and agent role to the job-to-be-done, risk, cost, and data shape; do not assume the "best" model is always the right one.
-6. **Truth decks beat vibes.** Reusable AI workflows should carry a few representative input/output cases with must-include, must-avoid, quality, latency, and cost expectations before prompts or providers are treated as production-ready.
-7. **Escalate automation deliberately.** Use `docs/AUTOMATION-TIMING-RUBRIC.md` before converting manual work into scripts, agents, crons, or first-class product integrations.
-8. **Select the smallest effective interface layer.** Use `docs/INTERFACE-LAYER-SELECTION.md` before turning chat, co-work, IDE, terminal, or script-shaped work into custom orchestration.
+5. **Move up abstraction layers before productizing.** For product/workflow dispatches, identify the cheap raw-output layer, defensible context, smallest prototype, and telemetry/review loop before treating a feature as a moat.
+6. **Model choice is contextual.** Match harness and agent role to the job-to-be-done, risk, cost, and data shape; do not assume the "best" model is always the right one.
+7. **Truth decks beat vibes.** Reusable AI workflows should carry a few representative input/output cases with must-include, must-avoid, quality, latency, and cost expectations before prompts or providers are treated as production-ready.
+8. **Escalate automation deliberately.** Use `docs/AUTOMATION-TIMING-RUBRIC.md` before converting manual work into scripts, agents, crons, or first-class product integrations.
+9. **Select the smallest effective interface layer.** Use `docs/INTERFACE-LAYER-SELECTION.md` before turning chat, co-work, IDE, terminal, or script-shaped work into custom orchestration.
 
 ## Good background-improvement targets
 
