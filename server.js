@@ -14,6 +14,7 @@ const cleanup = require('./src/cleanup');
 const rateLimiter = require('./src/rate-limiter');
 const { parseVerdict } = require('./src/review-verdict');
 const { parseChatActions } = require('./src/chat-actions');
+const { appendValueLayerPrompt } = require('./src/value-layer');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -437,14 +438,15 @@ function loadPersonality(agentId) {
 function buildAgentPrompt(agentId, message, workdir) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
+  const agentMessage = appendValueLayerPrompt(message);
   const workdirNote = workdir
     ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
     : '';
-  if (!persona) return message + workdirNote;
+  if (!persona) return agentMessage + workdirNote;
   const name = (cfg && cfg.name) || agentId;
   const role = (cfg && cfg.role) || '';
   return '[SYSTEM — you are ' + name + (role ? ', ' + role : '') + '. Operate per your charter below.]\n'
-    + persona.trim() + workdirNote + '\n\n[TASK]\n' + message;
+    + persona.trim() + workdirNote + '\n\n[TASK]\n' + agentMessage;
 }
 
 // Task artifact workspace: every dispatch runs inside ~/Visionary/<project>/task-<id>
