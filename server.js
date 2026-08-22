@@ -15,6 +15,7 @@ const rateLimiter = require('./src/rate-limiter');
 const { parseVerdict } = require('./src/review-verdict');
 const { parseChatActions } = require('./src/chat-actions');
 const { appendValueLayerPrompt } = require('./src/value-layer');
+const { appendSystemDecompositionPrompt } = require('./src/system-decomposition');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -438,7 +439,7 @@ function loadPersonality(agentId) {
 function buildAgentPrompt(agentId, message, workdir) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
-  const agentMessage = appendValueLayerPrompt(message);
+  const agentMessage = appendSystemDecompositionPrompt(appendValueLayerPrompt(message));
   const workdirNote = workdir
     ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
     : '';
