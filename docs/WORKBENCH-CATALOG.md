@@ -24,8 +24,9 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 5. **Move up abstraction layers before productizing.** For product/workflow dispatches, identify the cheap raw-output layer, defensible context, smallest prototype, and telemetry/review loop before treating a feature as a moat.
 6. **Model choice is contextual.** Match harness and agent role to the job-to-be-done, risk, cost, and data shape; do not assume the "best" model is always the right one.
 7. **Truth decks beat vibes.** Reusable AI workflows should carry a few representative input/output cases with must-include, must-avoid, quality, latency, and cost expectations before prompts or providers are treated as production-ready.
-8. **Escalate automation deliberately.** Use `docs/AUTOMATION-TIMING-RUBRIC.md` before converting manual work into scripts, agents, crons, or first-class product integrations.
-9. **Select the smallest effective interface layer.** Use `docs/INTERFACE-LAYER-SELECTION.md` before turning chat, co-work, IDE, terminal, or script-shaped work into custom orchestration.
+8. **Run matrices beat anecdotes.** Evaluation and research dispatches should name the model/provider/persona/prompt/case variables, deterministic parsing/scoring rules, exports, and failure data before drawing conclusions.
+9. **Escalate automation deliberately.** Use `docs/AUTOMATION-TIMING-RUBRIC.md` before converting manual work into scripts, agents, crons, or first-class product integrations.
+10. **Select the smallest effective interface layer.** Use `docs/INTERFACE-LAYER-SELECTION.md` before turning chat, co-work, IDE, terminal, or script-shaped work into custom orchestration.
 
 ## Good background-improvement targets
 

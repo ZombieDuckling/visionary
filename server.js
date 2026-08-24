@@ -17,6 +17,7 @@ const { parseChatActions } = require('./src/chat-actions');
 const { appendValueLayerPrompt } = require('./src/value-layer');
 const { appendSystemDecompositionPrompt } = require('./src/system-decomposition');
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
+const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -441,7 +442,9 @@ function buildAgentPrompt(agentId, message, workdir) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
   const agentMessage = appendContextBoundaryPrompt(
-    appendSystemDecompositionPrompt(appendValueLayerPrompt(message)),
+    appendExperimentMatrixPrompt(
+      appendSystemDecompositionPrompt(appendValueLayerPrompt(message))
+    ),
     message
   );
   const workdirNote = workdir
