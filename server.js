@@ -18,6 +18,7 @@ const { appendValueLayerPrompt } = require('./src/value-layer');
 const { appendSystemDecompositionPrompt } = require('./src/system-decomposition');
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
+const { extractUsageTelemetry } = require('./src/usage-telemetry');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -647,8 +648,9 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
     // Record what the run produced so the operator can find + open it from the UI.
     let artifacts = [];
     let runWorkdir = null;
+    let runRow = null;
     try {
-      const runRow = stmts.getRunById.get(runId);
+      runRow = stmts.getRunById.get(runId);
       runWorkdir = runRow && runRow.workdir;
       if (runWorkdir) {
         artifacts = collectArtifacts(runWorkdir, startTime);
@@ -656,25 +658,25 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
       }
     } catch { /* artifact scan must never fail the run */ }
 
-    // INTEL-04: parse token usage from CLI JSON output and estimate cost
+    // INTEL-04: normalize token/cost telemetry from CLI JSON when available;
+    // otherwise save deterministic estimates so every completed harness run has
+    // some operator-visible usage signal.
     try {
-      const parsed = JSON.parse(cleaned);
-      const usage = parsed.usage || parsed.token_usage || (parsed.metrics && parsed.metrics);
-      if (usage && (usage.input_tokens || usage.output_tokens)) {
-        const inputTok = usage.input_tokens || 0;
-        const outputTok = usage.output_tokens || 0;
-        const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
-        const isLlama = agentCfg && agentCfg.model && agentCfg.model.indexOf('llama') !== -1;
-        // Prefer the harness's own cost figure (claude --output-format json
-        // emits total_cost_usd); fall back to a rough per-token estimate.
-        const cost = typeof parsed.total_cost_usd === 'number'
-          ? parsed.total_cost_usd
-          : isLlama
-            ? (inputTok * 0.0001 + outputTok * 0.0001) / 1000
-            : (inputTok * 0.003 + outputTok * 0.015) / 1000;
-        stmts.updateRunTokens.run({ id: runId, input_tokens: inputTok, output_tokens: outputTok, estimated_cost_usd: cost });
-      }
-    } catch (_tokenErr) { /* no usage data */ }
+      const agentCfg = agentConfigs.find(function (c) { return c.id === agentId; });
+      const telemetry = extractUsageTelemetry({
+        rawOutput: cleaned,
+        resultText,
+        message: runRow && runRow.message,
+        agentConfig: agentCfg,
+        harness: result.harness
+      });
+      stmts.updateRunTokens.run({
+        id: runId,
+        input_tokens: telemetry.input_tokens,
+        output_tokens: telemetry.output_tokens,
+        estimated_cost_usd: telemetry.estimated_cost_usd
+      });
+    } catch (_tokenErr) { /* usage telemetry must never fail the run */ }
 
     const harnessLabel = result.harness ? ' via ' + result.harness : '';
 

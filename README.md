@@ -40,7 +40,7 @@ After a run completes, the reviewer agent runs through its own harness chain wit
 
 ### Cost capture
 
-The Claude adapter dispatches with `--output-format json` and extracts real `input_tokens`, `output_tokens`, and `total_cost_usd` from the harness response. Those fields are stored on `agent_runs` and surfaced in the task history panel.
+The Claude adapter dispatches with `--output-format json` and extracts real `input_tokens`, `output_tokens`, and `total_cost_usd` from the harness response. Non-reporting harnesses now get deterministic prompt/output token estimates from the saved run message and result text, so every completed run has at least an operator-visible usage signal in `agent_runs`. Estimated costs are deliberately rough and labeled by the existing `estimated_cost_usd` field.
 
 ### Watchdog
 
