@@ -488,6 +488,11 @@
       });
       var spendDetail = recentRuns.length ? 'recent ' + recentRuns.length + ' runs' : 'recent runs';
       var spendValue = recentSpend > 0 ? '$' + recentSpend.toFixed(4) : '$0.00';
+      var costBaseline = data.cost_baseline || null;
+      var baselineValue = costBaseline ? ('$' + Number(costBaseline.net_delta_usd || 0).toFixed(2)) : '$0.00';
+      var baselineDetail = costBaseline
+        ? (costBaseline.completed_runs + ' completed · vs ' + costBaseline.window_label)
+        : 'vs manual baseline';
 
       html += '<div class="overview-metrics">'
         + overviewMetric('Open tasks', (tasks.todo || 0) + (tasks.in_progress || 0) + (tasks.review || 0), 'todo ' + (tasks.todo || 0) + ' · active ' + (tasks.in_progress || 0) + ' · review ' + (tasks.review || 0))
@@ -496,6 +501,7 @@
         + overviewMetric('Projects', projects.active || 0, 'active')
         + overviewMetric('Unread', counts.unread_notifications || 0, 'notifications')
         + overviewMetric('Spend', spendValue, spendDetail)
+        + overviewMetric('Baseline delta', baselineValue, baselineDetail)
         + '</div>';
 
       if (staleRuns.length) {
