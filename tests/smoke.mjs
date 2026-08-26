@@ -113,13 +113,16 @@ test('GET /api/overview returns expected shape', async () => {
   assert.equal(status, 200);
   assert.ok(json && typeof json === 'object');
   for (const key of ['generated_at', 'counts', 'missions', 'open_tasks',
-    'stale_running_runs', 'recent_runs', 'recent_activity', 'latest_by_agent',
+    'stale_running_runs', 'recent_runs', 'cost_baseline', 'recent_activity', 'latest_by_agent',
     'active_agent_ids']) {
     assert.ok(key in json, `overview missing key: ${key}`);
   }
   assert.ok(Array.isArray(json.missions));
   assert.ok(Array.isArray(json.stale_running_runs));
   assert.ok(Array.isArray(json.active_agent_ids));
+  assert.equal(typeof json.cost_baseline.ai_cost_usd, 'number');
+  assert.equal(typeof json.cost_baseline.human_baseline_usd, 'number');
+  assert.ok(json.cost_baseline.baseline_assumptions, 'baseline assumptions present');
   assert.equal(json.counts.active_dispatches, 0,
     'no in-memory dispatches at smoke-test startup');
 });

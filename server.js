@@ -19,6 +19,7 @@ const { appendSystemDecompositionPrompt } = require('./src/system-decomposition'
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
+const { summarizeCostBaseline } = require('./src/cost-baseline');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -972,6 +973,17 @@ const server = http.createServer(async (req, res) => {
           ORDER BY ar.created_at DESC
           LIMIT 6
         `).all();
+        const baselineRuns = db.prepare(`
+          SELECT id, agent_id, status, input_tokens, output_tokens, estimated_cost_usd, created_at
+          FROM agent_runs
+          WHERE datetime(created_at) >= datetime('now', '-30 days')
+          ORDER BY created_at DESC
+        `).all();
+        const costBaseline = summarizeCostBaseline(baselineRuns, {
+          window_label: 'last 30 days',
+          human_minutes_per_completed_run: 15,
+          human_hourly_rate_usd: 75
+        });
         const recentActivity = stmts.getRecentActivity.all(6);
         const unread = stmts.getUnreadCount.get();
         const latestByAgent = stmts.getLatestRunPerAgent.all();
@@ -1053,6 +1065,7 @@ const server = http.createServer(async (req, res) => {
           open_tasks: openTasks,
           stale_running_runs: staleRunningRuns,
           recent_runs: recentRuns,
+          cost_baseline: costBaseline,
           recent_activity: recentActivity,
           latest_by_agent: latestByAgent,
           active_agent_ids: activeAgentIds,
