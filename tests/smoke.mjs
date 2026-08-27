@@ -113,11 +113,12 @@ test('GET /api/overview returns expected shape', async () => {
   assert.equal(status, 200);
   assert.ok(json && typeof json === 'object');
   for (const key of ['generated_at', 'counts', 'missions', 'open_tasks',
-    'stale_running_runs', 'recent_runs', 'cost_baseline', 'recent_activity', 'latest_by_agent',
+    'stale_running_runs', 'recent_runs', 'cost_baseline', 'governance_watchlist', 'recent_activity', 'latest_by_agent',
     'active_agent_ids']) {
     assert.ok(key in json, `overview missing key: ${key}`);
   }
   assert.ok(Array.isArray(json.missions));
+  assert.ok(Array.isArray(json.governance_watchlist));
   assert.ok(Array.isArray(json.stale_running_runs));
   assert.ok(Array.isArray(json.active_agent_ids));
   assert.equal(typeof json.cost_baseline.ai_cost_usd, 'number');
@@ -163,6 +164,30 @@ test('GET /api/projects returns array', async () => {
   const { status, json } = await http('GET', '/api/projects');
   assert.equal(status, 200);
   assert.ok(json && Array.isArray(json.projects));
+});
+
+test('GET /api/projects/:id/governance returns deterministic readiness analysis', async () => {
+  const created = await http('POST', '/api/projects', {
+    name: 'Governance Smoke School AI',
+    description: 'AI workflow for teachers, students, and support staff with privacy review.'
+  });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+  const task = await http('POST', '/api/tasks', {
+    project_id: projectId,
+    title: 'Draft student support recommendation rubric',
+    description: 'Include teacher review, fairness, adoption, and policy checks.',
+    priority: 'high',
+    status: 'todo'
+  });
+  assert.equal(task.status, 201);
+
+  const { status, json } = await http('GET', '/api/projects/' + projectId + '/governance');
+  assert.equal(status, 200);
+  assert.equal(json.project.id, projectId);
+  assert.equal(json.governance.recommended, true);
+  assert.ok(Array.isArray(json.governance.checklist));
+  assert.ok(json.governance.triggers.some((t) => t.id === 'affected-users'));
 });
 
 test('GET /api/activity returns array', async () => {
