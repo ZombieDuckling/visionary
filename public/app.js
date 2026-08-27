@@ -451,6 +451,7 @@
       var activity = data.recent_activity || [];
       var missions = data.missions || [];
       var orchestrator = data.orchestrator || null;
+      var governanceWatchlist = data.governance_watchlist || [];
       var healthLabel = staleRuns.length ? 'Needs attention' : 'Ready';
 
       var html = '<h2 class="section-header"><span class="section-header-icon">⌁</span> Mission Overview</h2>';
@@ -480,6 +481,10 @@
 
       if (orchestrator) {
         html += renderOrchestratorPanel(orchestrator);
+      }
+
+      if (governanceWatchlist.length) {
+        html += renderGovernanceWatchlist(governanceWatchlist);
       }
 
       var recentSpend = 0;
@@ -555,6 +560,23 @@
       container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">⌁</span> Mission Overview</h2>'
         + '<div class="card overview-alert"><span class="badge badge-red">Error</span><span>' + esc((err.data && err.data.error) || err.message || 'Failed to load overview') + '</span></div>';
     });
+  }
+
+  function renderGovernanceWatchlist(items) {
+    var html = '<section class="card overview-panel overview-governance">'
+      + '<div class="overview-panel-header"><h3>Governance watchlist</h3><span class="badge badge-orange">affected-user risk</span></div>'
+      + '<div class="overview-meta">Projects where tasks/descriptions suggest stakeholders, sensitive domains, or AI decisioning. Use before productizing autonomy.</div>'
+      + '<div class="overview-list">';
+    items.forEach(function (item) {
+      html += '<div class="overview-list-item">'
+        + '<div><strong>' + esc(item.project_name) + '</strong><div class="overview-meta">score ' + esc(item.score) + ' · ' + esc(item.active_task_count) + ' active · ' + esc((item.triggers || []).join(', ')) + '</div></div>'
+        + '<a class="btn btn-small" href="#/projects/' + esc(item.project_id) + '">Review</a>'
+        + '</div>';
+    });
+    html += '</div>'
+      + '<div class="overview-meta">Next: create a decision ledger with affected users, proposals, acceptance/rejection rationale, and eval cases.</div>'
+      + '</section>';
+    return html;
   }
 
   function renderOrchestratorPanel(orchestrator) {

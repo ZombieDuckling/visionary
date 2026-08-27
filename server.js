@@ -20,6 +20,7 @@ const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
+const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -985,6 +986,10 @@ const server = http.createServer(async (req, res) => {
           human_hourly_rate_usd: 75
         });
         const recentActivity = stmts.getRecentActivity.all(6);
+        const governanceProjects = stmts.getAllProjects.all().filter(function (p) { return p.status !== 'archived'; });
+        const tasksByProject = {};
+        governanceProjects.forEach(function (p) { tasksByProject[p.id] = stmts.getTasksByProject.all(p.id); });
+        const governanceWatchlist = buildGovernanceWatchlist(governanceProjects, tasksByProject, 3);
         const unread = stmts.getUnreadCount.get();
         const latestByAgent = stmts.getLatestRunPerAgent.all();
         const activeAgentIds = Array.from(activeDispatches.values()).map(function (d) { return d.agentId; });
@@ -1066,6 +1071,7 @@ const server = http.createServer(async (req, res) => {
           stale_running_runs: staleRunningRuns,
           recent_runs: recentRuns,
           cost_baseline: costBaseline,
+          governance_watchlist: governanceWatchlist,
           recent_activity: recentActivity,
           latest_by_agent: latestByAgent,
           active_agent_ids: activeAgentIds,
@@ -2493,6 +2499,16 @@ const server = http.createServer(async (req, res) => {
           });
         });
         res.json({ projects: result });
+        return;
+      }
+
+      // GET /api/projects/:id/governance — deterministic affected-user governance readiness
+      if (method === 'GET' && /^\/api\/projects\/(\d+)\/governance$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)\/governance$/)[1], 10);
+        const project = stmts.getProjectById.get(projectId);
+        if (!project) { res.json({ error: 'Project not found' }, 404); return; }
+        const tasks = stmts.getTasksByProject.all(projectId);
+        res.json({ project, governance: analyzeGovernanceNeed(project, tasks) });
         return;
       }
 

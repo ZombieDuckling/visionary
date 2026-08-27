@@ -44,6 +44,10 @@ The Claude adapter dispatches with `--output-format json` and extracts real `inp
 
 The Overview API also returns `cost_baseline`: a local 30-day comparison of agent-run spend against an explicit human-time baseline (default 15 minutes per completed run at $75/hour). This follows the practical cost lens: compare AI spend to the real manual/search/review alternative, not to a fake zero-cost baseline.
 
+### Governance watchlist
+
+`src/governance.js` scans local project/task text for affected-user, sensitive-domain, education, AI-decisioning, trust/adoption, and external-workflow signals. `/api/overview` returns a bounded `governance_watchlist`, and `GET /api/projects/:id/governance` returns the full deterministic trigger list plus a lightweight decision-ledger checklist. This is intentionally advisory: it does not block work, but it nudges consequential AI/customer/team workflows toward named stakeholders, proposal ranking, implementation rationale, and eval cases before autonomy is productized.
+
 ### Watchdog
 
 `watchdog.py` is an independent Python process that polls `/api/org` every 60 seconds. It decides per-agent whether to trigger a health-check (`POST /api/agents/:id/health-check`) or log a stale-activity warning. Each adapter's `healthcheck()` probes the actual CLI binary. The boot banner reports which harnesses are available.
