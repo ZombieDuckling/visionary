@@ -46,7 +46,7 @@ The Overview API also returns `cost_baseline`: a local 30-day comparison of agen
 
 ### Governance watchlist
 
-`src/governance.js` scans local project/task text for affected-user, sensitive-domain, education, AI-decisioning, trust/adoption, and external-workflow signals. `/api/overview` returns a bounded `governance_watchlist`, and `GET /api/projects/:id/governance` returns the full deterministic trigger list plus a lightweight decision-ledger checklist. This is intentionally advisory: it does not block work, but it nudges consequential AI/customer/team workflows toward named stakeholders, proposal ranking, implementation rationale, and eval cases before autonomy is productized.
+`src/governance.js` scans local project/task text for affected-user, sensitive-domain, education, AI-decisioning, trust/adoption, external-workflow, and domain-literacy signals. `/api/overview` returns a bounded `governance_watchlist`, and `GET /api/projects/:id/governance` returns the full deterministic trigger list plus lightweight decision-ledger guidance. When the text looks like practitioners adopting AI in a domain, the payload now includes a `domain_ai_literacy` workbench profile with use/non-use boundaries, examples/anti-examples, peer review loops, artifact revision evidence, and consent/retention checks. This is intentionally advisory: it does not block work, but it nudges consequential AI/customer/team workflows toward named stakeholders, proposal ranking, implementation rationale, and eval cases before autonomy is productized.
 
 ### Watchdog
 

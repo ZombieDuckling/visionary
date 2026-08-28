@@ -568,8 +568,14 @@
       + '<div class="overview-meta">Projects where tasks/descriptions suggest stakeholders, sensitive domains, or AI decisioning. Use before productizing autonomy.</div>'
       + '<div class="overview-list">';
     items.forEach(function (item) {
+      var profiles = (item.workbench_profiles || []).map(function (profile) {
+        return '<span class="badge badge-blue">' + esc(profile.title || profile.id) + '</span>';
+      }).join(' ');
       html += '<div class="overview-list-item">'
-        + '<div><strong>' + esc(item.project_name) + '</strong><div class="overview-meta">score ' + esc(item.score) + ' · ' + esc(item.active_task_count) + ' active · ' + esc((item.triggers || []).join(', ')) + '</div></div>'
+        + '<div><strong>' + esc(item.project_name) + '</strong><div class="overview-meta">score ' + esc(item.score) + ' · ' + esc(item.active_task_count) + ' active · ' + esc((item.triggers || []).join(', ')) + '</div>'
+        + (profiles ? '<div class="overview-meta governance-profiles">' + profiles + '</div>' : '')
+        + (item.next_action ? '<div class="overview-meta">Next: ' + esc(item.next_action) + '</div>' : '')
+        + '</div>'
         + '<a class="btn btn-small" href="#/projects/' + esc(item.project_id) + '">Review</a>'
         + '</div>';
     });

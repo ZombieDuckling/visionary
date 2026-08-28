@@ -11,7 +11,8 @@ const SIGNALS = [
   { id: 'sensitive-domain', weight: 4, pattern: /\b(finance|financial|investment|portfolio|legal|medical|health|security|cyber|privacy|compliance|risk|safety|identity|personal data|pii)\b/i },
   { id: 'ai-decisioning', weight: 3, pattern: /\b(ai|agent|agents|automation|automated|model|llm|recommendation|ranking|scoring|decision|triage|classifier)\b/i },
   { id: 'trust-adoption', weight: 2, pattern: /\b(trust|adoption|approval|review|governance|rubric|policy|ethics|fairness|bias|consent|feedback)\b/i },
-  { id: 'external-workflow', weight: 2, pattern: /\b(client|customer|team|department|org|organisation|organization|public|market|sales|support|workflow)\b/i }
+  { id: 'external-workflow', weight: 2, pattern: /\b(client|customer|team|department|org|organisation|organization|public|market|sales|support|workflow)\b/i },
+  { id: 'domain-literacy', weight: 2, pattern: /\b(ai literacy|literacy|training|workshop|community of practice|peer review|practitioners?|profession|domain experts?|enablement|onboarding|change management)\b/i }
 ];
 
 const CHECKLIST = [
@@ -23,6 +24,40 @@ const CHECKLIST = [
   'Record accepted/rejected/deferred decisions with rationale and links.',
   'Re-check outcomes after implementation, not just attendance or sentiment.'
 ];
+
+const DOMAIN_AI_LITERACY_CHECKLIST = [
+  'Name the domain practitioners and the expertise they must keep owning.',
+  'List AI use cases, assist-only cases, and human-only/no-use boundaries.',
+  'Capture concrete examples and anti-examples from the domain workflow.',
+  'Create a peer review/community loop for objections, failures, and standards updates.',
+  'Attach assistant roles to real artifacts, not persona theater.',
+  'Record artifact revisions, accepted/rejected changes, and implementation evidence.',
+  'State consent and retention rules for any private conversation data used to improve shared tools.'
+];
+
+function hasTrigger(triggers, id) {
+  return triggers.some((trigger) => trigger.id === id);
+}
+
+function buildWorkbenchProfiles(triggers) {
+  const profiles = [];
+  const hasAffectedOrExternal = hasTrigger(triggers, 'affected-users') || hasTrigger(triggers, 'external-workflow');
+  const hasDomainAdoptionShape = hasTrigger(triggers, 'domain-literacy')
+    || hasTrigger(triggers, 'education')
+    || hasTrigger(triggers, 'trust-adoption');
+
+  if (hasAffectedOrExternal && hasTrigger(triggers, 'ai-decisioning') && hasDomainAdoptionShape) {
+    profiles.push({
+      id: 'domain_ai_literacy',
+      title: 'Domain AI literacy workbench',
+      reason: 'This looks like practitioners adopting AI inside a real domain, so Visionary should force use/non-use boundaries, peer discourse, artifacts, and implementation evidence into view.',
+      checklist: DOMAIN_AI_LITERACY_CHECKLIST.slice(),
+      next_action: 'Run a domain-literacy workbench before turning the workflow into always-on automation.'
+    });
+  }
+
+  return profiles;
+}
 
 function textFor(project, tasks) {
   const chunks = [];
@@ -67,9 +102,11 @@ function analyzeGovernanceNeed(project, tasks) {
     triggers.push({ id: 'active-workload', weight: 1, snippets: [String(activeTasks) + ' active task(s)'] });
   }
 
+  const workbenchProfiles = buildWorkbenchProfiles(triggers);
+
   const recommended = score >= 7 || (
-    triggers.some((t) => t.id === 'affected-users')
-    && triggers.some((t) => t.id === 'ai-decisioning' || t.id === 'sensitive-domain')
+    hasTrigger(triggers, 'affected-users')
+    && (hasTrigger(triggers, 'ai-decisioning') || hasTrigger(triggers, 'sensitive-domain'))
   );
 
   let level = 'low';
@@ -82,9 +119,10 @@ function analyzeGovernanceNeed(project, tasks) {
     score,
     trigger_count: triggers.length,
     triggers,
+    workbench_profiles: workbenchProfiles,
     checklist: CHECKLIST.slice(),
     next_action: recommended
-      ? 'Create a lightweight decision ledger before productizing or dispatching more autonomous work.'
+      ? (workbenchProfiles[0] ? workbenchProfiles[0].next_action : 'Create a lightweight decision ledger before productizing or dispatching more autonomous work.')
       : 'No governance workbench needed yet; keep normal artifact/review hygiene.'
   };
 }
@@ -106,6 +144,7 @@ function buildGovernanceWatchlist(projects, tasksByProject, limit = 3) {
       level: entry.analysis.level,
       active_task_count: entry.active_task_count,
       triggers: entry.analysis.triggers.map((t) => t.id),
+      workbench_profiles: entry.analysis.workbench_profiles.map((p) => ({ id: p.id, title: p.title })),
       next_action: entry.analysis.next_action
     }));
 }
@@ -113,6 +152,7 @@ function buildGovernanceWatchlist(projects, tasksByProject, limit = 3) {
 module.exports = {
   SIGNALS,
   CHECKLIST,
+  DOMAIN_AI_LITERACY_CHECKLIST,
   analyzeGovernanceNeed,
   buildGovernanceWatchlist
 };

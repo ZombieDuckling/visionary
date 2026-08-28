@@ -28,6 +28,7 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 9. **Escalate automation deliberately.** Use `docs/AUTOMATION-TIMING-RUBRIC.md` before converting manual work into scripts, agents, crons, or first-class product integrations.
 10. **Select the smallest effective interface layer.** Use `docs/INTERFACE-LAYER-SELECTION.md` before turning chat, co-work, IDE, terminal, or script-shaped work into custom orchestration.
 11. **Use governance workbenches for consequential AI.** When project/task text points at affected users, education, sensitive domains, external customers, or AI decisioning, check `/api/projects/:id/governance` and create a decision ledger before productizing autonomy.
+12. **Separate domain AI literacy from generic governance.** If the governance payload includes `workbench_profiles[].id === "domain_ai_literacy"`, treat the project as practitioner adoption work: name use/non-use boundaries, examples/anti-examples, peer review loops, artifact revisions, and consent/retention rules before building always-on automation.
 
 ## Good background-improvement targets
 
