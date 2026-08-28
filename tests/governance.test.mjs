@@ -23,7 +23,29 @@ test('governance scanner recommends a workbench for consequential AI/user workfl
   assert.ok(analysis.triggers.some((t) => t.id === 'affected-users'));
   assert.ok(analysis.triggers.some((t) => t.id === 'education'));
   assert.ok(analysis.triggers.some((t) => t.id === 'ai-decisioning'));
+  assert.ok(analysis.workbench_profiles.some((p) => p.id === 'domain_ai_literacy'));
+  assert.match(analysis.next_action, /domain-literacy/);
   assert.ok(analysis.checklist.length >= 7);
+});
+
+test('governance scanner identifies domain AI literacy workbench shape outside schools', () => {
+  const project = {
+    id: 9,
+    name: 'Claims team AI literacy rollout',
+    slug: 'claims-team-ai-literacy-rollout',
+    description: 'Enablement workshop for insurance practitioners adopting AI assistants in the support workflow.'
+  };
+  const tasks = [
+    { title: 'Collect practitioner examples and anti-examples', description: 'Compare human-only decisions with assist-only AI drafting.', status: 'todo', priority: 'high' },
+    { title: 'Design peer review loop', description: 'Community of practice captures trust objections and consent boundaries.', status: 'todo', priority: 'medium' }
+  ];
+
+  const analysis = analyzeGovernanceNeed(project, tasks);
+  assert.equal(analysis.recommended, true);
+  assert.ok(analysis.triggers.some((t) => t.id === 'domain-literacy'));
+  const profile = analysis.workbench_profiles.find((p) => p.id === 'domain_ai_literacy');
+  assert.ok(profile);
+  assert.ok(profile.checklist.some((item) => /use cases, assist-only cases/.test(item)));
 });
 
 test('governance scanner stays quiet for a tiny internal maintenance project', () => {
@@ -49,4 +71,5 @@ test('governance watchlist sorts and bounds recommended projects', () => {
   assert.equal(watchlist.length, 1);
   assert.ok([2, 3].includes(watchlist[0].project_id));
   assert.ok(watchlist[0].triggers.length >= 3);
+  assert.ok(Array.isArray(watchlist[0].workbench_profiles));
 });
