@@ -19,6 +19,7 @@ const { appendSystemDecompositionPrompt } = require('./src/system-decomposition'
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
+const { appendChallengeDesignPrompt } = require('./src/challenge-design');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -447,8 +448,10 @@ function buildAgentPrompt(agentId, message, workdir) {
   const persona = loadPersonality(agentId);
   const agentMessage = appendContextBoundaryPrompt(
     appendArtifactWorkbenchPrompt(
-      appendExperimentMatrixPrompt(
-        appendSystemDecompositionPrompt(appendValueLayerPrompt(message))
+      appendChallengeDesignPrompt(
+        appendExperimentMatrixPrompt(
+          appendSystemDecompositionPrompt(appendValueLayerPrompt(message))
+        )
       )
     ),
     message

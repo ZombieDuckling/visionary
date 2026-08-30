@@ -34,6 +34,10 @@ Every dispatch runs inside its own working directory: `~/Visionary/<project>/tas
 
 After a run completes, the reviewer agent runs through its own harness chain with the artifact list as evidence and read-only tools. Reviews parse a structured `APPROVE:` / `REJECT:` first line — no keyword-anywhere false verdicts. Inconclusive results stay in Review for the operator. Rejections redispatch through the normal path (new workdir, full failover). Tasks that hit the retry ceiling stay in Review rather than bouncing back to todo.
 
+### Challenge-design dispatch nudges
+
+Broad prompts like “draft a quick plan” or “generate ideas” now get a deterministic challenge-design block before dispatch. The nudge tells the agent to name the audience, avoid the stale/easy generic baseline, add a compact rubric, use evidence/examples, and still deliver without asking for clarification. It is intentionally skipped when the operator already supplied concrete quality criteria.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
