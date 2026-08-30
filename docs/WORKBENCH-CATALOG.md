@@ -39,6 +39,7 @@ When doing autonomous maintenance, prefer changes that strengthen one of these w
 - Role/personality support: clearer agent charters, org-chart validation, role-to-workflow matching.
 - Artifact visibility: better file lists, links, source provenance, or preview safety.
 - Cost/token telemetry: capture, estimate, or expose usage without adding paid dependencies.
+- Challenge-design quality bars: broad AI output prompts should name audience, stale baseline, rubric, evidence, examples, and acceptance criteria before agents produce generic work.
 - Secret isolation and local-first safety: path guards, env documentation, retention checks.
 - Reliability checks: focused tests, smoke scripts, route validation, syntax gates.
 - Onboarding UX: front-desk pages, empty-state copy, operator runbooks.
