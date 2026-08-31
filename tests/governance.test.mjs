@@ -48,6 +48,28 @@ test('governance scanner identifies domain AI literacy workbench shape outside s
   assert.ok(profile.checklist.some((item) => /use cases, assist-only cases/.test(item)));
 });
 
+test('governance scanner exposes post-digital governance surface for sensitive AI workflows', () => {
+  const project = {
+    id: 10,
+    name: 'Customer security agent',
+    slug: 'customer-security-agent',
+    description: 'External customer AI agent for cyber risk triage, account access recommendations, and privacy-sensitive incident notes.'
+  };
+  const tasks = [
+    { title: 'Prototype automated access recommendation', description: 'Map identity, action rights, logs, rollback path, and provider dependency before launch.', status: 'todo', priority: 'high' }
+  ];
+
+  const analysis = analyzeGovernanceNeed(project, tasks);
+  assert.equal(analysis.recommended, true);
+  assert.ok(analysis.triggers.some((t) => t.id === 'sensitive-domain'));
+  assert.ok(analysis.triggers.some((t) => t.id === 'ai-decisioning'));
+  const profile = analysis.workbench_profiles.find((p) => p.id === 'post_digital_governance_surface');
+  assert.ok(profile);
+  assert.match(profile.reason, /identity, access, money, reputation, security posture/);
+  assert.ok(profile.checklist.some((item) => /read, edit, execute, export, delete/.test(item)));
+  assert.match(analysis.next_action, /governance-surface/);
+});
+
 test('governance scanner stays quiet for a tiny internal maintenance project', () => {
   const project = { id: 8, name: 'Local CSS cleanup', description: 'Tidy spacing on the dashboard.' };
   const tasks = [{ title: 'Rename a CSS variable', description: 'Small visual cleanup.', status: 'todo' }];
