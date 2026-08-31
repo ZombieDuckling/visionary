@@ -35,6 +35,16 @@ const DOMAIN_AI_LITERACY_CHECKLIST = [
   'State consent and retention rules for any private conversation data used to improve shared tools.'
 ];
 
+const POST_DIGITAL_GOVERNANCE_CHECKLIST = [
+  'Map actors/roles and the exact identity each actor has inside the workspace.',
+  'List read, edit, execute, export, delete, invite, and override rights separately.',
+  'Classify data as raw source, derived note, embedding, log, export, or provider trace.',
+  'Name platform/provider dependencies for model access, identity, payments, moderation, and compute.',
+  'Require source/provenance traces for claims, recommendations, and accepted decisions.',
+  'State cyber/social blast radius: money, access, infrastructure, reputation, safety, or legal position.',
+  'Define audit, rollback, incident-response, and human-owner paths before granting always-on autonomy.'
+];
+
 function hasTrigger(triggers, id) {
   return triggers.some((trigger) => trigger.id === id);
 }
@@ -45,6 +55,9 @@ function buildWorkbenchProfiles(triggers) {
   const hasDomainAdoptionShape = hasTrigger(triggers, 'domain-literacy')
     || hasTrigger(triggers, 'education')
     || hasTrigger(triggers, 'trust-adoption');
+  const hasPostDigitalGovernanceShape = hasTrigger(triggers, 'sensitive-domain')
+    && hasTrigger(triggers, 'ai-decisioning')
+    && (hasAffectedOrExternal || hasTrigger(triggers, 'trust-adoption'));
 
   if (hasAffectedOrExternal && hasTrigger(triggers, 'ai-decisioning') && hasDomainAdoptionShape) {
     profiles.push({
@@ -53,6 +66,16 @@ function buildWorkbenchProfiles(triggers) {
       reason: 'This looks like practitioners adopting AI inside a real domain, so Visionary should force use/non-use boundaries, peer discourse, artifacts, and implementation evidence into view.',
       checklist: DOMAIN_AI_LITERACY_CHECKLIST.slice(),
       next_action: 'Run a domain-literacy workbench before turning the workflow into always-on automation.'
+    });
+  }
+
+  if (hasPostDigitalGovernanceShape) {
+    profiles.push({
+      id: 'post_digital_governance_surface',
+      title: 'Post-digital governance surface',
+      reason: 'This looks like an AI/workbench system that may shape identity, access, money, reputation, security posture, or external decisions; Visionary should expose rights, provenance, provider dependencies, blast radius, audit, and rollback before autonomy expands.',
+      checklist: POST_DIGITAL_GOVERNANCE_CHECKLIST.slice(),
+      next_action: 'Add a governance-surface section to the project brief and review tool/action rights before dispatching always-on or external-facing agents.'
     });
   }
 
@@ -153,6 +176,7 @@ module.exports = {
   SIGNALS,
   CHECKLIST,
   DOMAIN_AI_LITERACY_CHECKLIST,
+  POST_DIGITAL_GOVERNANCE_CHECKLIST,
   analyzeGovernanceNeed,
   buildGovernanceWatchlist
 };
