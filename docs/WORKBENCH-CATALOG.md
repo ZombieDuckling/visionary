@@ -31,6 +31,7 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 12. **Separate domain AI literacy from generic governance.** If the governance payload includes `workbench_profiles[].id === "domain_ai_literacy"`, treat the project as practitioner adoption work: name use/non-use boundaries, examples/anti-examples, peer review loops, artifact revisions, and consent/retention rules before building always-on automation.
 13. **Expose post-digital governance surfaces.** If the governance payload includes `workbench_profiles[].id === "post_digital_governance_surface"`, map roles/identity, action rights, data classes, provider dependencies, source provenance, blast radius, audit, rollback, and incident ownership before expanding autonomy.
 14. **Keep document collaboration artifact-centered.** When dispatching edits to specs, runbooks, briefs, proposals, templates, or reports, require a source discussion, active artifact, bounded role/output contract, section target, change ledger, and merge/review path before treating the result as final.
+15. **Resume from position-addressed state.** When a request says continue, resume, follow up, hand off, unblock, or pick up a prior run, reconcile the relevant task/project status, source files, artifact workdir, logs, branch/commit, blockers, and verification trail before executing new work.
 
 ## Good background-improvement targets
 
