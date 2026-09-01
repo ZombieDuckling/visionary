@@ -38,6 +38,10 @@ After a run completes, the reviewer agent runs through its own harness chain wit
 
 Broad prompts like “draft a quick plan” or “generate ideas” now get a deterministic challenge-design block before dispatch. The nudge tells the agent to name the audience, avoid the stale/easy generic baseline, add a compact rubric, use evidence/examples, and still deliver without asking for clarification. It is intentionally skipped when the operator already supplied concrete quality criteria.
 
+### Continuity dispatch nudges
+
+Requests that say “continue”, “resume”, “pick up”, “handoff”, “follow up”, or “unblock” now get a deterministic continuity block before dispatch. The agent is told to recover the smallest useful prior state — task/project status, source files, workdir/artifacts, logs, branch/commit, blockers, and verification trail — before doing new work. This keeps long-running work anchored to durable state instead of stale chat memory.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
