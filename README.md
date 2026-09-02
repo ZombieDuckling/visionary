@@ -42,6 +42,10 @@ Broad prompts like “draft a quick plan” or “generate ideas” now get a de
 
 Requests that say “continue”, “resume”, “pick up”, “handoff”, “follow up”, or “unblock” now get a deterministic continuity block before dispatch. The agent is told to recover the smallest useful prior state — task/project status, source files, workdir/artifacts, logs, branch/commit, blockers, and verification trail — before doing new work. This keeps long-running work anchored to durable state instead of stale chat memory.
 
+### Folder-product baseline nudges
+
+Product/app/agent build requests now get a deterministic folder-product baseline check. Before building custom infrastructure, the agent must name the smallest folder/workbench + markdown/context/artifact setup that could solve the job, then justify any software layer by the gap plain files cannot cover: roles, permissions, privacy, shared access, continuity, audit, artifact visibility, integrations, scheduling, or live status. This keeps Visionary focused on deployment/governance value instead of wrapping what a well-routed folder already does.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
