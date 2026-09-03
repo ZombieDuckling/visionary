@@ -21,6 +21,7 @@ const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
 const { appendContinuityWorkbenchPrompt } = require('./src/continuity-workbench');
 const { appendFolderProductBaselinePrompt } = require('./src/folder-product-baseline');
+const { appendWorkflowMapPrompt } = require('./src/workflow-map');
 const { appendChallengeDesignPrompt } = require('./src/challenge-design');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
@@ -452,8 +453,10 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendArtifactWorkbenchPrompt(
       appendChallengeDesignPrompt(
         appendFolderProductBaselinePrompt(
-          appendExperimentMatrixPrompt(
-            appendSystemDecompositionPrompt(appendValueLayerPrompt(appendContinuityWorkbenchPrompt(message)))
+          appendWorkflowMapPrompt(
+            appendExperimentMatrixPrompt(
+              appendSystemDecompositionPrompt(appendValueLayerPrompt(appendContinuityWorkbenchPrompt(message)))
+            )
           )
         )
       )

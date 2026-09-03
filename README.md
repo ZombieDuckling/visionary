@@ -46,6 +46,10 @@ Requests that say “continue”, “resume”, “pick up”, “handoff”, �
 
 Product/app/agent build requests now get a deterministic folder-product baseline check. Before building custom infrastructure, the agent must name the smallest folder/workbench + markdown/context/artifact setup that could solve the job, then justify any software layer by the gap plain files cannot cover: roles, permissions, privacy, shared access, continuity, audit, artifact visibility, integrations, scheduling, or live status. This keeps Visionary focused on deployment/governance value instead of wrapping what a well-routed folder already does.
 
+### Workflow-map nudges
+
+Team/workflow/role/context-memory requests now get a deterministic workflow-map check. The agent must briefly name the nouns and verbs before acting: actors/nodes, actions/edges, inputs/outputs, source-of-truth files/state, and a verification path for a fresh operator or agent. This applies Jake Van Clief's second-brain lesson without adding a premature graph database or UI layer.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
