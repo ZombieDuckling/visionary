@@ -50,6 +50,10 @@ Product/app/agent build requests now get a deterministic folder-product baseline
 
 Team/workflow/role/context-memory requests now get a deterministic workflow-map check. The agent must briefly name the nouns and verbs before acting: actors/nodes, actions/edges, inputs/outputs, source-of-truth files/state, and a verification path for a fresh operator or agent. This applies Jake Van Clief's second-brain lesson without adding a premature graph database or UI layer.
 
+### Agent-split nudges
+
+Agent/persona/org-design requests now get a deterministic split-justification check before dispatch. The agent must say what actually requires a distinct agent — authority, ownership, tool access, secrets, watchdog cadence, review duty, cost/latency profile, or user-facing identity — and name the simpler folder/workbench/router/script alternative when one would do. This keeps Visionary's role support grounded in workflow boundaries instead of prompt-theater swarms.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
