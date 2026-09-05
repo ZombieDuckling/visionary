@@ -54,6 +54,10 @@ Team/workflow/role/context-memory requests now get a deterministic workflow-map 
 
 Agent/persona/org-design requests now get a deterministic split-justification check before dispatch. The agent must say what actually requires a distinct agent — authority, ownership, tool access, secrets, watchdog cadence, review duty, cost/latency profile, or user-facing identity — and name the simpler folder/workbench/router/script alternative when one would do. This keeps Visionary's role support grounded in workflow boundaries instead of prompt-theater swarms.
 
+### Downstream export nudges
+
+Export/package/handoff requests now get a deterministic downstream-export block before dispatch. The agent must name the canonical source artifact, target consumer/tool, output files or formats, continuation context, fidelity checks, and review path. This keeps decks, specs, HTML, zips, Canva/PowerPoint packages, Claude Code handoffs, and vendor bundles portable instead of trapped in chat.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.

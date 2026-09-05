@@ -32,6 +32,7 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 13. **Expose post-digital governance surfaces.** If the governance payload includes `workbench_profiles[].id === "post_digital_governance_surface"`, map roles/identity, action rights, data classes, provider dependencies, source provenance, blast radius, audit, rollback, and incident ownership before expanding autonomy.
 14. **Keep document collaboration artifact-centered.** When dispatching edits to specs, runbooks, briefs, proposals, templates, or reports, require a source discussion, active artifact, bounded role/output contract, section target, change ledger, and merge/review path before treating the result as final.
 15. **Resume from position-addressed state.** When a request says continue, resume, follow up, hand off, unblock, or pick up a prior run, reconcile the relevant task/project status, source files, artifact workdir, logs, branch/commit, blockers, and verification trail before executing new work.
+16. **Package work for the next surface.** When a request says export, convert, package, bundle, zip, publish, or hand off a deck/spec/report/folder, name the canonical source, target consumer/tool, output formats, continuation context, fidelity checks, and review path so Canva, PowerPoint, Claude Code, vendors, contractors, or clients can resume without chat archaeology.
 
 ## Good background-improvement targets
 
