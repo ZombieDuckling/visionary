@@ -19,6 +19,7 @@ const { appendSystemDecompositionPrompt } = require('./src/system-decomposition'
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
+const { appendDownstreamExportPrompt } = require('./src/downstream-export');
 const { appendContinuityWorkbenchPrompt } = require('./src/continuity-workbench');
 const { appendFolderProductBaselinePrompt } = require('./src/folder-product-baseline');
 const { appendWorkflowMapPrompt } = require('./src/workflow-map');
@@ -452,12 +453,14 @@ function buildAgentPrompt(agentId, message, workdir) {
   const persona = loadPersonality(agentId);
   const agentMessage = appendContextBoundaryPrompt(
     appendArtifactWorkbenchPrompt(
-      appendChallengeDesignPrompt(
-        appendAgentSplitPrompt(
-          appendFolderProductBaselinePrompt(
-            appendWorkflowMapPrompt(
-              appendExperimentMatrixPrompt(
-                appendSystemDecompositionPrompt(appendValueLayerPrompt(appendContinuityWorkbenchPrompt(message)))
+      appendDownstreamExportPrompt(
+        appendChallengeDesignPrompt(
+          appendAgentSplitPrompt(
+            appendFolderProductBaselinePrompt(
+              appendWorkflowMapPrompt(
+                appendExperimentMatrixPrompt(
+                  appendSystemDecompositionPrompt(appendValueLayerPrompt(appendContinuityWorkbenchPrompt(message)))
+                )
               )
             )
           )
