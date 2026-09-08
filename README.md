@@ -54,6 +54,10 @@ Team/workflow/role/context-memory requests now get a deterministic workflow-map 
 
 Agent/persona/org-design requests now get a deterministic split-justification check before dispatch. The agent must say what actually requires a distinct agent — authority, ownership, tool access, secrets, watchdog cadence, review duty, cost/latency profile, or user-facing identity — and name the simpler folder/workbench/router/script alternative when one would do. This keeps Visionary's role support grounded in workflow boundaries instead of prompt-theater swarms.
 
+### Workflow-skill template nudges
+
+Requests that ask Visionary agents to create or improve a skill, SOP, playbook, checklist, template, prompt, or repeatable workflow now get a deterministic reusable-workflow block before dispatch. The agent must name the canonical markdown source, scope boundaries, procedure, examples/failure modes, pressure-test case, and revision loop before producing another one-off answer. This applies the “skills are markdown” / “build once, never start from scratch” lesson without turning every workflow into a platform feature.
+
 ### Downstream export nudges
 
 Export/package/handoff requests now get a deterministic downstream-export block before dispatch. The agent must name the canonical source artifact, target consumer/tool, output files or formats, continuation context, fidelity checks, and review path. This keeps decks, specs, HTML, zips, Canva/PowerPoint packages, Claude Code handoffs, and vendor bundles portable instead of trapped in chat.
@@ -184,7 +188,7 @@ See `.planning/ROADMAP.md` for the longer arc.
 
 ## Contributing
 
-PRs welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. The small-deps stance, vanilla-JS rule, and SQLite-only architecture are deliberate constraints, not negotiables. The test gate is `npm run verify` (syntax check + smoke suite, currently 17/17).
+PRs welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. The small-deps stance, vanilla-JS rule, and SQLite-only architecture are deliberate constraints, not negotiables. The test gate is `npm run verify` (syntax check + smoke suite + unit tests).
 
 ## License
 
