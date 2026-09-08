@@ -34,6 +34,8 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 15. **Resume from position-addressed state.** When a request says continue, resume, follow up, hand off, unblock, or pick up a prior run, reconcile the relevant task/project status, source files, artifact workdir, logs, branch/commit, blockers, and verification trail before executing new work.
 16. **Package work for the next surface.** When a request says export, convert, package, bundle, zip, publish, or hand off a deck/spec/report/folder, name the canonical source, target consumer/tool, output formats, continuation context, fidelity checks, and review path so Canva, PowerPoint, Claude Code, vendors, contractors, or clients can resume without chat archaeology.
 
+17. **Build workflow skills as portable markdown first.** When dispatching work to create or improve a skill, SOP, playbook, checklist, template, prompt, or repeated process, require a canonical markdown source, scope boundaries, concrete procedure, examples/failure modes, at least one pressure-test case, and a revision loop before productizing the workflow.
+
 ## Good background-improvement targets
 
 When doing autonomous maintenance, prefer changes that strengthen one of these workbench components without broad rewrites:

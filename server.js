@@ -23,6 +23,7 @@ const { appendDownstreamExportPrompt } = require('./src/downstream-export');
 const { appendContinuityWorkbenchPrompt } = require('./src/continuity-workbench');
 const { appendFolderProductBaselinePrompt } = require('./src/folder-product-baseline');
 const { appendWorkflowMapPrompt } = require('./src/workflow-map');
+const { appendWorkflowSkillTemplatePrompt } = require('./src/workflow-skill-template');
 const { appendAgentSplitPrompt } = require('./src/agent-split');
 const { appendChallengeDesignPrompt } = require('./src/challenge-design');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
@@ -458,8 +459,10 @@ function buildAgentPrompt(agentId, message, workdir) {
           appendAgentSplitPrompt(
             appendFolderProductBaselinePrompt(
               appendWorkflowMapPrompt(
-                appendExperimentMatrixPrompt(
-                  appendSystemDecompositionPrompt(appendValueLayerPrompt(appendContinuityWorkbenchPrompt(message)))
+                appendWorkflowSkillTemplatePrompt(
+                  appendExperimentMatrixPrompt(
+                    appendSystemDecompositionPrompt(appendValueLayerPrompt(appendContinuityWorkbenchPrompt(message)))
+                  )
                 )
               )
             )
