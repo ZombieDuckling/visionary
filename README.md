@@ -62,6 +62,10 @@ Requests that ask Visionary agents to create or improve a skill, SOP, playbook, 
 
 Export/package/handoff requests now get a deterministic downstream-export block before dispatch. The agent must name the canonical source artifact, target consumer/tool, output files or formats, continuation context, fidelity checks, and review path. This keeps decks, specs, HTML, zips, Canva/PowerPoint packages, Claude Code handoffs, and vendor bundles portable instead of trapped in chat.
 
+### Opportunity-routing nudges
+
+Client/customer/market workflow requests now get a deterministic opportunity-routing block before dispatch. The agent must name the buyer/user, current time or money cost, fulfillment capacity and routing path, reusable asset to save, and proof-of-work before recommending broader product buildout. This applies Jake Van Clief's paid-pain lesson: Visionary agents should route real demand to capable operators before turning AI novelty into software.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.

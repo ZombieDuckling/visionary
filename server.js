@@ -15,6 +15,7 @@ const rateLimiter = require('./src/rate-limiter');
 const { parseVerdict } = require('./src/review-verdict');
 const { parseChatActions } = require('./src/chat-actions');
 const { appendValueLayerPrompt } = require('./src/value-layer');
+const { appendOpportunityRoutingPrompt } = require('./src/opportunity-routing');
 const { appendSystemDecompositionPrompt } = require('./src/system-decomposition');
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
@@ -461,7 +462,7 @@ function buildAgentPrompt(agentId, message, workdir) {
               appendWorkflowMapPrompt(
                 appendWorkflowSkillTemplatePrompt(
                   appendExperimentMatrixPrompt(
-                    appendSystemDecompositionPrompt(appendValueLayerPrompt(appendContinuityWorkbenchPrompt(message)))
+                    appendSystemDecompositionPrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))
                   )
                 )
               )
