@@ -66,6 +66,10 @@ Export/package/handoff requests now get a deterministic downstream-export block 
 
 Client/customer/market workflow requests now get a deterministic opportunity-routing block before dispatch. The agent must name the buyer/user, current time or money cost, fulfillment capacity and routing path, reusable asset to save, and proof-of-work before recommending broader product buildout. This applies Jake Van Clief's paid-pain lesson: Visionary agents should route real demand to capable operators before turning AI novelty into software.
 
+### Domain-expert source nudges
+
+Domain-specific AI/workflow requests now get a deterministic domain-expert-source block before dispatch. The agent must name the practitioner or accountable reviewer, source artifacts, edge cases, AI-assist versus human-only boundaries, and acceptance/sign-off criteria before building automation. This applies Jake Van Clief's subject-experts-beat-AI-experts lesson: Visionary should help experts package their judgment, not let generic AI fluency pretend to replace it.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
