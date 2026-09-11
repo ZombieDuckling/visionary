@@ -27,6 +27,7 @@ const { appendWorkflowMapPrompt } = require('./src/workflow-map');
 const { appendWorkflowSkillTemplatePrompt } = require('./src/workflow-skill-template');
 const { appendAgentSplitPrompt } = require('./src/agent-split');
 const { appendChallengeDesignPrompt } = require('./src/challenge-design');
+const { appendQuestionDiscoveryPrompt } = require('./src/question-discovery');
 const { appendDomainExpertSourcePrompt } = require('./src/domain-expert-source');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
@@ -458,12 +459,14 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendArtifactWorkbenchPrompt(
       appendDownstreamExportPrompt(
         appendChallengeDesignPrompt(
-          appendAgentSplitPrompt(
-            appendFolderProductBaselinePrompt(
-              appendWorkflowMapPrompt(
-                appendWorkflowSkillTemplatePrompt(
-                  appendExperimentMatrixPrompt(
-                    appendSystemDecompositionPrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message)))))
+          appendQuestionDiscoveryPrompt(
+            appendAgentSplitPrompt(
+              appendFolderProductBaselinePrompt(
+                appendWorkflowMapPrompt(
+                  appendWorkflowSkillTemplatePrompt(
+                    appendExperimentMatrixPrompt(
+                      appendSystemDecompositionPrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message)))))
+                    )
                   )
                 )
               )
