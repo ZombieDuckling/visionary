@@ -74,6 +74,10 @@ Client/customer/market workflow requests now get a deterministic opportunity-rou
 
 Domain-specific AI/workflow requests now get a deterministic domain-expert-source block before dispatch. The agent must name the practitioner or accountable reviewer, source artifacts, edge cases, AI-assist versus human-only boundaries, and acceptance/sign-off criteria before building automation. This applies Jake Van Clief's subject-experts-beat-AI-experts lesson: Visionary should help experts package their judgment, not let generic AI fluency pretend to replace it.
 
+### Source-provenance nudges
+
+Research, data, transcript, archive, repository, audit, report, or knowledgebase synthesis requests now get a deterministic source-provenance block before dispatch unless the operator already supplied one. The agent must preserve source inventory, transformations, confidence/gaps, reusable structure, and verification checks before producing findings. This applies Jake Van Clief's research-data-care lesson: AI-organized knowledge is only useful if the next operator can trace conclusions back to real sources.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
