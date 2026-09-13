@@ -78,6 +78,10 @@ Domain-specific AI/workflow requests now get a deterministic domain-expert-sourc
 
 Research, data, transcript, archive, repository, audit, report, or knowledgebase synthesis requests now get a deterministic source-provenance block before dispatch unless the operator already supplied one. The agent must preserve source inventory, transformations, confidence/gaps, reusable structure, and verification checks before producing findings. This applies Jake Van Clief's research-data-care lesson: AI-organized knowledge is only useful if the next operator can trace conclusions back to real sources.
 
+### Learning-loop nudges
+
+Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
