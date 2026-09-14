@@ -30,6 +30,7 @@ const { appendChallengeDesignPrompt } = require('./src/challenge-design');
 const { appendQuestionDiscoveryPrompt } = require('./src/question-discovery');
 const { appendDomainExpertSourcePrompt } = require('./src/domain-expert-source');
 const { appendSourceProvenancePrompt } = require('./src/source-provenance');
+const { appendSourceMapBeforeSearchPrompt } = require('./src/source-map-before-search');
 const { appendLearningLoopPrompt } = require('./src/learning-loop');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
@@ -467,7 +468,7 @@ function buildAgentPrompt(agentId, message, workdir) {
                 appendWorkflowMapPrompt(
                   appendWorkflowSkillTemplatePrompt(
                     appendExperimentMatrixPrompt(
-                      appendSystemDecompositionPrompt(appendLearningLoopPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message)))))))
+                      appendSystemDecompositionPrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))
                     )
                   )
                 )
