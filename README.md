@@ -86,6 +86,10 @@ Repo, folder, project, component, script, docs, artifact, or workbench requests 
 
 Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
 
+### Durable-retrospective nudges
+
+Requests that revisit old AI/product plans, predictions, docs, roadmaps, or strategy now get a deterministic durable-retrospective block before dispatch. The agent must name the original claim/context, what held up as a durable principle, what changed in tools/market/workflow/assumptions, and whether to keep, revise, archive, or retest each major claim. This applies Jake Van Clief's retrospective lesson: Visionary should preserve transferable primitives without pretending stale tactics are still current.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
