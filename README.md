@@ -90,6 +90,10 @@ Learning, teaching, training, tutorial, course, or onboarding requests now get a
 
 Requests that revisit old AI/product plans, predictions, docs, roadmaps, or strategy now get a deterministic durable-retrospective block before dispatch. The agent must name the original claim/context, what held up as a durable principle, what changed in tools/market/workflow/assumptions, and whether to keep, revise, archive, or retest each major claim. This applies Jake Van Clief's retrospective lesson: Visionary should preserve transferable primitives without pretending stale tactics are still current.
 
+### Failure-study nudges
+
+Debug, incident, broken-build, and recurring-failure requests now get a deterministic failure-study block before dispatch. The agent must collect evidence first, name the missing concept or invariant the failure exposed, make the smallest safe fix, verify it, and save or propose one reusable test/checklist/runbook note. This applies Jake Van Clief's “failure shows what to study” lesson without turning every bug into a long postmortem.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
