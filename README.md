@@ -62,6 +62,10 @@ Agent/persona/org-design requests now get a deterministic split-justification ch
 
 Requests that ask Visionary agents to create or improve a skill, SOP, playbook, checklist, template, prompt, or repeatable workflow now get a deterministic reusable-workflow block before dispatch. The agent must name the canonical markdown source, scope boundaries, procedure, examples/failure modes, pressure-test case, and revision loop before producing another one-off answer. This applies the “skills are markdown” / “build once, never start from scratch” lesson without turning every workflow into a platform feature.
 
+### Asset-workbench nudges
+
+Brand/design/media asset requests now get a deterministic asset-workbench block before dispatch. The agent must inventory source assets, keep originals separate from generated outputs, map brand rules/examples/components/scripts, capture taste constraints, stage deck/site/animation pipelines, and leave portable source plus rendered/exported files. This applies Jake Van Clief's Claude Design import/export lesson: spend model effort once on an exportable workbench instead of repeatedly rediscovering context inside a hosted UI.
+
 ### Downstream export nudges
 
 Export/package/handoff requests now get a deterministic downstream-export block before dispatch. The agent must name the canonical source artifact, target consumer/tool, output files or formats, continuation context, fidelity checks, and review path. This keeps decks, specs, HTML, zips, Canva/PowerPoint packages, Claude Code handoffs, and vendor bundles portable instead of trapped in chat.
