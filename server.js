@@ -20,6 +20,7 @@ const { appendSystemDecompositionPrompt } = require('./src/system-decomposition'
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
+const { appendAssetWorkbenchPrompt } = require('./src/asset-workbench');
 const { appendDownstreamExportPrompt } = require('./src/downstream-export');
 const { appendContinuityWorkbenchPrompt } = require('./src/continuity-workbench');
 const { appendFolderProductBaselinePrompt } = require('./src/folder-product-baseline');
@@ -462,15 +463,17 @@ function buildAgentPrompt(agentId, message, workdir) {
   const persona = loadPersonality(agentId);
   const agentMessage = appendContextBoundaryPrompt(
     appendArtifactWorkbenchPrompt(
-      appendDownstreamExportPrompt(
-        appendChallengeDesignPrompt(
-          appendQuestionDiscoveryPrompt(
-            appendAgentSplitPrompt(
-              appendFolderProductBaselinePrompt(
-                appendWorkflowMapPrompt(
-                  appendWorkflowSkillTemplatePrompt(
-                    appendExperimentMatrixPrompt(
-                      appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))))
+      appendAssetWorkbenchPrompt(
+        appendDownstreamExportPrompt(
+          appendChallengeDesignPrompt(
+            appendQuestionDiscoveryPrompt(
+              appendAgentSplitPrompt(
+                appendFolderProductBaselinePrompt(
+                  appendWorkflowMapPrompt(
+                    appendWorkflowSkillTemplatePrompt(
+                      appendExperimentMatrixPrompt(
+                        appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))))
+                      )
                     )
                   )
                 )
