@@ -17,6 +17,7 @@ const { parseChatActions } = require('./src/chat-actions');
 const { appendValueLayerPrompt } = require('./src/value-layer');
 const { appendOpportunityRoutingPrompt } = require('./src/opportunity-routing');
 const { appendSystemDecompositionPrompt } = require('./src/system-decomposition');
+const { appendSourceRuntimeValuePrompt } = require('./src/source-runtime-value');
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
@@ -472,7 +473,7 @@ function buildAgentPrompt(agentId, message, workdir) {
                   appendWorkflowMapPrompt(
                     appendWorkflowSkillTemplatePrompt(
                       appendExperimentMatrixPrompt(
-                        appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))))
+                        appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message)))))))))))
                       )
                     )
                   )
