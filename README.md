@@ -106,6 +106,10 @@ Requests that revisit old AI/product plans, predictions, docs, roadmaps, or stra
 
 Debug, incident, broken-build, and recurring-failure requests now get a deterministic failure-study block before dispatch. The agent must collect evidence first, name the missing concept or invariant the failure exposed, make the smallest safe fix, verify it, and save or propose one reusable test/checklist/runbook note. This applies Jake Van Clief's “failure shows what to study” lesson without turning every bug into a long postmortem.
 
+### Replicability nudges
+
+Delivery, ops, deployment, automation, scheduled, or handoff requests that mention repeatability, reruns, fallback, proof, logs, commands, or verification now get a deterministic replicability block before dispatch. The agent must name the inputs/environment, exact repeatable path, redundancy/fallback option, and proof artifact/output before calling the work done. This applies Jake Van Clief's redundancy/replicability lesson: useful work should survive the next run, provider failure, or fresh operator without relying on the original chat.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
