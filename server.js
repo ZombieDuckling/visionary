@@ -37,6 +37,7 @@ const { appendSourceMapBeforeSearchPrompt } = require('./src/source-map-before-s
 const { appendLearningLoopPrompt } = require('./src/learning-loop');
 const { appendDurableRetrospectivePrompt } = require('./src/durable-retrospective');
 const { appendFailureStudyLoopPrompt } = require('./src/failure-study-loop');
+const { appendReplicabilityCheckPrompt } = require('./src/replicability-check');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -475,7 +476,7 @@ function buildAgentPrompt(agentId, message, workdir) {
                     appendWorkflowSkillTemplatePrompt(
                       appendOpinionStandardPrompt(
                         appendExperimentMatrixPrompt(
-                          appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))))))
+                          appendReplicabilityCheckPrompt(appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message)))))))))))))
                       )
                     )
                   )
