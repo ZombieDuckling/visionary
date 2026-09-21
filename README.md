@@ -110,6 +110,10 @@ Debug, incident, broken-build, and recurring-failure requests now get a determin
 
 Delivery, ops, deployment, automation, scheduled, or handoff requests that mention repeatability, reruns, fallback, proof, logs, commands, or verification now get a deterministic replicability block before dispatch. The agent must name the inputs/environment, exact repeatable path, redundancy/fallback option, and proof artifact/output before calling the work done. This applies Jake Van Clief's redundancy/replicability lesson: useful work should survive the next run, provider failure, or fresh operator without relying on the original chat.
 
+### Workflow-resilience nudges
+
+AI/provider/tool-dependent workflow requests that mention outage, quota, failover, backup, model swaps, local/manual fallback, portable state, or degradation now get a deterministic workflow-resilience block before dispatch. The agent must name the resume state, next provider/model/tool, local/manual fallback, contract boundary, verification path, and safe degradation behavior. This applies Jake Van Clief's provider-resilience lesson: model swaps should be boring, and critical work should not depend on one chat surface.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
