@@ -94,6 +94,10 @@ Repo, folder, project, component, script, docs, artifact, or workbench requests 
 
 Source-code, template, clone, fork, import, migration, or leaked-code requests now get a deterministic source-runtime value block before dispatch. The agent must name the reused source/provenance limits, runtime wiring, workflow fit, delivery proof, and value boundary before treating copied code as useful software. This applies Jake Van Clief's source-leak lesson: code capture is not product capture without deployment, data, permissions, operations, and customer/workflow fit.
 
+### Interface-boundary nudges
+
+API, CLI, tool, webhook, route, schema, adapter, or integration requests now get a deterministic interface-boundary block before dispatch when boundary or verification signals are present. The agent must name the exact contract surface, inputs/outputs, permission and secret boundary, read-back/smoke/schema verification, and failure behavior. This applies Jake Van Clief's abstraction-and-verification lesson: interfaces are contracts, confidence is not correctness, and secrets stay isolated from auditable workbench artifacts.
+
 ### Learning-loop nudges
 
 Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
