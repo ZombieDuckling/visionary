@@ -118,6 +118,10 @@ Delivery, ops, deployment, automation, scheduled, or handoff requests that menti
 
 AI/provider/tool-dependent workflow requests that mention outage, quota, failover, backup, model swaps, local/manual fallback, portable state, or degradation now get a deterministic workflow-resilience block before dispatch. The agent must name the resume state, next provider/model/tool, local/manual fallback, contract boundary, verification path, and safe degradation behavior. This applies Jake Van Clief's provider-resilience lesson: model swaps should be boring, and critical work should not depend on one chat surface.
 
+### Baseline-ratchet nudges
+
+Workflow/product/process improvement requests now get a deterministic baseline-ratchet block before dispatch unless the operator already supplied a baseline frame. The agent must name the old/manual baseline, the current AI baseline that has become cheap or table-stakes, the raised human+AI expectation, and the verification proof that the bar actually moved. This applies Jake Van Clief's “we forget what we already use is magic” lesson: Visionary agents should turn normalized AI capabilities into boring infrastructure and aim at the next useful workflow leverage point.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
