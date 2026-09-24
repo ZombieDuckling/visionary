@@ -20,6 +20,7 @@ const { appendSystemDecompositionPrompt } = require('./src/system-decomposition'
 const { appendSourceRuntimeValuePrompt } = require('./src/source-runtime-value');
 const { appendContextBoundaryPrompt } = require('./src/context-boundary');
 const { appendInterfaceBoundaryCheckPrompt } = require('./src/interface-boundary-check');
+const { appendDecisionBoundaryPrompt } = require('./src/decision-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
 const { appendAssetWorkbenchPrompt } = require('./src/asset-workbench');
@@ -467,7 +468,7 @@ function loadPersonality(agentId) {
 function buildAgentPrompt(agentId, message, workdir) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
-  const agentMessage = appendInterfaceBoundaryCheckPrompt(appendContextBoundaryPrompt(
+  const agentMessage = appendDecisionBoundaryPrompt(appendInterfaceBoundaryCheckPrompt(appendContextBoundaryPrompt(
     appendArtifactWorkbenchPrompt(
       appendAssetWorkbenchPrompt(
         appendDownstreamExportPrompt(
@@ -491,7 +492,7 @@ function buildAgentPrompt(agentId, message, workdir) {
       )
     ),
     message
-  ));
+  )));
   const workdirNote = workdir
     ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
     : '';
