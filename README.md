@@ -122,6 +122,10 @@ AI/provider/tool-dependent workflow requests that mention outage, quota, failove
 
 Workflow/product/process improvement requests now get a deterministic baseline-ratchet block before dispatch unless the operator already supplied a baseline frame. The agent must name the old/manual baseline, the current AI baseline that has become cheap or table-stakes, the raised human+AI expectation, and the verification proof that the bar actually moved. This applies Jake Van Clief's “we forget what we already use is magic” lesson: Visionary agents should turn normalized AI capabilities into boring infrastructure and aim at the next useful workflow leverage point.
 
+### Consent/disclosure nudges
+
+Synthetic voice, likeness, avatar, deepfake, testimonial, or representative-identity media requests now get a deterministic consent/disclosure block before dispatch unless the operator already supplied the boundary frame. The agent must name subject authority, consent evidence, disclosure surface, raw/source data separation, retention/deletion rules, and misuse risks before producing identity-simulating media. This applies Jake Van Clief's voice-cloning consent lesson: Visionary agents should make identity automation auditable instead of letting generated media blur who approved, spoke, or endorsed.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
