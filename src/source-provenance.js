@@ -3,8 +3,8 @@
 // Deterministic source-provenance nudge for research/data synthesis work.
 // Inspired by Jake Van Clief's research-data-care lesson: organizing knowledge
 // with AI is only useful if future operators can see the source material,
-// confidence, transformations, gaps, and verification path instead of receiving
-// an untraceable polished summary.
+// confidence, transformations, gaps, source-signal strength, and verification
+// path instead of receiving an untraceable polished summary.
 
 const SOURCE_WORK_TERMS = [
   'research', 'analyze', 'analyse', 'analysis', 'synthesize', 'synthesise',
@@ -28,6 +28,12 @@ const PROVENANCE_TERMS = [
   'methodology', 'method', 'audit trail', 'traceability'
 ];
 
+const SOURCE_SIGNAL_TERMS = [
+  'metadata-only', 'metadata only', 'low signal', 'low-signal', 'subtitles disabled',
+  'transcript unavailable', 'unavailable transcript', 'pointer clip', 'ambience',
+  'atmospheric', 'source context', 'signal', 'evidence level', 'source quality'
+];
+
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -48,7 +54,8 @@ function classifySourceProvenance(message) {
   const sourceWork = countMatches(text, SOURCE_WORK_TERMS);
   const output = countMatches(text, OUTPUT_TERMS);
   const provenance = countMatches(text, PROVENANCE_TERMS);
-  const score = (sourceWork * 2) + output - (provenance * 2);
+  const sourceSignal = countMatches(text, SOURCE_SIGNAL_TERMS);
+  const score = (sourceWork * 2) + output + sourceSignal - (provenance * 2);
 
   if (provenance >= 3) {
     return { applies: false, reason: 'operator already supplied source-provenance frame', score };
@@ -63,7 +70,9 @@ function classifySourceProvenance(message) {
     return { applies: false, reason: 'source work is already narrow enough', score };
   }
 
-  const layer = sourceWork >= 3 && output >= 2
+  const layer = sourceSignal >= 2
+    ? 'source-signal-sorting'
+    : sourceWork >= 3 && output >= 2
     ? 'provenance-workbench'
     : output >= 1
       ? 'traceable-synthesis'
@@ -77,7 +86,8 @@ function classifySourceProvenance(message) {
     signals: {
       source_work: sourceWork,
       output,
-      provenance
+      provenance,
+      source_signal: sourceSignal
     }
   };
 }
@@ -89,6 +99,7 @@ function sourceProvenancePromptBlock(message) {
   return '[SOURCE-PROVENANCE CHECK]\n'
     + 'This looks like research/data/source synthesis. Do not produce a polished answer that loses the audit trail. Before concluding, make the source trail inspectable and then complete the task.\n'
     + '- Source inventory: name the files, URLs, records, transcripts, repos, datasets, or notes used; if source IDs exist, preserve them exactly.\n'
+    + '- Signal level: label transcript-backed, metadata-only, pointer/ambience, partial, conflicting, or low-signal sources plainly; do not inflate weak source context into durable lessons.\n'
     + '- Transformations: state what was extracted, cleaned, grouped, inferred, or excluded.\n'
     + '- Confidence and gaps: separate sourced facts from interpretation, assumptions, missing material, and low-confidence claims.\n'
     + '- Reusable structure: save the result as an index, table, taxonomy, manifest, or workbench artifact when that will help the next operator continue.\n'
