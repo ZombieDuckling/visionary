@@ -32,6 +32,13 @@ test('classifySourceProvenance detects source gap checks for source-heavy asks',
   assert.ok(result.signals.source_work >= 2);
 });
 
+test('classifySourceProvenance elevates source signal sorting for weak evidence batches', () => {
+  const result = classifySourceProvenance('Synthesize transcript unavailable metadata-only clips, low-signal ambience notes, and source context into lessons');
+  assert.equal(result.applies, true);
+  assert.equal(result.layer, 'source-signal-sorting');
+  assert.ok(result.signals.source_signal >= 2);
+});
+
 test('classifySourceProvenance does not nag when provenance frame already exists', () => {
   const message = 'Build a research table with source ids, citations, confidence, assumptions, gaps, verification, and raw source links';
   const result = classifySourceProvenance(message);
@@ -43,6 +50,7 @@ test('sourceProvenancePromptBlock asks for inventory transformations confidence 
   const block = sourceProvenancePromptBlock('Organize interview notes and dataset findings into a taxonomy');
   assert.match(block, /SOURCE-PROVENANCE CHECK/);
   assert.match(block, /Source inventory/);
+  assert.match(block, /Signal level/);
   assert.match(block, /Transformations/);
   assert.match(block, /Confidence and gaps/);
   assert.match(block, /Reusable structure/);

@@ -86,6 +86,8 @@ Domain-specific AI/workflow requests now get a deterministic domain-expert-sourc
 
 Research, data, transcript, archive, repository, audit, report, or knowledgebase synthesis requests now get a deterministic source-provenance block before dispatch unless the operator already supplied one. The agent must preserve source inventory, transformations, confidence/gaps, reusable structure, and verification checks before producing findings. This applies Jake Van Clief's research-data-care lesson: AI-organized knowledge is only useful if the next operator can trace conclusions back to real sources.
 
+The same check now calls out source-signal quality for metadata-only, transcript-unavailable, pointer, ambience, partial, conflicting, or low-signal material so weak source context is labeled instead of promoted into fake durable lessons.
+
 ### Source-map before search nudges
 
 Repo, folder, project, component, script, docs, artifact, or workbench requests now get a deterministic source-map block before dispatch unless the operator already supplied a file-tree/routing frame. The agent must read an existing README/HANDOFF/manifest/index first, name the relevant tree, search from likely paths before broadening, preserve exact paths in handoffs, and verify that cited/generated file references exist. This applies Jake Van Clief's folder-tree lesson: paths are low-cost routing context, not decoration.
