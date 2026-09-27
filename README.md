@@ -128,6 +128,10 @@ Workflow/product/process improvement requests now get a deterministic baseline-r
 
 Synthetic voice, likeness, avatar, deepfake, testimonial, or representative-identity media requests now get a deterministic consent/disclosure block before dispatch unless the operator already supplied the boundary frame. The agent must name subject authority, consent evidence, disclosure surface, raw/source data separation, retention/deletion rules, and misuse risks before producing identity-simulating media. This applies Jake Van Clief's voice-cloning consent lesson: Visionary agents should make identity automation auditable instead of letting generated media blur who approved, spoke, or endorsed.
 
+### Review-debt nudges
+
+Large generated code, document, report, deck, plan, or design requests now get a deterministic review-debt block before dispatch unless the operator already supplied a review frame. The agent must slice the work into a coherent increment, summarize what changed, expose a fast review surface, include verification, and call out assumptions or weak spots. This applies Jake Van Clief's review-debt lesson: generation is cheap, but useful output must remain explainable and inspectable.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
