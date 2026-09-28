@@ -44,6 +44,7 @@ const { appendWorkflowResiliencePrompt } = require('./src/workflow-resilience');
 const { appendBaselineRatchetPrompt } = require('./src/baseline-ratchet');
 const { appendConsentDisclosurePrompt } = require('./src/consent-disclosure');
 const { appendReviewDebtPrompt } = require('./src/review-debt');
+const { appendCompletionManifestPrompt } = require('./src/completion-manifest');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -482,7 +483,7 @@ function buildAgentPrompt(agentId, message, workdir) {
                     appendWorkflowSkillTemplatePrompt(
                       appendOpinionStandardPrompt(
                         appendExperimentMatrixPrompt(
-                          appendReviewDebtPrompt(appendConsentDisclosurePrompt(appendBaselineRatchetPrompt(appendWorkflowResiliencePrompt(appendReplicabilityCheckPrompt(appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message)))))))))))))))))
+                          appendCompletionManifestPrompt(appendReviewDebtPrompt(appendConsentDisclosurePrompt(appendBaselineRatchetPrompt(appendWorkflowResiliencePrompt(appendReplicabilityCheckPrompt(appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))))))))))))
                       )
                     )
                   )
