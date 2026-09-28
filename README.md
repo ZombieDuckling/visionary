@@ -132,6 +132,10 @@ Synthetic voice, likeness, avatar, deepfake, testimonial, or representative-iden
 
 Large generated code, document, report, deck, plan, or design requests now get a deterministic review-debt block before dispatch unless the operator already supplied a review frame. The agent must slice the work into a coherent increment, summarize what changed, expose a fast review surface, include verification, and call out assumptions or weak spots. This applies Jake Van Clief's review-debt lesson: generation is cheap, but useful output must remain explainable and inspectable.
 
+### Completion-manifest nudges
+
+Batch, archive, inventory, ingestion, and backlog closeout requests now get a deterministic completion-manifest block before dispatch unless the operator already supplied manifest/count verification. The agent must name the source-of-truth inventory, reconcile total/processed/remaining/skipped counts, mark low-signal or unavailable items plainly, update durable state, and include parser/schema/count verification output. This applies the Jake Van Clief channel-ingestion closeout lesson: a run is not complete until the manifest, coverage notes, and verification agree.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
