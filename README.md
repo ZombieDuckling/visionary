@@ -136,6 +136,10 @@ Large generated code, document, report, deck, plan, or design requests now get a
 
 Batch, archive, inventory, ingestion, and backlog closeout requests now get a deterministic completion-manifest block before dispatch unless the operator already supplied manifest/count verification. The agent must name the source-of-truth inventory, reconcile total/processed/remaining/skipped counts, mark low-signal or unavailable items plainly, update durable state, and include parser/schema/count verification output. This applies the Jake Van Clief channel-ingestion closeout lesson: a run is not complete until the manifest, coverage notes, and verification agree.
 
+### Classifier-gate nudges
+
+Repeated bounded judgment requests — labels, yes/no checks, scores, routing, triage, readiness, approval, or rejection — now get a deterministic classifier-gate block before dispatch. The agent must define gate scope, allowed outputs, confidence thresholds, deterministic exclusions, result persistence, and an override/eval loop before using open-ended LLM output. This applies Jake Van Clief's decision-file lesson: use code for exact checks, bounded gates for fuzzy labels/routes/scores, full LLMs for synthesis, and humans for low-confidence or high-stakes cases.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.
