@@ -100,6 +100,10 @@ Source-code, template, clone, fork, import, migration, or leaked-code requests n
 
 API, CLI, tool, webhook, route, schema, adapter, or integration requests now get a deterministic interface-boundary block before dispatch when boundary or verification signals are present. The agent must name the exact contract surface, inputs/outputs, permission and secret boundary, read-back/smoke/schema verification, and failure behavior. This applies Jake Van Clief's abstraction-and-verification lesson: interfaces are contracts, confidence is not correctness, and secrets stay isolated from auditable workbench artifacts.
 
+### Workbench-sync plane nudges
+
+MCP, connector, sync, import/export, or multi-client requests around folders/repos/workbenches now get a deterministic workbench-sync block before dispatch. The agent must name the portable source object, separate source templates from mutable copies and exports, scope each connector to an org/workspace/project boundary, keep secrets outside exportable artifacts, create or verify an import/export manifest, and expose diff/review history before shared state is trusted. This applies Jake Van Clief's MCP/folder lesson: connectors are the sync/auth plane around portable workbench state, not the source of truth.
+
 ### Learning-loop nudges
 
 Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
