@@ -47,6 +47,7 @@ const { appendReviewDebtPrompt } = require('./src/review-debt');
 const { appendCompletionManifestPrompt } = require('./src/completion-manifest');
 const { appendClassifierGatePrompt } = require('./src/classifier-gate');
 const { appendWorkbenchSyncPlanePrompt } = require('./src/workbench-sync-plane');
+const { appendWorkbenchPrerequisiteGatePrompt } = require('./src/workbench-prerequisite-gate');
 const { appendTacitCapturePrompt } = require('./src/tacit-capture');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
@@ -486,7 +487,7 @@ function buildAgentPrompt(agentId, message, workdir) {
                     appendWorkflowSkillTemplatePrompt(
                       appendOpinionStandardPrompt(
                         appendExperimentMatrixPrompt(
-                          appendWorkbenchSyncPlanePrompt(appendClassifierGatePrompt(appendTacitCapturePrompt(appendCompletionManifestPrompt(appendReviewDebtPrompt(appendConsentDisclosurePrompt(appendBaselineRatchetPrompt(appendWorkflowResiliencePrompt(appendReplicabilityCheckPrompt(appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message)))))))))))))))))))))
+                          appendWorkbenchSyncPlanePrompt(appendWorkbenchPrerequisiteGatePrompt(appendClassifierGatePrompt(appendTacitCapturePrompt(appendCompletionManifestPrompt(appendReviewDebtPrompt(appendConsentDisclosurePrompt(appendBaselineRatchetPrompt(appendWorkflowResiliencePrompt(appendReplicabilityCheckPrompt(appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))))))))))))))))
                       )
                     )
                   )
