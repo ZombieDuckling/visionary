@@ -104,6 +104,10 @@ API, CLI, tool, webhook, route, schema, adapter, or integration requests now get
 
 MCP, connector, sync, import/export, or multi-client requests around folders/repos/workbenches now get a deterministic workbench-sync block before dispatch. The agent must name the portable source object, separate source templates from mutable copies and exports, scope each connector to an org/workspace/project boundary, keep secrets outside exportable artifacts, create or verify an import/export manifest, and expose diff/review history before shared state is trusted. This applies Jake Van Clief's MCP/folder lesson: connectors are the sync/auth plane around portable workbench state, not the source of truth.
 
+### Workbench-prerequisite gate nudges
+
+Agent/workflow automation requests now get a deterministic prerequisite gate before dispatch when they imply real work across inboxes, repos, CRMs, files, tickets, or project tasks. The agent must name the procedure/skill, role or user context, source and connector access, permission/read-back boundary, and cost/governance limits before treating the visible agent label as the solution. This applies Jake Van Clief's agent-UX lesson: useful agents are interfaces over prerequisites, context, connectors, limits, and review — not prompt theater.
+
 ### Learning-loop nudges
 
 Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
