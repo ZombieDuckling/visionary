@@ -70,6 +70,10 @@ Requests that ask agents to encode taste, preferences, principles, rubrics, styl
 
 Brand/design/media asset requests now get a deterministic asset-workbench block before dispatch. The agent must inventory source assets, keep originals separate from generated outputs, map brand rules/examples/components/scripts, capture taste constraints, stage deck/site/animation pipelines, and leave portable source plus rendered/exported files. This applies Jake Van Clief's Claude Design import/export lesson: spend model effort once on an exportable workbench instead of repeatedly rediscovering context inside a hosted UI.
 
+### Stage-gated workbench nudges
+
+Costly generated deliverables — video, audio, decks, campaigns, reports, courses, apps, prototypes, and workbench/pipeline outputs — now get a deterministic stage-gated workbench block before dispatch unless the operator already supplied a gate frame. The agent must state stage Input / Do / Output / Human check, preserve source material separately from generated outputs, create cheap metadata/spec/preview artifacts before final render/export, use deterministic checks for exact facts, chunk repairable outputs, and list the final package plus next resume point. This applies Jake Van Clief's stage-gated media/workbench lesson: make intermediate artifacts and human approval visible before expensive finalization.
+
 ### Downstream export nudges
 
 Export/package/handoff requests now get a deterministic downstream-export block before dispatch. The agent must name the canonical source artifact, target consumer/tool, output files or formats, continuation context, fidelity checks, and review path. This keeps decks, specs, HTML, zips, Canva/PowerPoint packages, Claude Code handoffs, and vendor bundles portable instead of trapped in chat.
