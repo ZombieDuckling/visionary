@@ -24,6 +24,7 @@ const { appendDecisionBoundaryPrompt } = require('./src/decision-boundary');
 const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
 const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
 const { appendAssetWorkbenchPrompt } = require('./src/asset-workbench');
+const { appendStageGatedWorkbenchPrompt } = require('./src/stage-gated-workbench');
 const { appendDownstreamExportPrompt } = require('./src/downstream-export');
 const { appendContinuityWorkbenchPrompt } = require('./src/continuity-workbench');
 const { appendFolderProductBaselinePrompt } = require('./src/folder-product-baseline');
@@ -475,31 +476,49 @@ function loadPersonality(agentId) {
 function buildAgentPrompt(agentId, message, workdir) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
-  const agentMessage = appendDecisionBoundaryPrompt(appendInterfaceBoundaryCheckPrompt(appendContextBoundaryPrompt(
-    appendArtifactWorkbenchPrompt(
-      appendAssetWorkbenchPrompt(
-        appendDownstreamExportPrompt(
-          appendChallengeDesignPrompt(
-            appendQuestionDiscoveryPrompt(
-              appendAgentSplitPrompt(
-                appendFolderProductBaselinePrompt(
-                  appendWorkflowMapPrompt(
-                    appendWorkflowSkillTemplatePrompt(
-                      appendOpinionStandardPrompt(
-                        appendExperimentMatrixPrompt(
-                          appendWorkbenchSyncPlanePrompt(appendWorkbenchPrerequisiteGatePrompt(appendClassifierGatePrompt(appendTacitCapturePrompt(appendCompletionManifestPrompt(appendReviewDebtPrompt(appendConsentDisclosurePrompt(appendBaselineRatchetPrompt(appendWorkflowResiliencePrompt(appendReplicabilityCheckPrompt(appendFailureStudyLoopPrompt(appendDurableRetrospectivePrompt(appendSystemDecompositionPrompt(appendSourceRuntimeValuePrompt(appendLearningLoopPrompt(appendSourceMapBeforeSearchPrompt(appendSourceProvenancePrompt(appendDomainExpertSourcePrompt(appendValueLayerPrompt(appendOpportunityRoutingPrompt(appendContinuityWorkbenchPrompt(message))))))))))))))))))))))
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      )
-    ),
-    message
-  )));
+  const promptAugmenters = [
+    appendContinuityWorkbenchPrompt,
+    appendOpportunityRoutingPrompt,
+    appendValueLayerPrompt,
+    appendDomainExpertSourcePrompt,
+    appendSourceProvenancePrompt,
+    appendSourceMapBeforeSearchPrompt,
+    appendLearningLoopPrompt,
+    appendSourceRuntimeValuePrompt,
+    appendSystemDecompositionPrompt,
+    appendDurableRetrospectivePrompt,
+    appendFailureStudyLoopPrompt,
+    appendReplicabilityCheckPrompt,
+    appendWorkflowResiliencePrompt,
+    appendBaselineRatchetPrompt,
+    appendConsentDisclosurePrompt,
+    appendReviewDebtPrompt,
+    appendCompletionManifestPrompt,
+    appendTacitCapturePrompt,
+    appendClassifierGatePrompt,
+    appendWorkbenchPrerequisiteGatePrompt,
+    appendWorkbenchSyncPlanePrompt,
+    appendExperimentMatrixPrompt,
+    appendOpinionStandardPrompt,
+    appendWorkflowSkillTemplatePrompt,
+    appendWorkflowMapPrompt,
+    appendFolderProductBaselinePrompt,
+    appendAgentSplitPrompt,
+    appendQuestionDiscoveryPrompt,
+    appendChallengeDesignPrompt,
+    appendDownstreamExportPrompt,
+    appendStageGatedWorkbenchPrompt,
+    appendAssetWorkbenchPrompt,
+    appendArtifactWorkbenchPrompt,
+    function appendContextBoundaryWithOriginal(current) {
+      return appendContextBoundaryPrompt(current, message);
+    },
+    appendInterfaceBoundaryCheckPrompt,
+    appendDecisionBoundaryPrompt
+  ];
+  const agentMessage = promptAugmenters.reduce(function (current, augment) {
+    return augment(current);
+  }, String(message || ''));
   const workdirNote = workdir
     ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
     : '';
