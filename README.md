@@ -140,6 +140,10 @@ Workflow/product/process improvement requests now get a deterministic baseline-r
 
 Synthetic voice, likeness, avatar, deepfake, testimonial, or representative-identity media requests now get a deterministic consent/disclosure block before dispatch unless the operator already supplied the boundary frame. The agent must name subject authority, consent evidence, disclosure surface, raw/source data separation, retention/deletion rules, and misuse risks before producing identity-simulating media. This applies Jake Van Clief's voice-cloning consent lesson: Visionary agents should make identity automation auditable instead of letting generated media blur who approved, spoke, or endorsed.
 
+### Media-provenance nudges
+
+Generated or edited media requests — video, images, audio, ads, campaigns, renders, variants, and style/take workflows — now get a deterministic media-provenance block before dispatch unless the operator already supplied one. The agent must keep source assets, prompt/spec ledger, tool/model metadata, variant folders, deterministic captions/text/export details, rights/approval assumptions, and final package inventory visible. This applies Jake Van Clief's generated-media folder lesson: the useful product is not one magical render, but a resumable folder that explains what was generated, from what, with which tool, and why the selected take is safe to use.
+
 ### Review-debt nudges
 
 Large generated code, document, report, deck, plan, or design requests now get a deterministic review-debt block before dispatch unless the operator already supplied a review frame. The agent must slice the work into a coherent increment, summarize what changed, expose a fast review surface, include verification, and call out assumptions or weak spots. This applies Jake Van Clief's review-debt lesson: generation is cheap, but useful output must remain explainable and inspectable.

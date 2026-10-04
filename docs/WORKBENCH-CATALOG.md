@@ -36,6 +36,8 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 
 17. **Build workflow skills as portable markdown first.** When dispatching work to create or improve a skill, SOP, playbook, checklist, template, prompt, or repeated process, require a canonical markdown source, scope boundaries, concrete procedure, examples/failure modes, at least one pressure-test case, and a revision loop before productizing the workflow.
 
+18. **Keep generated media provenance folder-shaped.** When dispatching image, video, audio, ad, render, style-variant, or take-selection work, require source assets, prompt/spec ledger, tool/model metadata, variant notes, deterministic captions/text/export details, rights/approval assumptions, and a final package inventory before treating a generated asset as usable.
+
 ## Good background-improvement targets
 
 When doing autonomous maintenance, prefer changes that strengthen one of these workbench components without broad rewrites:
