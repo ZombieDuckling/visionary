@@ -44,6 +44,7 @@ const { appendReplicabilityCheckPrompt } = require('./src/replicability-check');
 const { appendWorkflowResiliencePrompt } = require('./src/workflow-resilience');
 const { appendBaselineRatchetPrompt } = require('./src/baseline-ratchet');
 const { appendConsentDisclosurePrompt } = require('./src/consent-disclosure');
+const { appendMediaProvenancePrompt } = require('./src/media-provenance');
 const { appendReviewDebtPrompt } = require('./src/review-debt');
 const { appendCompletionManifestPrompt } = require('./src/completion-manifest');
 const { appendClassifierGatePrompt } = require('./src/classifier-gate');
@@ -492,6 +493,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendWorkflowResiliencePrompt,
     appendBaselineRatchetPrompt,
     appendConsentDisclosurePrompt,
+    appendMediaProvenancePrompt,
     appendReviewDebtPrompt,
     appendCompletionManifestPrompt,
     appendTacitCapturePrompt,
