@@ -148,6 +148,10 @@ Generated or edited media requests — video, images, audio, ads, campaigns, ren
 
 Large generated code, document, report, deck, plan, or design requests now get a deterministic review-debt block before dispatch unless the operator already supplied a review frame. The agent must slice the work into a coherent increment, summarize what changed, expose a fast review surface, include verification, and call out assumptions or weak spots. This applies Jake Van Clief's review-debt lesson: generation is cheap, but useful output must remain explainable and inspectable.
 
+### Voice-file nudges
+
+Voice-sensitive copy, content, outreach, page, post, email, proposal, script, or announcement requests now get a deterministic voice-file block before dispatch. The agent must name the project-local voice source or say none exists, use concrete examples instead of vague adjectives, separate lintable style rules from subjective taste review, and propose dated durable corrections when the same voice issue repeats. This applies Jake Van Clief's voice-file lesson: consistent writing should come from local source files plus deterministic checks, not hidden chat memory.
+
 ### Completion-manifest nudges
 
 Batch, archive, inventory, ingestion, and backlog closeout requests now get a deterministic completion-manifest block before dispatch unless the operator already supplied manifest/count verification. The agent must name the source-of-truth inventory, reconcile total/processed/remaining/skipped counts, mark low-signal or unavailable items plainly, update durable state, and include parser/schema/count verification output. This applies the Jake Van Clief channel-ingestion closeout lesson: a run is not complete until the manifest, coverage notes, and verification agree.
