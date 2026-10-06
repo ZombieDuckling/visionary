@@ -132,6 +132,10 @@ Delivery, ops, deployment, automation, scheduled, or handoff requests that menti
 
 AI/provider/tool-dependent workflow requests that mention outage, quota, failover, backup, model swaps, local/manual fallback, portable state, or degradation now get a deterministic workflow-resilience block before dispatch. The agent must name the resume state, next provider/model/tool, local/manual fallback, contract boundary, verification path, and safe degradation behavior. This applies Jake Van Clief's provider-resilience lesson: model swaps should be boring, and critical work should not depend on one chat surface.
 
+### Execution-evidence nudges
+
+AI automation, workflow, report, cron, scheduler, or pipeline requests that lean on “running”, “green”, “successful”, or “completed” status now get a deterministic execution-evidence block before dispatch. The agent must name expected artifacts, cheap one-minute checks, the status-vs-correctness boundary, human review gates, and safe stop behavior before downstream work trusts the output. This applies Jake Van Clief's “running is not correctness” lesson: process health is only useful when paired with inspectable artifacts and checks.
+
 ### Baseline-ratchet nudges
 
 Workflow/product/process improvement requests now get a deterministic baseline-ratchet block before dispatch unless the operator already supplied a baseline frame. The agent must name the old/manual baseline, the current AI baseline that has become cheap or table-stakes, the raised human+AI expectation, and the verification proof that the bar actually moved. This applies Jake Van Clief's “we forget what we already use is magic” lesson: Visionary agents should turn normalized AI capabilities into boring infrastructure and aim at the next useful workflow leverage point.
