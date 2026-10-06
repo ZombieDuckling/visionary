@@ -42,6 +42,7 @@ const { appendDurableRetrospectivePrompt } = require('./src/durable-retrospectiv
 const { appendFailureStudyLoopPrompt } = require('./src/failure-study-loop');
 const { appendReplicabilityCheckPrompt } = require('./src/replicability-check');
 const { appendWorkflowResiliencePrompt } = require('./src/workflow-resilience');
+const { appendExecutionEvidenceGatePrompt } = require('./src/execution-evidence-gate');
 const { appendBaselineRatchetPrompt } = require('./src/baseline-ratchet');
 const { appendConsentDisclosurePrompt } = require('./src/consent-disclosure');
 const { appendMediaProvenancePrompt } = require('./src/media-provenance');
@@ -492,6 +493,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendFailureStudyLoopPrompt,
     appendReplicabilityCheckPrompt,
     appendWorkflowResiliencePrompt,
+    appendExecutionEvidenceGatePrompt,
     appendBaselineRatchetPrompt,
     appendConsentDisclosurePrompt,
     appendMediaProvenancePrompt,
