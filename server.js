@@ -38,6 +38,7 @@ const { appendDomainExpertSourcePrompt } = require('./src/domain-expert-source')
 const { appendSourceProvenancePrompt } = require('./src/source-provenance');
 const { appendSourceMapBeforeSearchPrompt } = require('./src/source-map-before-search');
 const { appendLearningLoopPrompt } = require('./src/learning-loop');
+const { appendAiWorkflowLadderPrompt } = require('./src/ai-workflow-ladder');
 const { appendDurableRetrospectivePrompt } = require('./src/durable-retrospective');
 const { appendFailureStudyLoopPrompt } = require('./src/failure-study-loop');
 const { appendReplicabilityCheckPrompt } = require('./src/replicability-check');
@@ -487,6 +488,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendSourceProvenancePrompt,
     appendSourceMapBeforeSearchPrompt,
     appendLearningLoopPrompt,
+    appendAiWorkflowLadderPrompt,
     appendSourceRuntimeValuePrompt,
     appendSystemDecompositionPrompt,
     appendDurableRetrospectivePrompt,

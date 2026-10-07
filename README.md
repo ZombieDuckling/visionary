@@ -116,6 +116,10 @@ Agent/workflow automation requests now get a deterministic prerequisite gate bef
 
 Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
 
+### AI-workflow ladder nudges
+
+AI learning or workflow-conversion requests now get a deterministic ladder block before dispatch unless the operator already supplied a promotion frame. The agent must identify the real job, current rung, next durable artifact, method/fact separation, split discipline, and fresh-session proof before recommending tools or agents. This applies Jake Van Clief's “chat → corrections/skills → workbench files → routing map → stage artifacts → scripts → maintenance” lesson: Visionary should move work one rung at a time instead of jumping straight to platform or agent architecture.
+
 ### Durable-retrospective nudges
 
 Requests that revisit old AI/product plans, predictions, docs, roadmaps, or strategy now get a deterministic durable-retrospective block before dispatch. The agent must name the original claim/context, what held up as a durable principle, what changed in tools/market/workflow/assumptions, and whether to keep, revise, archive, or retest each major claim. This applies Jake Van Clief's retrospective lesson: Visionary should preserve transferable primitives without pretending stale tactics are still current.
