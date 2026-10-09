@@ -32,12 +32,14 @@ test('classifyBaselineRatchet does not nag when baseline frame already exists', 
   assert.equal(result.reason, 'operator already supplied baseline frame');
 });
 
-test('baselineRatchetPromptBlock names old baseline, current baseline, raised expectation, verification, and scope guard', () => {
+test('baselineRatchetPromptBlock names old baseline, current baseline, raised expectation, reinvestment, verification, and scope guard', () => {
   const block = baselineRatchetPromptBlock('Modernize the ops dashboard workflow');
   assert.match(block, /BASELINE-RATCHET CHECK/);
   assert.match(block, /Old\/manual baseline/);
   assert.match(block, /Current AI baseline/);
   assert.match(block, /Raised expectation/);
+  assert.match(block, /Reinvestment target/);
+  assert.match(block, /recovered capacity/);
   assert.match(block, /Verification/);
   assert.match(block, /Scope guard/);
 });

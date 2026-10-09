@@ -3,7 +3,9 @@
 // Deterministic baseline-ratchet nudge for improvement/modernization work.
 // Inspired by Jake Van Clief's "we forget what we already use is magic" lesson:
 // once an AI capability becomes normal infrastructure, workflows should reset
-// the baseline instead of celebrating yesterday's novelty.
+// the baseline instead of celebrating yesterday's novelty. The recovered time
+// must also be routed into the next useful backlog item instead of being
+// counted as the whole win.
 
 const CHANGE_TERMS = [
   'improve', 'upgrade', 'modernize', 'rebaseline', 'baseline', 'ratchet', 'raise the bar',
@@ -72,6 +74,7 @@ function baselineRatchetPromptBlock(message) {
     + '- Old/manual baseline: what did a human, script, or prior agent workflow have to do before this became easy?\n'
     + '- Current AI baseline: what is now cheap, normal, or table-stakes enough that it should become infrastructure?\n'
     + '- Raised expectation: what higher-value human+AI outcome should replace the old definition of done?\n'
+    + '- Reinvestment target: if this saves time, name the next backlog item, owner, capability, quality bar, or deferred project that absorbs the recovered capacity.\n'
     + '- Verification: name the metric, smoke check, artifact, review output, or acceptance criterion that proves the bar actually moved.\n'
     + '- Scope guard: do not add platform surface just for novelty; improve the smallest workflow layer that creates durable leverage.\n'
     + 'Keep this concise and then deliver the requested work.\n'
