@@ -116,6 +116,10 @@ Agent/workflow automation requests now get a deterministic prerequisite gate bef
 
 Workflow/agent requests that start from wrappers, harnesses, vendor frameworks, or custom orchestration now get a deterministic portable-instruction check before dispatch. The agent must capture the reusable workflow first: outcome contract, model-agnostic instructions, reachable files/tools, runtime assumptions, review checkpoint, and a second-runtime portability proof or explicit access gap. This applies Jake Van Clief's latest wrapper lesson: the durable asset is the portable instruction/workbench package, not the first agent shell that runs it.
 
+### Intent-compiler workbench nudges
+
+Folder, repo, markdown, and workbench workflow requests now get a deterministic intent-compiler check before dispatch when they imply a reusable mapping from operator intent to runtime execution. The agent must name the root routing file, capture local goals/standards/examples/review rules, keep workflow-specific knowledge in portable files instead of hidden chat or wrapper prompts, use deterministic helpers for exact checks, and state a portability proof for another file-reading model or human substitute. This applies Jake Van Clief's “folders as compilers” lesson: Visionary should treat workbenches as inspectable intent packages with optional harness adapters, not proprietary agent blobs.
+
 ### Learning-loop nudges
 
 Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
