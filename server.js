@@ -49,6 +49,7 @@ const { appendConsentDisclosurePrompt } = require('./src/consent-disclosure');
 const { appendMediaProvenancePrompt } = require('./src/media-provenance');
 const { appendReviewDebtPrompt } = require('./src/review-debt');
 const { appendCompletionManifestPrompt } = require('./src/completion-manifest');
+const { appendWorkbenchOutcomeReviewPrompt } = require('./src/workbench-outcome-review');
 const { appendClassifierGatePrompt } = require('./src/classifier-gate');
 const { appendWorkbenchSyncPlanePrompt } = require('./src/workbench-sync-plane');
 const { appendWorkbenchPrerequisiteGatePrompt } = require('./src/workbench-prerequisite-gate');
@@ -504,6 +505,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendReviewDebtPrompt,
     appendVoiceFileCheckPrompt,
     appendCompletionManifestPrompt,
+    appendWorkbenchOutcomeReviewPrompt,
     appendTacitCapturePrompt,
     appendClassifierGatePrompt,
     appendWorkbenchPrerequisiteGatePrompt,
