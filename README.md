@@ -172,6 +172,10 @@ Voice-sensitive copy, content, outreach, page, post, email, proposal, script, or
 
 Batch, archive, inventory, ingestion, and backlog closeout requests now get a deterministic completion-manifest block before dispatch unless the operator already supplied manifest/count verification. The agent must name the source-of-truth inventory, reconcile total/processed/remaining/skipped counts, mark low-signal or unavailable items plainly, update durable state, and include parser/schema/count verification output. This applies the Jake Van Clief channel-ingestion closeout lesson: a run is not complete until the manifest, coverage notes, and verification agree.
 
+### Workbench-outcome review nudges
+
+Post-build, post-training, client-workshop, onboarding, pilot, and deployment follow-up requests now get a deterministic workbench-outcome review block before dispatch unless the operator already supplied an architecture/outcome frame. The agent must map the actual workbench architecture, compare intended outcomes with usage/evidence, name blockers and owners, capture one reusable program lesson, and choose a verified next action. This applies Jake Van Clief's architecture-review lesson: useful follow-up inspects artifacts and adoption evidence instead of asking for vibes.
+
 ### Classifier-gate nudges
 
 Repeated bounded judgment requests — labels, yes/no checks, scores, routing, triage, readiness, approval, or rejection — now get a deterministic classifier-gate block before dispatch. The agent must define gate scope, allowed outputs, confidence thresholds, deterministic exclusions, result persistence, and an override/eval loop before using open-ended LLM output. This applies Jake Van Clief's decision-file lesson: use code for exact checks, bounded gates for fuzzy labels/routes/scores, full LLMs for synthesis, and humans for low-confidence or high-stakes cases.
