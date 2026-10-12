@@ -498,6 +498,11 @@
       var baselineDetail = costBaseline
         ? (costBaseline.completed_runs + ' completed · vs ' + costBaseline.window_label)
         : 'vs manual baseline';
+      var rereadRisk = costBaseline && costBaseline.context_reread_risk ? costBaseline.context_reread_risk : null;
+      var rereadValue = rereadRisk ? String(rereadRisk.repeated_context_runs || 0) : '0';
+      var rereadDetail = rereadRisk
+        ? ((rereadRisk.large_context_runs || 0) + ' large-context runs · threshold ' + (rereadRisk.large_context_token_threshold || 0) + ' tokens')
+        : 'large context repeats';
 
       html += '<div class="overview-metrics">'
         + overviewMetric('Open tasks', (tasks.todo || 0) + (tasks.in_progress || 0) + (tasks.review || 0), 'todo ' + (tasks.todo || 0) + ' · active ' + (tasks.in_progress || 0) + ' · review ' + (tasks.review || 0))
@@ -507,6 +512,7 @@
         + overviewMetric('Unread', counts.unread_notifications || 0, 'notifications')
         + overviewMetric('Spend', spendValue, spendDetail)
         + overviewMetric('Baseline delta', baselineValue, baselineDetail)
+        + overviewMetric('Reread risk', rereadValue, rereadDetail)
         + '</div>';
 
       if (staleRuns.length) {

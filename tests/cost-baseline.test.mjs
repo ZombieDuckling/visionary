@@ -53,3 +53,19 @@ test('summarizeCostBaseline handles empty input safely', () => {
   assert.equal(summary.human_baseline_usd, 0);
   assert.equal(summary.decision_signal, 'no_completed_runs');
 });
+
+test('summarizeCostBaseline flags repeated large-context rereads', () => {
+  const sourceHeavyPrompt = 'Review this pasted source bundle and produce the next action.';
+  const summary = summarizeCostBaseline([
+    { id: 1, agent_id: 'forge', status: 'completed', input_tokens: 9000, estimated_cost_usd: 0.1, message: sourceHeavyPrompt },
+    { id: 2, agent_id: 'scout', status: 'completed', input_tokens: 8500, estimated_cost_usd: 0.1, message: '  review this pasted source bundle\n and produce the next action. ' },
+    { id: 3, agent_id: 'forge', status: 'completed', input_tokens: 1200, estimated_cost_usd: 0.01, message: sourceHeavyPrompt },
+    { id: 4, agent_id: 'reviewer', status: 'completed', input_tokens: 9000, estimated_cost_usd: 0.1, message: 'Different large prompt' }
+  ], { large_context_token_threshold: 8000 });
+
+  assert.equal(summary.context_reread_risk.large_context_runs, 3);
+  assert.equal(summary.context_reread_risk.repeated_context_groups, 1);
+  assert.equal(summary.context_reread_risk.repeated_context_runs, 2);
+  assert.equal(summary.context_reread_risk.largest_repeated_input_tokens, 17500);
+  assert.match(summary.context_reread_risk.recommendation, /Distill repeated source/);
+});

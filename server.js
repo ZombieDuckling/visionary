@@ -1058,7 +1058,7 @@ const server = http.createServer(async (req, res) => {
           LIMIT 6
         `).all();
         const baselineRuns = db.prepare(`
-          SELECT id, agent_id, status, input_tokens, output_tokens, estimated_cost_usd, created_at
+          SELECT id, agent_id, status, message, input_tokens, output_tokens, estimated_cost_usd, created_at
           FROM agent_runs
           WHERE datetime(created_at) >= datetime('now', '-30 days')
           ORDER BY created_at DESC
