@@ -124,6 +124,10 @@ Folder, repo, markdown, and workbench workflow requests now get a deterministic 
 
 Learning, teaching, training, tutorial, course, or onboarding requests now get a deterministic learning-loop block before dispatch unless the operator already supplied exercises, feedback, or proof criteria. The agent must name the target skill, starting-level assumption, active reps, feedback path, and transfer proof before producing learning material. This applies Jake Van Clief's “no AI cheat code for learning fast” lesson: Visionary should help agents turn explanations into practice loops and evidence, not passive summaries.
 
+### Experiment-matrix nudges
+
+Evaluation and research dispatches now get a deterministic experiment-matrix block before agents compare models, prompts, personas, or workflow behavior. The agent must name variables, output contracts, parsing/scoring rules, failure data, and evidence exports before drawing conclusions. Subjective “which tool/model/provider is best?” comparisons now add a blind local-fit requirement: use the same input for each candidate, anonymize outputs as A/B/C, capture the human pick against local criteria before revealing brand/leaderboard/price, then record the answer key and tradeoffs. This applies Jake Van Clief's blind same-input lesson: public rankings are weaker than source-identical tests on Josh's actual work.
+
 ### AI-workflow ladder nudges
 
 AI learning or workflow-conversion requests now get a deterministic ladder block before dispatch unless the operator already supplied a promotion frame. The agent must identify the real job, current rung, next durable artifact, method/fact separation, split discipline, and fresh-session proof before recommending tools or agents. This applies Jake Van Clief's “chat → corrections/skills → workbench files → routing map → stage artifacts → scripts → maintenance” lesson: Visionary should move work one rung at a time instead of jumping straight to platform or agent architecture.
