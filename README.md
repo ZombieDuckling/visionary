@@ -116,6 +116,10 @@ Agent/workflow automation requests now get a deterministic prerequisite gate bef
 
 Workflow/agent requests that start from wrappers, harnesses, vendor frameworks, or custom orchestration now get a deterministic portable-instruction check before dispatch. The agent must capture the reusable workflow first: outcome contract, model-agnostic instructions, reachable files/tools, runtime assumptions, review checkpoint, and a second-runtime portability proof or explicit access gap. This applies Jake Van Clief's latest wrapper lesson: the durable asset is the portable instruction/workbench package, not the first agent shell that runs it.
 
+### Workflow-capture nudges
+
+Repeated jobs being automated, scheduled, or delegated to an agent now get a deterministic workflow-capture block before dispatch unless the operator already supplied a capture frame. The agent must run the two-minute test (write the procedure, have a fresh reader follow it, mark the trip-ups), fill the input/do/output/human-check headings, interview the operator instead of writing the spec cold, reproduce it in a fresh chat, and only then classify each step with `docs/AUTOMATION-TIMING-RUBRIC.md` before building scripts, agents, or schedules. This applies Jake Van Clief's two-minute-test lesson: the missing written procedure — not the model — is the bottleneck, so capture the workflow before automating it.
+
 ### Intent-compiler workbench nudges
 
 Folder, repo, markdown, and workbench workflow requests now get a deterministic intent-compiler check before dispatch when they imply a reusable mapping from operator intent to runtime execution. The agent must name the root routing file, capture local goals/standards/examples/review rules, keep workflow-specific knowledge in portable files instead of hidden chat or wrapper prompts, use deterministic helpers for exact checks, and state a portability proof for another file-reading model or human substitute. This applies Jake Van Clief's “folders as compilers” lesson: Visionary should treat workbenches as inspectable intent packages with optional harness adapters, not proprietary agent blobs.

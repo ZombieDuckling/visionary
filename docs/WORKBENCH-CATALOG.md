@@ -39,6 +39,8 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 
 19. **Keep generated media provenance folder-shaped.** When dispatching image, video, audio, ad, render, style-variant, or take-selection work, require source assets, prompt/spec ledger, tool/model metadata, variant notes, deterministic captions/text/export details, rights/approval assumptions, and a final package inventory before treating a generated asset as usable.
 
+20. **Capture the workflow before automating it.** For a repeated job being automated, scheduled, or delegated to an agent, run the two-minute test (write the procedure, have a fresh reader follow it, mark the trip-ups), fill input/do/output/human-check, reproduce it in a fresh chat, and only then classify each step with `docs/AUTOMATION-TIMING-RUBRIC.md` — the missing written procedure is the bottleneck, not the model.
+
 ## Good background-improvement targets
 
 When doing autonomous maintenance, prefer changes that strengthen one of these workbench components without broad rewrites:
