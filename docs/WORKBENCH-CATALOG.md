@@ -41,6 +41,8 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 
 20. **Capture the workflow before automating it.** For a repeated job being automated, scheduled, or delegated to an agent, run the two-minute test (write the procedure, have a fresh reader follow it, mark the trip-ups), fill input/do/output/human-check, reproduce it in a fresh chat, and only then classify each step with `docs/AUTOMATION-TIMING-RUBRIC.md` — the missing written procedure is the bottleneck, not the model.
 
+21. **Give code work a visible orient/plan/edit/verify loop.** For refactors, features, bug fixes, migrations, tests, or endpoints dispatched to a file-aware coding agent, require orientation from the repo front desk, a visible plan/search strategy, named target files plus forbidden areas and acceptance criteria, bounded edits with observable diffs, and real execution output (syntax/test/build/pipeline) before the result is trusted — a "looks correct" transcript is review debt, not verification.
+
 ## Good background-improvement targets
 
 When doing autonomous maintenance, prefer changes that strengthen one of these workbench components without broad rewrites:
