@@ -43,6 +43,8 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 
 21. **Give code work a visible orient/plan/edit/verify loop.** For refactors, features, bug fixes, migrations, tests, or endpoints dispatched to a file-aware coding agent, require orientation from the repo front desk, a visible plan/search strategy, named target files plus forbidden areas and acceptance criteria, bounded edits with observable diffs, and real execution output (syntax/test/build/pipeline) before the result is trusted — a "looks correct" transcript is review debt, not verification.
 
+22. **Automate to augment, not to replace.** When a request removes the human from a workflow — "autonomous", "hands-off", "unattended", "set-and-forget", "no human", "fully automated" — require the augmented human role and multiplied capacity, the structure supplied (context, memory, files, examples, review gates), the points where the human still steers (intake, exceptions, approval, final judgment), the verification and rollback path, and the one step — if any — that is genuinely safe to fully automate. Structure is the product; the riderless-automation claim is the weak version.
+
 ## Good background-improvement targets
 
 When doing autonomous maintenance, prefer changes that strengthen one of these workbench components without broad rewrites:

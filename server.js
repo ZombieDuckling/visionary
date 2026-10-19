@@ -56,6 +56,7 @@ const { appendWorkbenchPrerequisiteGatePrompt } = require('./src/workbench-prere
 const { appendPortableInstructionAssetPrompt } = require('./src/portable-instruction-asset');
 const { appendWorkflowCapturePrompt } = require('./src/workflow-capture');
 const { appendCodingAgentLoopPrompt } = require('./src/coding-agent-loop');
+const { appendAugmentOverAutomatePrompt } = require('./src/augment-over-automate');
 const { appendIntentCompilerWorkbenchPrompt } = require('./src/intent-compiler-workbench');
 const { appendScopedMemoryRoutingPrompt } = require('./src/scoped-memory-routing');
 const { appendVoiceFileCheckPrompt } = require('./src/voice-file-check');
@@ -520,6 +521,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendOpinionStandardPrompt,
     appendWorkflowCapturePrompt,
     appendCodingAgentLoopPrompt,
+    appendAugmentOverAutomatePrompt,
     appendWorkflowSkillTemplatePrompt,
     appendWorkflowMapPrompt,
     appendFolderProductBaselinePrompt,
