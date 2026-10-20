@@ -45,6 +45,8 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 
 22. **Automate to augment, not to replace.** When a request removes the human from a workflow — "autonomous", "hands-off", "unattended", "set-and-forget", "no human", "fully automated" — require the augmented human role and multiplied capacity, the structure supplied (context, memory, files, examples, review gates), the points where the human still steers (intake, exceptions, approval, final judgment), the verification and rollback path, and the one step — if any — that is genuinely safe to fully automate. Structure is the product; the riderless-automation claim is the weak version.
 
+23. **Pick the next skill at the cross-domain overlap.** When choosing a learning or build target — "what should I learn/build next", "pick the next skill", "rank the roadmap" — list the domains the operator already carries, name the two domains the target sits between and the concrete transfer that discounts it, rank by transfer discount rather than generic value, keep genuinely orthogonal high-value skills as explicit exceptions, and capture each observed eureka in a dated ledger. Adjacency is a cost lens: the overlap you already have a head start in is the cheapest next step, and the boost should be recorded so it compounds.
+
 ## Good background-improvement targets
 
 When doing autonomous maintenance, prefer changes that strengthen one of these workbench components without broad rewrites:
