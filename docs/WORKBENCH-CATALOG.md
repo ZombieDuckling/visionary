@@ -47,6 +47,8 @@ Visionary is easier to improve when the repo is treated as an AI workbench inste
 
 23. **Pick the next skill at the cross-domain overlap.** When choosing a learning or build target — "what should I learn/build next", "pick the next skill", "rank the roadmap" — list the domains the operator already carries, name the two domains the target sits between and the concrete transfer that discounts it, rank by transfer discount rather than generic value, keep genuinely orthogonal high-value skills as explicit exceptions, and capture each observed eureka in a dated ledger. Adjacency is a cost lens: the overlap you already have a head start in is the cheapest next step, and the boost should be recorded so it compounds.
 
+24. **Decompose AI work into instructions, runner, state, and hand-back.** When a dispatch frames AI as the worker — "AI can do the work", "let AI handle it", "have AI do X", "now that AI can…" — require the instructions and where the why lives, the model/runtime named separately as the runner, the durable state that survives the run and who can inspect it, the human hand-back point (never "none"), and the ownership split between non-opinionated parts and the operator's own opinionated why. A program is instructions + a runner + surviving state; the model only fills the runner slot, so treating it as the whole program is the failure mode.
+
 ## Good background-improvement targets
 
 When doing autonomous maintenance, prefer changes that strengthen one of these workbench components without broad rewrites:
