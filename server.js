@@ -1079,10 +1079,36 @@ const server = http.createServer(async (req, res) => {
           WHERE datetime(created_at) >= datetime('now', '-30 days')
           ORDER BY created_at DESC
         `).all();
-        const costBaseline = summarizeCostBaseline(baselineRuns, {
+        // Annotate each run with the harness that produced it (from activity_log)
+        // so the cost baseline can report a hosting/local-fit signal. Guarded so
+        // a malformed/legacy detail_json can never fail the overview.
+        const harnessByRunId = new Map();
+        try {
+          const harnessRows = db.prepare(`
+            SELECT id, detail_json
+            FROM activity_log
+            WHERE event_type = 'agent.completed'
+              AND detail_json LIKE '%"harness"%'
+              AND datetime(created_at) >= datetime('now', '-30 days')
+          `).all();
+          harnessRows.forEach(function (row) {
+            try {
+              const detail = JSON.parse(row.detail_json);
+              if (detail && detail.run_id != null && detail.harness) {
+                harnessByRunId.set(Number(detail.run_id), String(detail.harness));
+              }
+            } catch { /* ignore unparseable activity detail */ }
+          });
+        } catch { /* harness annotation must never fail the overview */ }
+        const baselineRunsAnnotated = baselineRuns.map(function (row) {
+          const harness = harnessByRunId.get(Number(row.id));
+          return harness ? Object.assign({}, row, { harness: harness }) : row;
+        });
+        const costBaseline = summarizeCostBaseline(baselineRunsAnnotated, {
           window_label: 'last 30 days',
           human_minutes_per_completed_run: 15,
-          human_hourly_rate_usd: 75
+          human_hourly_rate_usd: 75,
+          human_search_minutes_per_completed_run: 8
         });
         const recentActivity = stmts.getRecentActivity.all(6);
         const governanceProjects = stmts.getAllProjects.all().filter(function (p) { return p.status !== 'archived'; });

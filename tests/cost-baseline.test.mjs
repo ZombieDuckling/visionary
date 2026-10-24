@@ -69,3 +69,49 @@ test('summarizeCostBaseline flags repeated large-context rereads', () => {
   assert.equal(summary.context_reread_risk.largest_repeated_input_tokens, 17500);
   assert.match(summary.context_reread_risk.recommendation, /Distill repeated source/);
 });
+
+test('summarizeCostBaseline discloses the whole-path human search/interface term', () => {
+  const summary = summarizeCostBaseline([
+    { agent_id: 'forge', status: 'completed', estimated_cost_usd: 0.05, input_tokens: 1000, output_tokens: 250 },
+    { agent_id: 'scout', status: 'completed', estimated_cost_usd: 0.03, input_tokens: 800, output_tokens: 120 }
+  ], {
+    human_minutes_per_completed_run: 30,
+    human_hourly_rate_usd: 60,
+    human_search_minutes_per_completed_run: 10
+  });
+
+  assert.equal(summary.human_baseline_usd, 60);
+  assert.equal(summary.whole_path_baseline.assumptions.human_search_minutes_per_completed_run, 10);
+  assert.equal(summary.whole_path_baseline.assumptions.human_search_hourly_rate_usd, 60);
+  assert.equal(summary.whole_path_baseline.human_productive_usd, 60);
+  assert.equal(summary.whole_path_baseline.human_search_usd, 20);
+  assert.equal(summary.whole_path_baseline.human_path_cost_usd, 80);
+  assert.equal(summary.whole_path_baseline.path_net_delta_usd, 79.92);
+  assert.equal(summary.whole_path_baseline.decision_signal, 'ai_cheaper_than_whole_path');
+});
+
+test('summarizeCostBaseline reports a hosting/local-fit signal from harness provenance', () => {
+  const summary = summarizeCostBaseline([
+    { agent_id: 'coder', status: 'completed', harness: 'ollama', estimated_cost_usd: 0, input_tokens: 9000, message: 'bounded corpus review' },
+    { agent_id: 'coder', status: 'completed', harness: 'ollama', estimated_cost_usd: 0, input_tokens: 9000, message: 'bounded corpus review' },
+    { agent_id: 'forge', status: 'completed', harness: 'claude-code', estimated_cost_usd: 0.1 },
+    { agent_id: 'scout', status: 'completed', estimated_cost_usd: null }
+  ]);
+
+  assert.equal(summary.hosting_signal.local_runs, 2);
+  assert.equal(summary.hosting_signal.hosted_runs, 1);
+  assert.equal(summary.hosting_signal.unknown_runs, 1);
+  assert.equal(summary.hosting_signal.local_first_candidate, true);
+  assert.match(summary.hosting_signal.recommendation, /local-first path/);
+});
+
+test('summarizeCostBaseline handles null harness provenance gracefully', () => {
+  const summary = summarizeCostBaseline([
+    { agent_id: 'forge', status: 'completed', estimated_cost_usd: 0.02 }
+  ]);
+  assert.equal(summary.hosting_signal.local_runs, 0);
+  assert.equal(summary.hosting_signal.hosted_runs, 0);
+  assert.equal(summary.hosting_signal.unknown_runs, 1);
+  assert.equal(summary.hosting_signal.local_first_candidate, false);
+  assert.equal(summary.whole_path_baseline.decision_signal, 'ai_cheaper_than_whole_path');
+});

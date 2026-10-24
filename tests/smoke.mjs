@@ -124,6 +124,11 @@ test('GET /api/overview returns expected shape', async () => {
   assert.equal(typeof json.cost_baseline.ai_cost_usd, 'number');
   assert.equal(typeof json.cost_baseline.human_baseline_usd, 'number');
   assert.ok(json.cost_baseline.baseline_assumptions, 'baseline assumptions present');
+  assert.ok(json.cost_baseline.whole_path_baseline, 'whole-path human baseline present');
+  assert.equal(typeof json.cost_baseline.whole_path_baseline.human_search_usd, 'number');
+  assert.equal(typeof json.cost_baseline.whole_path_baseline.path_net_delta_usd, 'number');
+  assert.ok(json.cost_baseline.hosting_signal, 'hosting signal present');
+  assert.equal(typeof json.cost_baseline.hosting_signal.local_first_candidate, 'boolean');
   assert.equal(json.counts.active_dispatches, 0,
     'no in-memory dispatches at smoke-test startup');
 });

@@ -503,6 +503,18 @@
       var rereadDetail = rereadRisk
         ? ((rereadRisk.large_context_runs || 0) + ' large-context runs · threshold ' + (rereadRisk.large_context_token_threshold || 0) + ' tokens')
         : 'large context repeats';
+      var wholePath = costBaseline && costBaseline.whole_path_baseline ? costBaseline.whole_path_baseline : null;
+      var wholePathValue = wholePath ? ('$' + Number(wholePath.path_net_delta_usd || 0).toFixed(2)) : '$0.00';
+      var wholePathDetail = wholePath
+        ? ('human path $' + Number(wholePath.human_path_cost_usd || 0).toFixed(2) + ' · search $' + Number(wholePath.human_search_usd || 0).toFixed(2))
+        : 'whole path to the answer';
+      var hosting = costBaseline && costBaseline.hosting_signal ? costBaseline.hosting_signal : null;
+      var hostingValue = hosting
+        ? (hosting.local_first_candidate ? 'Local-first' : (hosting.local_runs > 0 ? 'Mixed' : 'Hosted'))
+        : 'n/a';
+      var hostingDetail = hosting
+        ? (hosting.local_runs + ' local · ' + hosting.hosted_runs + ' hosted · ' + hosting.unknown_runs + ' untagged')
+        : 'hosting location';
 
       html += '<div class="overview-metrics">'
         + overviewMetric('Open tasks', (tasks.todo || 0) + (tasks.in_progress || 0) + (tasks.review || 0), 'todo ' + (tasks.todo || 0) + ' · active ' + (tasks.in_progress || 0) + ' · review ' + (tasks.review || 0))
@@ -513,6 +525,8 @@
         + overviewMetric('Spend', spendValue, spendDetail)
         + overviewMetric('Baseline delta', baselineValue, baselineDetail)
         + overviewMetric('Reread risk', rereadValue, rereadDetail)
+        + overviewMetric('Whole-path delta', wholePathValue, wholePathDetail)
+        + overviewMetric('Hosting', hostingValue, hostingDetail)
         + '</div>';
 
       if (staleRuns.length) {
