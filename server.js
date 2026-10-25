@@ -61,6 +61,7 @@ const { appendCrossDomainAdjacencyPrompt } = require('./src/cross-domain-adjacen
 const { appendProgramDecompositionPrompt } = require('./src/program-decomposition');
 const { appendAugmentationMeansPrompt } = require('./src/augmentation-means');
 const { appendCompanyBrainPrompt } = require('./src/company-brain');
+const { appendHandBackSurfacePrompt } = require('./src/hand-back-surface');
 const { appendIntentCompilerWorkbenchPrompt } = require('./src/intent-compiler-workbench');
 const { appendScopedMemoryRoutingPrompt } = require('./src/scoped-memory-routing');
 const { appendVoiceFileCheckPrompt } = require('./src/voice-file-check');
@@ -530,6 +531,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendProgramDecompositionPrompt,
     appendAugmentationMeansPrompt,
     appendCompanyBrainPrompt,
+    appendHandBackSurfacePrompt,
     appendWorkflowSkillTemplatePrompt,
     appendWorkflowMapPrompt,
     appendFolderProductBaselinePrompt,
