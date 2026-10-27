@@ -67,6 +67,7 @@ const { appendIntentCompilerWorkbenchPrompt } = require('./src/intent-compiler-w
 const { appendScopedMemoryRoutingPrompt } = require('./src/scoped-memory-routing');
 const { appendVoiceFileCheckPrompt } = require('./src/voice-file-check');
 const { appendTacitCapturePrompt } = require('./src/tacit-capture');
+const { appendFanOutPartitionabilityPrompt } = require('./src/fan-out-partitionability');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -538,6 +539,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendWorkflowMapPrompt,
     appendFolderProductBaselinePrompt,
     appendAgentSplitPrompt,
+    appendFanOutPartitionabilityPrompt,
     appendQuestionDiscoveryPrompt,
     appendChallengeDesignPrompt,
     appendDownstreamExportPrompt,
