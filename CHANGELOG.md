@@ -28,6 +28,7 @@ The orchestrator formerly known as Jarvis is now **Argus**, running Hermes-first
 - `bridge.py` heartbeat crash (`sqlite3.Connection` has no `lastrowid`).
 - Chat `CREATE_TASK` parser no longer fires on the instruction template echoed back by harnesses; missing `project_id` in chat task-creation activity writes.
 - `/api/runs/:id/open` rejects symlink escapes and executable bundles.
+- `bridge.py` crashed at import on macOS's default Python 3.9 (PEP 604 `X | None` annotations are evaluated at runtime), so the inter-agent message bridge never started; annotations now use `typing.Optional`.
 
 ## [2.1.0] — 2026-06-10
 

@@ -33,6 +33,7 @@ import http
 import signal
 import sys
 from datetime import datetime, timezone
+from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
 try:
@@ -51,7 +52,7 @@ MAX_BODY_BYTES = int(os.environ.get("BRIDGE_MAX_BODY", "65536"))
 HEARTBEAT_INTERVAL = 30
 
 # ── Message Store ───────────────────────────────────────────────────
-db_conn: sqlite3.Connection | None = None
+db_conn: Optional[sqlite3.Connection] = None
 
 def get_db() -> sqlite3.Connection:
     global db_conn
@@ -62,8 +63,8 @@ def get_db() -> sqlite3.Connection:
         db_conn.execute("PRAGMA busy_timeout = 5000")
     return db_conn
 
-def write_activity(event_type: str, agent_id: str | None, task_id: int | None,
-                   summary: str, detail: dict | None = None) -> int:
+def write_activity(event_type: str, agent_id: Optional[str], task_id: Optional[int],
+                   summary: str, detail: Optional[dict] = None) -> int:
     db = get_db()
     cur = db.execute(
         "INSERT INTO activity_log (event_type, agent_id, task_id, summary, detail_json) "
