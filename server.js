@@ -69,6 +69,7 @@ const { appendVoiceFileCheckPrompt } = require('./src/voice-file-check');
 const { appendTacitCapturePrompt } = require('./src/tacit-capture');
 const { appendFanOutPartitionabilityPrompt } = require('./src/fan-out-partitionability');
 const { appendInstructionProvenancePrompt } = require('./src/instruction-provenance');
+const { appendCollaborativeDocumentBranchPrompt } = require('./src/collaborative-document-branch');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -542,6 +543,7 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendAgentSplitPrompt,
     appendFanOutPartitionabilityPrompt,
     appendInstructionProvenancePrompt,
+    appendCollaborativeDocumentBranchPrompt,
     appendQuestionDiscoveryPrompt,
     appendChallengeDesignPrompt,
     appendDownstreamExportPrompt,
