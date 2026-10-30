@@ -70,6 +70,7 @@ const { appendTacitCapturePrompt } = require('./src/tacit-capture');
 const { appendFanOutPartitionabilityPrompt } = require('./src/fan-out-partitionability');
 const { appendInstructionProvenancePrompt } = require('./src/instruction-provenance');
 const { appendCollaborativeDocumentBranchPrompt } = require('./src/collaborative-document-branch');
+const { appendIntentMatchReviewPrompt } = require('./src/intent-match-review');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -554,7 +555,8 @@ function buildAgentPrompt(agentId, message, workdir) {
       return appendContextBoundaryPrompt(current, message);
     },
     appendInterfaceBoundaryCheckPrompt,
-    appendDecisionBoundaryPrompt
+    appendDecisionBoundaryPrompt,
+    appendIntentMatchReviewPrompt
   ];
   const agentMessage = promptAugmenters.reduce(function (current, augment) {
     return augment(current);
