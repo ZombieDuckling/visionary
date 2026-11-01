@@ -103,22 +103,22 @@ function vibeCodedAuditPromptBlock(message) {
   const classification = classifyVibeCodedAudit(message);
   if (!classification.applies) return '';
 
-  return '[VIBE-CODED SOFTWARE AUDIT]\\n'
-    + 'This request reviews, hardens, or ships software that an AI wrote. A working app is not evidence that secrets, auth, route exposure, deployment configuration, and generated planning artifacts are safe. Do not stop at tests or static checks; answer these before trusting or shipping it:\\n'
-    + '- Secrets and key history: scan current files for keys/tokens/secrets, search Git/tool/deployment history for deleted secrets, rotate anything that touched an AI tool, chat, repo push, or public log, and record any history you could not inspect as a limitation.\\n'
-    + '- Managed auth/security primitives: prefer official provider SDK/session APIs; flag hand-rolled JWT validation, crypto, session stores, password handling, webhook validation, and permission systems, and verify issuer/audience/project checks.\\n'
-    + '- Public/private route boundaries: enumerate public routes and allowed methods (including GET/POST/PUT and webhooks), confirm the auth behavior each expects, and test that mission-control/admin/ops/client data endpoints are not accidentally exposed; check CORS, callbacks, and health checks.\\n'
-    + '- Generated artifacts reviewed as context: read task plans, prompt files, markdown, and execution logs for ambiguous instructions like "build authentication" or "create encryption" that caused weak implementations, and correct or quarantine unsafe instructions before another agent reads them.\\n'
-    + '- External provider/deployment boundary: check provider/deployment configuration and vendor warnings where reachable, or state the limitation explicitly.\\n'
-    + '- Human threat model: ask what a malicious user, competitor, or accidental client could do with the current interface and business context code-only tools cannot infer; decide what must be fixed before launch versus accepted as known risk.\\n'
-    + '- Report: produce a risk report with current-file findings, unresolved limitations, auth/provider assessment, the public route map, generated-doc/task risks, fixes made or recommended, and the exact verification commands and results.\\n'
+  return '[VIBE-CODED SOFTWARE AUDIT]\n'
+    + 'This request reviews, hardens, or ships software that an AI wrote. A working app is not evidence that secrets, auth, route exposure, deployment configuration, and generated planning artifacts are safe. Do not stop at tests or static checks; answer these before trusting or shipping it:\n'
+    + '- Secrets and key history: scan current files for keys/tokens/secrets, search Git/tool/deployment history for deleted secrets, rotate anything that touched an AI tool, chat, repo push, or public log, and record any history you could not inspect as a limitation.\n'
+    + '- Managed auth/security primitives: prefer official provider SDK/session APIs; flag hand-rolled JWT validation, crypto, session stores, password handling, webhook validation, and permission systems, and verify issuer/audience/project checks.\n'
+    + '- Public/private route boundaries: enumerate public routes and allowed methods (including GET/POST/PUT and webhooks), confirm the auth behavior each expects, and test that mission-control/admin/ops/client data endpoints are not accidentally exposed; check CORS, callbacks, and health checks.\n'
+    + '- Generated artifacts reviewed as context: read task plans, prompt files, markdown, and execution logs for ambiguous instructions like "build authentication" or "create encryption" that caused weak implementations, and correct or quarantine unsafe instructions before another agent reads them.\n'
+    + '- External provider/deployment boundary: check provider/deployment configuration and vendor warnings where reachable, or state the limitation explicitly.\n'
+    + '- Human threat model: ask what a malicious user, competitor, or accidental client could do with the current interface and business context code-only tools cannot infer; decide what must be fixed before launch versus accepted as known risk.\n'
+    + '- Report: produce a risk report with current-file findings, unresolved limitations, auth/provider assessment, the public route map, generated-doc/task risks, fixes made or recommended, and the exact verification commands and results.\n'
     + '[/VIBE-CODED SOFTWARE AUDIT]';
 }
 
 function appendVibeCodedAuditPrompt(message) {
   const block = vibeCodedAuditPromptBlock(message);
   if (!block) return String(message || '');
-  return String(message || '') + '\\n\\n' + block;
+  return String(message || '') + '\n\n' + block;
 }
 
 module.exports = {

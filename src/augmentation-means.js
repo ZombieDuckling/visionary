@@ -112,16 +112,16 @@ function augmentationMeansPromptBlock(message) {
   if (!classification.applies) return '';
 
   return '[AUGMENTATION-MEANS CHECK]\n'
-    + 'This request adds a tool, feature, agent, or capability. Tools alone do not augment — Engelbart\'s four means must all be present, and intelligence is the organization of complexity toward a goal, not the complexity itself. Before shipping, label each means present, weak, or missing:\\n'
-    + '- Artifacts: the concrete objects the operator works through — files, folders, scripts, connectors, interfaces, hardware. A chat box alone is not enough.\\n'
-    + '- Language: the concepts and symbols that let intent be stated precisely and reused — context packages, prompt schemas, glossaries, naming, ontology. Not re-explained each session.\\n'
-    + '- Methodology: the goal-centered procedure with order-of-operations and exception handling — SOPs, routing maps, gates, verification loops.\\n'
-    + '- Training: what makes a fresh operator or session effective with the means above — onboarding, examples and anti-examples, checklists, walkthroughs, ledgers.\\n'
-    + '- Rule: if any means is missing, the outcome degrades to bare automation or tool-chasing. Build the missing means instead of adding more capabilities to compensate.\\n'
-    + '- Higher-order role: after each automation step, name the higher-order role the human now owns — never treat the human as removed.\\n'
-    + '- Primitives and composition: expose a small reliable set of primitives and compose them; do not hard-code one-off ends or grow a feature inventory.\\n'
-    + '- Organization toward goal: state who is augmented, why, and the hand-back point — and judge by intent + organization + problem fit, not model size, feature count, or agent count.\\n'
-    + '- Verdict: genuine augmentation, bare automation, or tool-chasing — and whether to prefer \"amplified intelligence\" framing over \"artificial intelligence\".\\n'
+    + 'This request adds a tool, feature, agent, or capability. Tools alone do not augment — Engelbart\'s four means must all be present, and intelligence is the organization of complexity toward a goal, not the complexity itself. Before shipping, label each means present, weak, or missing:\n'
+    + '- Artifacts: the concrete objects the operator works through — files, folders, scripts, connectors, interfaces, hardware. A chat box alone is not enough.\n'
+    + '- Language: the concepts and symbols that let intent be stated precisely and reused — context packages, prompt schemas, glossaries, naming, ontology. Not re-explained each session.\n'
+    + '- Methodology: the goal-centered procedure with order-of-operations and exception handling — SOPs, routing maps, gates, verification loops.\n'
+    + '- Training: what makes a fresh operator or session effective with the means above — onboarding, examples and anti-examples, checklists, walkthroughs, ledgers.\n'
+    + '- Rule: if any means is missing, the outcome degrades to bare automation or tool-chasing. Build the missing means instead of adding more capabilities to compensate.\n'
+    + '- Higher-order role: after each automation step, name the higher-order role the human now owns — never treat the human as removed.\n'
+    + '- Primitives and composition: expose a small reliable set of primitives and compose them; do not hard-code one-off ends or grow a feature inventory.\n'
+    + '- Organization toward goal: state who is augmented, why, and the hand-back point — and judge by intent + organization + problem fit, not model size, feature count, or agent count.\n'
+    + '- Verdict: genuine augmentation, bare automation, or tool-chasing — and whether to prefer \"amplified intelligence\" framing over \"artificial intelligence\".\n'
     + '[/AUGMENTATION-MEANS CHECK]';
 }
 
