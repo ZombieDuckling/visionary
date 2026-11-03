@@ -74,6 +74,7 @@ const { appendIntentMatchReviewPrompt } = require('./src/intent-match-review');
 const { appendSpecBeforeMachinePrompt } = require('./src/spec-before-the-machine');
 const { appendEfficiencyVsAmplificationPrompt } = require('./src/efficiency-vs-amplification');
 const { appendRuntimeReachPortabilityPrompt } = require('./src/runtime-reach-portability');
+const { appendAiAsCompilerPipelinePrompt } = require('./src/ai-as-compiler-pipeline');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -562,7 +563,8 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendIntentMatchReviewPrompt,
     appendSpecBeforeMachinePrompt,
     appendEfficiencyVsAmplificationPrompt,
-    appendRuntimeReachPortabilityPrompt
+    appendRuntimeReachPortabilityPrompt,
+    appendAiAsCompilerPipelinePrompt
   ];
   const agentMessage = promptAugmenters.reduce(function (current, augment) {
     return augment(current);

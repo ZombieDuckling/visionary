@@ -1,7 +1,7 @@
 ---
 agent_id: director-intelligence
 name: Director of Intelligence
-reports_to: jarvis
+reports_to: argus
 harness_chain: [openclaw, claude-code, codex]
 expected_activity_within_seconds: 3600
 ---
