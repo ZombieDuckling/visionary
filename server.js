@@ -78,6 +78,7 @@ const { appendAiAsCompilerPipelinePrompt } = require('./src/ai-as-compiler-pipel
 const { appendAutomationTimingPrompt } = require('./src/automation-timing');
 const { appendInterfaceLayerPrompt } = require('./src/interface-layer-selection');
 const { appendPositionAddressedMemoryPrompt } = require('./src/position-addressed-memory');
+const { appendCapabilityAssumptionReviewPrompt } = require('./src/capability-assumption-review');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -570,7 +571,8 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendAiAsCompilerPipelinePrompt,
     appendAutomationTimingPrompt,
     appendInterfaceLayerPrompt,
-    appendPositionAddressedMemoryPrompt
+    appendPositionAddressedMemoryPrompt,
+    appendCapabilityAssumptionReviewPrompt
   ];
   const agentMessage = promptAugmenters.reduce(function (current, augment) {
     return augment(current);
