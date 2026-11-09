@@ -80,6 +80,7 @@ const { appendInterfaceLayerPrompt } = require('./src/interface-layer-selection'
 const { appendPositionAddressedMemoryPrompt } = require('./src/position-addressed-memory');
 const { appendCapabilityAssumptionReviewPrompt } = require('./src/capability-assumption-review');
 const { appendRepeatedProblemSignalMiningPrompt } = require('./src/repeated-problem-signal-mining');
+const { appendSecretIsolationPrompt } = require('./src/secret-isolation-review');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -574,7 +575,8 @@ function buildAgentPrompt(agentId, message, workdir) {
     appendInterfaceLayerPrompt,
     appendPositionAddressedMemoryPrompt,
     appendCapabilityAssumptionReviewPrompt,
-    appendRepeatedProblemSignalMiningPrompt
+    appendRepeatedProblemSignalMiningPrompt,
+    appendSecretIsolationPrompt
   ];
   const agentMessage = promptAugmenters.reduce(function (current, augment) {
     return augment(current);
