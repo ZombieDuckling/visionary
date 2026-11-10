@@ -1460,6 +1460,25 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 .settings-actions { display: flex; gap: var(--space-sm); }
 .settings-note { font-size: var(--font-size-sm); color: var(--text-muted); margin-top: var(--space-md); line-height: 1.5; }
 
+/* ---------- System check ---------- */
+.health-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); }
+.health-panel-title { font-size: var(--font-size-md); font-weight: 600; margin: 0; }
+.health-panel-head .settings-note { margin-top: var(--space-xs); max-width: 560px; }
+.health-results { margin-top: var(--space-lg); }
+.health-summary { display: flex; align-items: center; gap: var(--space-sm); padding-bottom: var(--space-md); border-bottom: 1px solid var(--separator); }
+.health-summary-counts { font-size: var(--font-size-sm); color: var(--text-muted); font-family: var(--font-mono); }
+.health-row { display: grid; grid-template-columns: 52px 1fr; gap: var(--space-md); padding: var(--space-md) 0; border-bottom: 1px solid var(--separator); }
+.health-row:last-of-type { border-bottom: 0; }
+.health-row .badge { justify-self: start; align-self: start; }
+.health-row-label { font-size: var(--font-size-sm); font-weight: 600; }
+.health-row-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.5; margin-top: 2px; overflow-wrap: anywhere; }
+.health-row-fix { font-size: var(--font-size-sm); color: var(--accent-orange); line-height: 1.5; margin-top: var(--space-xs); }
+.health-env { margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--separator); font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-muted); overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .health-panel-head { flex-direction: column; }
+  .health-row { grid-template-columns: 1fr; gap: var(--space-xs); }
+}
+
 /* ---------- Chat panel (Jarvis inspector) ---------- */
 .chat-panel {
   width: var(--chat-w);

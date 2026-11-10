@@ -2829,7 +2829,13 @@
         + '<div class="settings-actions"><button class="btn btn-primary" type="submit">Save settings</button><a class="btn" href="/api/export">Export data</a></div>'
         + '<div class="settings-note">Theme applies immediately. Port and workspace path are saved, but require a server restart.</div>'
         + '<div id="settings-status" class="overview-meta"></div>'
-        + '</form></section>';
+        + '</form></section>'
+        + '<section class="card settings-panel health-panel">'
+        + '<div class="health-panel-head"><div><h3 class="health-panel-title">System check</h3>'
+        + '<div class="settings-note">Probes the database, artifact workspace, harness CLIs, personality charters, and watchdog heartbeat — the parts a dispatch depends on.</div></div>'
+        + '<button class="btn" id="health-run" type="button">Run check</button></div>'
+        + '<div id="health-results" class="health-results"></div>'
+        + '</section>';
       applyTheme(settings.theme || 'dark');
       var form = container.querySelector('#settings-form');
       var status = container.querySelector('#settings-status');
@@ -2849,6 +2855,50 @@
         });
       });
       form.theme.addEventListener('change', function () { applyTheme(form.theme.value); });
+
+      var healthResults = container.querySelector('#health-results');
+      var healthRun = container.querySelector('#health-run');
+      function renderHealth(report) {
+        var s = report.summary || {};
+        var overall = report.ok
+          ? '<span class="badge badge-green">Ready</span>'
+          : '<span class="badge badge-red">Blocked</span>';
+        var html = '<div class="health-summary">' + overall
+          + '<span class="health-summary-counts">' + (s.pass || 0) + ' pass · ' + (s.warn || 0) + ' warn · ' + (s.fail || 0) + ' fail</span></div>';
+        html += (report.checks || []).map(function (check) {
+          var badgeClass = check.status === 'pass' ? 'badge-green' : check.status === 'warn' ? 'badge-orange' : 'badge-red';
+          var badgeText = check.status === 'pass' ? 'PASS' : check.status === 'warn' ? 'WARN' : 'FAIL';
+          return '<div class="health-row">'
+            + '<span class="badge ' + badgeClass + '">' + badgeText + '</span>'
+            + '<div class="health-row-body">'
+            + '<div class="health-row-label">' + esc(check.label || check.id || '') + '</div>'
+            + '<div class="health-row-detail">' + esc(check.detail || '') + '</div>'
+            + (check.fix ? '<div class="health-row-fix">Fix: ' + esc(check.fix) + '</div>' : '')
+            + '</div></div>';
+        }).join('');
+        var env = report.environment || {};
+        html += '<div class="health-env">v' + esc(env.version || '?')
+          + ' · node ' + esc(env.node || '?')
+          + ' · pid ' + esc(String(env.pid || '?'))
+          + ' · schema ' + esc(String(env.schema_version || '?'))
+          + ' · artifacts ' + esc(env.artifact_root || 'none')
+          + '</div>';
+        healthResults.innerHTML = html;
+      }
+      function runHealth() {
+        healthResults.innerHTML = '<div class="empty-state"><div class="spinner"></div> Probing database, harnesses, charters, watchdog...</div>';
+        healthRun.disabled = true;
+        api('/health').then(function (report) {
+          if (container._viewRequestId !== requestId || state.activeTab !== 'settings') return;
+          renderHealth(report);
+        }).catch(function (err) {
+          if (container._viewRequestId !== requestId || state.activeTab !== 'settings') return;
+          healthResults.innerHTML = '<div class="card overview-alert"><span class="badge badge-red">Error</span><span>'
+            + esc((((err || {}).data || {}).error) || err.message || 'Health check failed') + '</span></div>';
+        }).finally(function () { healthRun.disabled = false; });
+      }
+      healthRun.addEventListener('click', runHealth);
+      runHealth();
     }).catch(function (err) {
       if (container._viewRequestId !== requestId || state.activeTab !== 'settings') return;
       container.innerHTML = '<h2 class="section-header"><span class="section-header-icon">⚙️</span> Settings</h2>'

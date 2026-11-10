@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
 const { execFile, execFileSync } = require('node:child_process');
-const { db, stmts } = require('./db');
+const { db, stmts, DB_PATH, SCHEMA_VERSION } = require('./db');
 const { bus, handleSSE } = require('./sse');
 const runtimes = require('./src/runtimes');
 const cookbook = require('./src/cookbook');
@@ -83,6 +83,7 @@ const { appendRepeatedProblemSignalMiningPrompt } = require('./src/repeated-prob
 const { appendSecretIsolationPrompt } = require('./src/secret-isolation-review');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
+const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
@@ -90,6 +91,11 @@ rateLimiter.init(stmts);
 
 // Read HTML file once at startup
 const indexHTML = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+const APP_VERSION = (function () {
+  try { return fs.readFileSync(path.join(__dirname, 'VERSION'), 'utf8').trim(); }
+  catch { return null; }
+})();
+const SERVER_STARTED_AT = new Date();
 const MAX_CHATS = 3;
 let activeChats = 0;
 
@@ -1665,6 +1671,64 @@ const server = http.createServer(async (req, res) => {
         const defaults = { auto_nudge_enabled: false, nudge_cooldown_seconds: 900 };
         const saved = row ? safeJsonParse(row.value_json, {}) : {};
         res.json({ watchdog: { ...defaults, ...saved } });
+        return;
+      }
+
+      // GET /api/health — deterministic install-readiness report.
+      // Every part of the program (state, runner, instructions, watchdog) is
+      // probed, not inferred from a status LED. See src/health-check.js.
+      if (method === 'GET' && pathname === '/api/health') {
+        const runtimeList = await runtimes.listRuntimes();
+        const agentRows = stmts.getAllAgentRuntimes.all();
+        const schemaRow = db.prepare('SELECT version FROM schema_version WHERE rowid = 1').get();
+        const heartbeatRow = stmts.getSettings.get('watchdog_heartbeat');
+        let heartbeatAt = null;
+        if (heartbeatRow) {
+          const heartbeat = safeJsonParse(heartbeatRow.value_json, null);
+          if (heartbeat && heartbeat.at) heartbeatAt = heartbeat.at;
+        }
+        const staleCandidates = db.prepare(`
+          SELECT id FROM agent_runs
+          WHERE status = 'running' AND datetime(started_at) < datetime('now', '-2 hours')
+        `).all();
+        const staleRuns = staleCandidates.filter(function (r) { return !activeDispatches.has(r.id); }).length;
+        const enabledSchedules = stmts.getEnabledSchedules.all();
+        const report = buildHealthReport({
+          db: db,
+          schemaVersion: schemaRow ? schemaRow.version : null,
+          expectedSchemaVersion: SCHEMA_VERSION,
+          artifactRoot: ARTIFACT_ROOT,
+          agents: agentRows,
+          runtimes: runtimeList,
+          canonicalHarness: function (name) {
+            try { return runtimes.getRuntime(name).name; } catch { return null; }
+          },
+          repoRoot: __dirname,
+          heartbeatAt: heartbeatAt,
+          watchdogIntervalSeconds: 60,
+          staleRuns: staleRuns,
+          schedulesEnabled: enabledSchedules.length,
+          activeDispatches: activeDispatches.size,
+          dbPath: DB_PATH,
+          version: APP_VERSION,
+          port: PORT,
+          startedAt: SERVER_STARTED_AT
+        });
+        res.json(report);
+        return;
+      }
+
+      // POST /api/watchdog/heartbeat — liveness beacon from watchdog.py.
+      // Stored in settings so /api/health can tell a dead watchdog from a
+      // healthy one without shelling out to ps.
+      if (method === 'POST' && pathname === '/api/watchdog/heartbeat') {
+        const body = await readBody(req);
+        const heartbeat = {
+          at: new Date().toISOString(),
+          pid: body && Number.isInteger(Number(body.pid)) ? Number(body.pid) : null
+        };
+        stmts.upsertSettings.run({ key: 'watchdog_heartbeat', value_json: JSON.stringify(heartbeat) });
+        res.json({ ok: true, heartbeat: heartbeat });
         return;
       }
 

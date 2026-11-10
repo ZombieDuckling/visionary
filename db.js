@@ -604,4 +604,4 @@ const stmts = {
   `)
 };
 
-module.exports = { db, stmts };
+module.exports = { db, stmts, DB_PATH, SCHEMA_VERSION: migrations.length };

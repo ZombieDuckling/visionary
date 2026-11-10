@@ -77,9 +77,18 @@ def fetch_watchdog_settings() -> dict:
     """Return watchdog settings from /api/settings/watchdog.  Never raises."""
     try:
         data = _http("GET", "/api/settings/watchdog")
-        return data.get("watchdog", {})
+        return data.get("watchdog", {}) if isinstance(data, dict) else {}
     except Exception:  # noqa: BLE001
         return {}
+
+
+def post_heartbeat() -> None:
+    """Best-effort liveness beacon so /api/health can tell a live watchdog
+    from a dead one. Never raises — a missed beacon is not fatal."""
+    try:
+        _http("POST", "/api/watchdog/heartbeat", {"pid": os.getpid()})
+    except (urllib.error.URLError, json.JSONDecodeError, OSError) as err:
+        print(f"[watchdog] heartbeat failed: {err}", file=sys.stderr)
 
 
 def nudge_agent(agent_id: str, prompt: str) -> dict:
@@ -133,6 +142,7 @@ def _cooldown_remaining(agent: dict, cooldown_seconds: int) -> float:
 
 
 def cycle() -> None:
+    post_heartbeat()
     try:
         agents = fetch_org()
     except (urllib.error.URLError, json.JSONDecodeError) as err:
@@ -191,6 +201,7 @@ def cycle() -> None:
 
 def main() -> int:
     print(f"[watchdog] starting (base={BASE} interval={INTERVAL}s timeout={HTTP_TIMEOUT}s)")
+    post_heartbeat()
     while True:
         try:
             cycle()

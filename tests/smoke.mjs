@@ -444,6 +444,48 @@ test('Token-aware replay: failover.js source uses selectForReplay (structural)',
   assert.ok(src.includes("status: 'rate-limited'"), 'failover returns rate-limited status');
 });
 
+test('GET /api/health returns a readiness report with every required probe', async () => {
+  const { status, json } = await http('GET', '/api/health');
+  assert.equal(status, 200);
+  assert.ok(json && typeof json === 'object', 'health report is JSON');
+  assert.equal(typeof json.ok, 'boolean', 'ok is boolean');
+  assert.ok(json.summary && typeof json.summary.pass === 'number'
+    && typeof json.summary.warn === 'number' && typeof json.summary.fail === 'number', 'summary counts present');
+  assert.ok(Array.isArray(json.checks) && json.checks.length >= 8, 'checks array present');
+  const ids = json.checks.map((c) => c.id);
+  for (const required of ['database.integrity', 'database.schema', 'artifacts.root',
+    'harnesses.available', 'agents.reachability', 'agents.charters', 'watchdog.heartbeat', 'runs.stale']) {
+    assert.ok(ids.includes(required), `health report missing check: ${required}`);
+  }
+  for (const check of json.checks) {
+    assert.ok(['pass', 'warn', 'fail'].includes(check.status), `invalid status on ${check.id}`);
+    assert.ok(typeof check.detail === 'string' && check.detail.length > 0, `empty detail on ${check.id}`);
+    if (check.status === 'fail') assert.ok(check.fix, `failed check ${check.id} needs a fix hint`);
+  }
+  assert.ok(json.environment && typeof json.environment.schema_version === 'number', 'schema version reported');
+  assert.equal(json.ok, json.summary.fail === 0, 'ok must agree with the fail count');
+});
+
+test('POST /api/watchdog/heartbeat makes the watchdog check fresh', async () => {
+  const post = await http('POST', '/api/watchdog/heartbeat', { pid: 4242 });
+  assert.equal(post.status, 200);
+  assert.equal(post.json.ok, true);
+  assert.ok(post.json.heartbeat && typeof post.json.heartbeat.at === 'string', 'heartbeat timestamp returned');
+  const { status, json } = await http('GET', '/api/health');
+  assert.equal(status, 200);
+  const check = json.checks.find((c) => c.id === 'watchdog.heartbeat');
+  assert.equal(check.status, 'pass', 'fresh heartbeat should pass');
+  assert.match(check.detail, /heartbeat \d+s ago/);
+});
+
+test('GET /api/health never reports a passing database integrity check falsely', async () => {
+  const { json } = await http('GET', '/api/health');
+  const check = json.checks.find((c) => c.id === 'database.integrity');
+  assert.equal(check.status, 'pass');
+  assert.match(check.detail, /quick_check returned ok/);
+  const schema = json.checks.find((c) => c.id === 'database.schema');
+  assert.equal(schema.status, 'pass', 'fresh isolated DB should match the shipped schema');
+});
 test('Overview cleanup: source code does not touch activeDispatches map (live-dispatch safety)', () => {
   // Static structural assertion: the cleanup handler must not mutate the
   // in-memory dispatch map. We grep the handler block of server.js.

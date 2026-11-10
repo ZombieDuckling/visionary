@@ -362,6 +362,8 @@ All paths are overridable via environment variables — no hardcoded user direct
 
 The Settings tab lets you configure port, workspace path, theme, and default runtime from the UI. Changes persist in SQLite via `GET /api/settings` and `PUT /api/settings`. Theme changes apply immediately; port and workspace changes require a restart.
 
+The same tab carries a **System check** panel backed by `GET /api/health`. It is a real probe, not a status LED: SQLite `quick_check` and schema-version parity, a write/read/unlink probe in the artifact workspace, version probes for every registered harness CLI, per-agent harness reachability against the org chart, personality-charter presence and `agent_id` match, watchdog heartbeat age, and stale-run count. Each check returns `pass`, `warn`, or `fail` with a fix hint; `ok` is true only when nothing failed. `POST /api/watchdog/heartbeat` is the beacon `watchdog.py` sends on start and every cycle — if the heartbeat goes stale, the panel says so instead of silently trusting a dead watchdog.
+
 ## Architecture
 
 The server is `server.js` — all HTTP routes, the scheduler tick, and the cleanup tick run in one Node process. `db.js` holds the entire schema and every prepared statement; no SQL appears in route handlers. `sse.js` is the event bus and client registry. The org chart is config-as-code in `personalities/org-chart.json` and is reconciled into the `agents` table on every boot.
