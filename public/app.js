@@ -2095,6 +2095,19 @@
         if (r.input_tokens != null || r.output_tokens != null) {
           tokStr = ' · <span class="run-tokens">' + (r.input_tokens != null ? esc(String(r.input_tokens)) + ' in' : '') + (r.input_tokens != null && r.output_tokens != null ? ' / ' : '') + (r.output_tokens != null ? esc(String(r.output_tokens)) + ' out' : '') + '</span>';
         }
+        var promptStr = '';
+        try {
+          var pm = JSON.parse(r.prompt_meta_json || 'null');
+          if (pm) {
+            var appliedIds = (pm.applied || []).map(function (a) { return a.id; });
+            promptStr = '<div class="run-prompt" title="' + esc(appliedIds.join(', ') || 'none') + '">'
+              + 'Prompt context · ' + (appliedIds.length || 0) + ' nudge' + (appliedIds.length === 1 ? '' : 's')
+              + ' · ' + esc(String(pm.nudge_chars || 0)) + ' chars'
+              + (pm.budget_chars ? ' / ' + esc(String(pm.budget_chars)) + ' budget' : '')
+              + ((pm.dropped && pm.dropped.length) ? ' · ' + pm.dropped.length + ' dropped' : '')
+              + '</div>';
+          }
+        } catch (e) { promptStr = ''; }
         return '<div class="run-item">'
           + '<div class="run-head">'
           + '<span class="run-badge run-badge-' + statusClass + '">' + esc(r.status) + '</span>'
@@ -2106,6 +2119,7 @@
           + '</span>'
           + (r.workdir ? '<button type="button" class="btn btn-small run-open-btn" data-run-id="' + r.id + '">Open Folder</button>' : '')
           + '</div>'
+          + promptStr
           + (r.result_text ? '<div class="run-result">' + esc(String(r.result_text).substring(0, 400)) + '</div>' : '')
           + (r.error ? '<div class="run-error">' + esc(String(r.error).substring(0, 300)) + '</div>' : '')
           + (r.workdir ? '<div class="run-workdir">' + esc(r.workdir) + '</div>' : '')

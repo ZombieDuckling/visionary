@@ -14,74 +14,8 @@ const cleanup = require('./src/cleanup');
 const rateLimiter = require('./src/rate-limiter');
 const { parseVerdict } = require('./src/review-verdict');
 const { parseChatActions } = require('./src/chat-actions');
-const { appendValueLayerPrompt } = require('./src/value-layer');
-const { appendOpportunityRoutingPrompt } = require('./src/opportunity-routing');
-const { appendSystemDecompositionPrompt } = require('./src/system-decomposition');
-const { appendSourceRuntimeValuePrompt } = require('./src/source-runtime-value');
-const { appendContextBoundaryPrompt } = require('./src/context-boundary');
-const { appendInterfaceBoundaryCheckPrompt } = require('./src/interface-boundary-check');
-const { appendDecisionBoundaryPrompt } = require('./src/decision-boundary');
-const { appendExperimentMatrixPrompt } = require('./src/experiment-matrix');
-const { appendArtifactWorkbenchPrompt } = require('./src/artifact-workbench');
-const { appendAssetWorkbenchPrompt } = require('./src/asset-workbench');
-const { appendStageGatedWorkbenchPrompt } = require('./src/stage-gated-workbench');
-const { appendDownstreamExportPrompt } = require('./src/downstream-export');
-const { appendContinuityWorkbenchPrompt } = require('./src/continuity-workbench');
-const { appendFolderProductBaselinePrompt } = require('./src/folder-product-baseline');
-const { appendWorkflowMapPrompt } = require('./src/workflow-map');
-const { appendWorkflowSkillTemplatePrompt } = require('./src/workflow-skill-template');
-const { appendOpinionStandardPrompt } = require('./src/opinion-standard');
-const { appendAgentSplitPrompt } = require('./src/agent-split');
-const { appendChallengeDesignPrompt } = require('./src/challenge-design');
-const { appendQuestionDiscoveryPrompt } = require('./src/question-discovery');
-const { appendDomainExpertSourcePrompt } = require('./src/domain-expert-source');
-const { appendSourceProvenancePrompt } = require('./src/source-provenance');
-const { appendSourceMapBeforeSearchPrompt } = require('./src/source-map-before-search');
-const { appendLearningLoopPrompt } = require('./src/learning-loop');
-const { appendAiWorkflowLadderPrompt } = require('./src/ai-workflow-ladder');
-const { appendDurableRetrospectivePrompt } = require('./src/durable-retrospective');
-const { appendFailureStudyLoopPrompt } = require('./src/failure-study-loop');
-const { appendReplicabilityCheckPrompt } = require('./src/replicability-check');
-const { appendWorkflowResiliencePrompt } = require('./src/workflow-resilience');
-const { appendExecutionEvidenceGatePrompt } = require('./src/execution-evidence-gate');
-const { appendBaselineRatchetPrompt } = require('./src/baseline-ratchet');
-const { appendConsentDisclosurePrompt } = require('./src/consent-disclosure');
-const { appendMediaProvenancePrompt } = require('./src/media-provenance');
-const { appendReviewDebtPrompt } = require('./src/review-debt');
-const { appendCompletionManifestPrompt } = require('./src/completion-manifest');
-const { appendWorkbenchOutcomeReviewPrompt } = require('./src/workbench-outcome-review');
-const { appendClassifierGatePrompt } = require('./src/classifier-gate');
-const { appendWorkbenchSyncPlanePrompt } = require('./src/workbench-sync-plane');
-const { appendWorkbenchPrerequisiteGatePrompt } = require('./src/workbench-prerequisite-gate');
-const { appendPortableInstructionAssetPrompt } = require('./src/portable-instruction-asset');
-const { appendWorkflowCapturePrompt } = require('./src/workflow-capture');
-const { appendCodingAgentLoopPrompt } = require('./src/coding-agent-loop');
-const { appendAugmentOverAutomatePrompt } = require('./src/augment-over-automate');
-const { appendCrossDomainAdjacencyPrompt } = require('./src/cross-domain-adjacency');
-const { appendProgramDecompositionPrompt } = require('./src/program-decomposition');
-const { appendAugmentationMeansPrompt } = require('./src/augmentation-means');
-const { appendCompanyBrainPrompt } = require('./src/company-brain');
-const { appendHandBackSurfacePrompt } = require('./src/hand-back-surface');
-const { appendVibeCodedAuditPrompt } = require('./src/vibe-coded-audit');
-const { appendIntentCompilerWorkbenchPrompt } = require('./src/intent-compiler-workbench');
-const { appendScopedMemoryRoutingPrompt } = require('./src/scoped-memory-routing');
-const { appendVoiceFileCheckPrompt } = require('./src/voice-file-check');
-const { appendTacitCapturePrompt } = require('./src/tacit-capture');
-const { appendFanOutPartitionabilityPrompt } = require('./src/fan-out-partitionability');
-const { appendInstructionProvenancePrompt } = require('./src/instruction-provenance');
-const { appendCollaborativeDocumentBranchPrompt } = require('./src/collaborative-document-branch');
-const { appendIntentMatchReviewPrompt } = require('./src/intent-match-review');
-const { appendSpecBeforeMachinePrompt } = require('./src/spec-before-the-machine');
-const { appendEfficiencyVsAmplificationPrompt } = require('./src/efficiency-vs-amplification');
-const { appendRuntimeReachPortabilityPrompt } = require('./src/runtime-reach-portability');
-const { appendAiAsCompilerPipelinePrompt } = require('./src/ai-as-compiler-pipeline');
-const { appendAutomationTimingPrompt } = require('./src/automation-timing');
-const { appendInterfaceLayerPrompt } = require('./src/interface-layer-selection');
-const { appendPositionAddressedMemoryPrompt } = require('./src/position-addressed-memory');
-const { appendCapabilityAssumptionReviewPrompt } = require('./src/capability-assumption-review');
-const { appendRepeatedProblemSignalMiningPrompt } = require('./src/repeated-problem-signal-mining');
-const { appendSecretIsolationPrompt } = require('./src/secret-isolation-review');
 const { extractUsageTelemetry } = require('./src/usage-telemetry');
+const promptPipeline = require('./src/prompt-pipeline');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
@@ -510,83 +444,15 @@ function loadPersonality(agentId) {
   personalityCache.set(fileId, text);
   return text;
 }
-function buildAgentPrompt(agentId, message, workdir) {
+// Dispatch prompt assembly. Nudges are classified against the operator's
+// original message only and capped by a deterministic budget (see
+// src/prompt-pipeline.js). Callers that need the telemetry can pass a
+// precomputed plan; otherwise one is built here.
+function buildAgentPrompt(agentId, message, workdir, plan) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
-  const promptAugmenters = [
-    appendContinuityWorkbenchPrompt,
-    appendOpportunityRoutingPrompt,
-    appendValueLayerPrompt,
-    appendDomainExpertSourcePrompt,
-    appendSourceProvenancePrompt,
-    appendSourceMapBeforeSearchPrompt,
-    appendLearningLoopPrompt,
-    appendAiWorkflowLadderPrompt,
-    appendSourceRuntimeValuePrompt,
-    appendSystemDecompositionPrompt,
-    appendDurableRetrospectivePrompt,
-    appendFailureStudyLoopPrompt,
-    appendReplicabilityCheckPrompt,
-    appendWorkflowResiliencePrompt,
-    appendExecutionEvidenceGatePrompt,
-    appendBaselineRatchetPrompt,
-    appendConsentDisclosurePrompt,
-    appendMediaProvenancePrompt,
-    appendReviewDebtPrompt,
-    appendVoiceFileCheckPrompt,
-    appendCompletionManifestPrompt,
-    appendWorkbenchOutcomeReviewPrompt,
-    appendTacitCapturePrompt,
-    appendClassifierGatePrompt,
-    appendWorkbenchPrerequisiteGatePrompt,
-    appendPortableInstructionAssetPrompt,
-    appendIntentCompilerWorkbenchPrompt,
-    appendScopedMemoryRoutingPrompt,
-    appendWorkbenchSyncPlanePrompt,
-    appendExperimentMatrixPrompt,
-    appendOpinionStandardPrompt,
-    appendWorkflowCapturePrompt,
-    appendCodingAgentLoopPrompt,
-    appendAugmentOverAutomatePrompt,
-    appendCrossDomainAdjacencyPrompt,
-    appendProgramDecompositionPrompt,
-    appendAugmentationMeansPrompt,
-    appendCompanyBrainPrompt,
-    appendHandBackSurfacePrompt,
-    appendVibeCodedAuditPrompt,
-    appendWorkflowSkillTemplatePrompt,
-    appendWorkflowMapPrompt,
-    appendFolderProductBaselinePrompt,
-    appendAgentSplitPrompt,
-    appendFanOutPartitionabilityPrompt,
-    appendInstructionProvenancePrompt,
-    appendCollaborativeDocumentBranchPrompt,
-    appendQuestionDiscoveryPrompt,
-    appendChallengeDesignPrompt,
-    appendDownstreamExportPrompt,
-    appendStageGatedWorkbenchPrompt,
-    appendAssetWorkbenchPrompt,
-    appendArtifactWorkbenchPrompt,
-    function appendContextBoundaryWithOriginal(current) {
-      return appendContextBoundaryPrompt(current, message);
-    },
-    appendInterfaceBoundaryCheckPrompt,
-    appendDecisionBoundaryPrompt,
-    appendIntentMatchReviewPrompt,
-    appendSpecBeforeMachinePrompt,
-    appendEfficiencyVsAmplificationPrompt,
-    appendRuntimeReachPortabilityPrompt,
-    appendAiAsCompilerPipelinePrompt,
-    appendAutomationTimingPrompt,
-    appendInterfaceLayerPrompt,
-    appendPositionAddressedMemoryPrompt,
-    appendCapabilityAssumptionReviewPrompt,
-    appendRepeatedProblemSignalMiningPrompt,
-    appendSecretIsolationPrompt
-  ];
-  const agentMessage = promptAugmenters.reduce(function (current, augment) {
-    return augment(current);
-  }, String(message || ''));
+  const resolvedPlan = plan || promptPipeline.planNudges(message);
+  const agentMessage = resolvedPlan.text;
   const workdirNote = workdir
     ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
     : '';
@@ -658,6 +524,9 @@ function resolveAgentRow(agentId) {
 // Dispatch an agent through the full failover chain, streaming output over SSE.
 function dispatchAgent(taskId, agentId, message) {
   const startTime = Date.now();
+  // Plan the injected context once, from the operator's original message, so
+  // the run row can record exactly what was added and what the budget dropped.
+  const promptPlan = promptPipeline.planNudges(message);
 
   // Transaction: update task status, insert run, insert activity
   const doTransaction = db.transaction(() => {
@@ -675,6 +544,7 @@ function dispatchAgent(taskId, agentId, message) {
     }
     const result = stmts.insertRun.run({ task_id: taskId, agent_id: agentId, message });
     const runId = Number(result.lastInsertRowid);
+    stmts.setRunPromptMeta.run({ id: runId, meta: JSON.stringify(promptPlan.meta) });
     stmts.insertActivity.run({
       event_type: 'agent.dispatched',
       agent_id: agentId,
@@ -699,7 +569,7 @@ function dispatchAgent(taskId, agentId, message) {
   const workdir = prepareWorkdir(taskId);
   if (workdir) stmts.setRunWorkdir.run({ id: runId, workdir });
   const ctx = {
-    message: buildAgentPrompt(agentId, message, workdir),
+    message: buildAgentPrompt(agentId, message, workdir, promptPlan),
     agentId: cfg ? cfg.id : agentId,
     model: cfg && cfg.model,
     agent: cfg,

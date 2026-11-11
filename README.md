@@ -34,6 +34,10 @@ Every dispatch runs inside its own working directory: `~/Visionary/<project>/tas
 
 After a run completes, the reviewer agent runs through its own harness chain with the artifact list as evidence and read-only tools. Reviews parse a structured `APPROVE:` / `REJECT:` first line — no keyword-anywhere false verdicts. Inconclusive results stay in Review for the operator. Rejections redispatch through the normal path (new workdir, full failover). Tasks that hit the retry ceiling stay in Review rather than bouncing back to todo.
 
+### Dispatch prompt budget and telemetry
+
+Every dispatch nudge in this README is classified against the operator's original message only, ranked by its own signal score, and capped by a deterministic budget (default 4 blocks / 6,000 characters). Blocks that do not fit are dropped whole and recorded. Before this pipeline existed the nudges chained onto the same string the next classifier read, so block vocabulary re-triggered unrelated nudges: a 30-character bug report inflated to 49,457 characters across 41 blocks. It is now 916 characters with the one relevant block. Each run stores `prompt_meta_json` (applied blocks, sizes, drops, classifier errors) and the task panel shows a `Prompt context` line, so prompt cost is inspectable per run instead of an invisible multiplier. Applies Jake Van Clief's prompt-and-memory-hierarchy lesson (`S3fXSc5z2n4`, `5B6W2OGfxq0`): instructions must not contaminate the evidence they were selected from. See [docs/DISPATCH-PROMPT-BUDGET.md](docs/DISPATCH-PROMPT-BUDGET.md).
+
 ### Question-discovery dispatch nudges
 
 Underdefined discovery, diagnosis, intake, client, product, workflow, or automation requests now get a deterministic question-discovery block before dispatch. The agent must extract the sharper question or decision, known facts/sources, unknowns/constraints, assumptions/non-goals, and a verification path before executing. It is intentionally skipped when the operator already supplied a discovery frame.
@@ -359,6 +363,8 @@ All paths are overridable via environment variables — no hardcoded user direct
 | `VISIONARY_WORKSPACE` | `$HOME/.openclaw/workspace` | Where agent briefs, memory, and portfolio live |
 | `VISIONARY_NODE` | `process.execPath` | Node binary the Electron shell uses to spawn the server |
 | `VISIONARY_ARTIFACTS` | `$HOME/Visionary` | Root directory for per-task working directories |
+| `VISIONARY_NUDGE_BUDGET_CHARS` | `6000` | Hard ceiling on injected dispatch-nudge characters (`0` disables the cap) |
+| `VISIONARY_NUDGE_MAX` | `4` | Maximum nudge blocks per dispatch (`0` disables the count cap) |
 
 The Settings tab lets you configure port, workspace path, theme, and default runtime from the UI. Changes persist in SQLite via `GET /api/settings` and `PUT /api/settings`. Theme changes apply immediately; port and workspace changes require a restart.
 

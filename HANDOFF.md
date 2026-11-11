@@ -113,6 +113,19 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - `estimateTokens(s)`, `budgetReport(messages, ceiling)`, `selectForReplay(messages, ceiling, mostRecentFirst)`.
 - Not yet wired into the dispatch path automatically. Use them when you wire token-aware replay.
 
+### Dispatch prompt pipeline (`src/prompt-pipeline.js`)
+- `planNudges(message, opts)` → `{ text, meta }`. Classifies every nudge against the
+  operator's original message only (never against the accumulating prompt), ranks by
+  classifier score, then applies a count/character budget (`VISIONARY_NUDGE_MAX`,
+  `VISIONARY_NUDGE_BUDGET_CHARS`; default 4 / 6000; `0` disables). Over-budget blocks
+  are dropped whole and recorded; the top signal is still injected if nothing fits;
+  a throwing module is skipped into `meta.errors`.
+- `server.js` calls `planNudges` once in `dispatchAgent` and passes the plan to
+  `buildAgentPrompt`; the run row stores `prompt_meta_json` (migration 11) and the
+  task panel renders it as `Prompt context`.
+- Do not add another append call to `server.js` — add the module to `NUDGE_MODULES`
+  and export `classify*` + `*PromptBlock`. See `docs/DISPATCH-PROMPT-BUDGET.md`.
+
 ### Deep research (`src/deep-research.js`)
 - `runResearch({ dispatch }, { question, maxQueries })` → decompose → per-sub-query independent failover → synthesize.
 - Route: `POST /api/research { agent_id, question, max_queries }`.
@@ -121,11 +134,11 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - `discover(name)` per-harness model list (static + runtime probes for ollama + openclaw).
 - Route: `GET /api/cookbook`.
 
-## DB schema (currently at version 6)
+## DB schema (currently at version 11)
 
-`projects`, `tasks`, `agent_runs`, `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`.
+`projects`, `tasks`, `agent_runs` (with `workdir`, `artifacts_json`, `prompt_meta_json`), `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`, `chat_sessions`, `chat_messages`.
 
-`schema_version.version = 6`. Migrations are append-only — never reorder existing entries.
+`schema_version.version = 11`. Migrations are append-only — never reorder existing entries.
 
 ## Frontend tab map
 

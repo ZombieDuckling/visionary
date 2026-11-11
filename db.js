@@ -258,6 +258,13 @@ const migrations = [
     created_at TEXT DEFAULT (datetime('now'))
   );
   CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, id);
+  `,
+
+  // Migration 10 -> 11: Dispatch prompt telemetry. Records which deterministic
+  // nudges were injected, their sizes, and what the budget dropped so prompt
+  // cost stays visible per run instead of being an invisible tax.
+  `
+  ALTER TABLE agent_runs ADD COLUMN prompt_meta_json TEXT;
   `
 ];
 
@@ -474,6 +481,7 @@ const stmts = {
 
   // Artifact statements
   setRunWorkdir: db.prepare(`UPDATE agent_runs SET workdir = @workdir WHERE id = @id`),
+  setRunPromptMeta: db.prepare(`UPDATE agent_runs SET prompt_meta_json = @meta WHERE id = @id`),
   setRunArtifacts: db.prepare(`UPDATE agent_runs SET artifacts_json = @artifacts_json WHERE id = @id`),
 
   // Token/cost statements

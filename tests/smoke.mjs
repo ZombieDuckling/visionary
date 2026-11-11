@@ -207,6 +207,33 @@ test('GET /api/unknown returns 404 JSON', async () => {
   assert.ok(json && json.error);
 });
 
+test('dispatch records deterministic prompt-context telemetry on the run', async () => {
+  const message = 'Fix the login bug in server.js';
+  const { status, json } = await http('POST', '/api/dispatch', {
+    agent_id: 'argus',
+    message,
+  });
+  assert.ok(status === 201 || status === 202, 'dispatch accepted: got ' + status);
+  assert.ok(json && json.run_id, 'dispatch returned a run id');
+  // Kill immediately so the smoke run does not wait on a real harness.
+  await http('POST', '/api/dispatch/' + json.run_id + '/kill');
+
+  const runs = await http('GET', '/api/runs?task_id=' + json.task_id);
+  assert.equal(runs.status, 200);
+  const run = (runs.json.runs || []).find((r) => r.id === json.run_id);
+  assert.ok(run, 'run row exists');
+  const meta = JSON.parse(run.prompt_meta_json || 'null');
+  assert.ok(meta, 'prompt_meta_json is recorded');
+  assert.equal(meta.original_chars, message.length);
+  assert.ok(meta.budget_chars > 0);
+  assert.ok(meta.max_nudges > 0);
+  assert.ok(Array.isArray(meta.applied));
+  assert.ok(Array.isArray(meta.dropped));
+  assert.ok(Array.isArray(meta.errors));
+  assert.deepEqual(meta.applied.map((a) => a.id), ['failure-study-loop']);
+  assert.ok(meta.prompt_chars < 2000, 'short request no longer inflates the prompt');
+});
+
 test('POST /api/dispatch rejects unknown agent_id (allowlist)', async () => {
   const { status, json } = await http('POST', '/api/dispatch', {
     agent_id: 'totally-fake-agent',
