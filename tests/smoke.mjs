@@ -9,7 +9,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +23,8 @@ const PORT = parseInt(process.env.SMOKE_PORT || '3399', 10);
 const BASE = `http://127.0.0.1:${PORT}`;
 const tmpRoot = mkdtempSync(join(tmpdir(), 'visionary-smoke-'));
 const TEST_DB = join(tmpRoot, 'visionary-smoke.sqlite');
+const TEST_ARTIFACT_ROOT = join(tmpRoot, 'artifacts');
+mkdirSync(TEST_ARTIFACT_ROOT, { recursive: true });
 
 let serverProc;
 let serverStderr = '';
@@ -56,6 +58,7 @@ before(async () => {
       ...process.env,
       VISIONARY_PORT: String(PORT),
       VISIONARY_DB: TEST_DB,
+      VISIONARY_ARTIFACTS: TEST_ARTIFACT_ROOT,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -169,6 +172,56 @@ test('GET /api/projects returns array', async () => {
   const { status, json } = await http('GET', '/api/projects');
   assert.equal(status, 200);
   assert.ok(json && Array.isArray(json.projects));
+});
+
+test('GET /api/projects/:id/artifacts indexes present and missing files', async () => {
+  const created = await http('POST', '/api/projects', { name: 'Artifact Smoke Project' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+  const task = await http('POST', '/api/tasks', {
+    project_id: projectId,
+    title: 'Artifact smoke task',
+    status: 'done'
+  });
+  assert.equal(task.status, 201);
+  const taskId = task.json.task.id;
+
+  const workdir = join(TEST_ARTIFACT_ROOT, 'artifact-smoke-project', 'task-' + taskId);
+  mkdirSync(join(workdir, 'sub'), { recursive: true });
+  writeFileSync(join(workdir, 'report.md'), '# smoke artifact\n');
+  writeFileSync(join(workdir, 'sub', 'notes.md'), 'notes\n');
+
+  const Database = require('better-sqlite3');
+  const db = new Database(TEST_DB);
+  try {
+    db.pragma('journal_mode = WAL');
+    db.prepare(`
+      INSERT INTO agent_runs (task_id, agent_id, message, status, workdir, artifacts_json, created_at)
+      VALUES (?, 'forge', 'smoke artifact run', 'completed', ?, ?, datetime('now'))
+    `).run(taskId, workdir, JSON.stringify([
+      { path: 'report.md', size: 16 },
+      { path: 'sub/notes.md', size: 6 },
+      { path: 'missing.md', size: 99 }
+    ]));
+  } finally {
+    db.close();
+  }
+
+  const { status, json } = await http('GET', '/api/projects/' + projectId + '/artifacts');
+  assert.equal(status, 200);
+  assert.equal(json.project.id, projectId);
+  assert.equal(json.artifacts.totals.files_present, 2);
+  assert.equal(json.artifacts.totals.files_missing, 1);
+  assert.equal(json.artifacts.totals.runs_with_artifacts, 1);
+  assert.equal(json.artifacts.tasks.length, 1);
+  const missing = json.artifacts.tasks[0].files.find((f) => f.path === 'missing.md');
+  assert.ok(missing, 'missing file is still indexed');
+  assert.equal(missing.exists, false);
+  assert.equal(missing.reason, 'missing');
+  assert.equal(json.artifacts.missing.length, 1);
+
+  const unknown = await http('GET', '/api/projects/999999/artifacts');
+  assert.equal(unknown.status, 404);
 });
 
 test('GET /api/projects/:id/governance returns deterministic readiness analysis', async () => {
@@ -531,4 +584,20 @@ test('Overview cleanup: source code does not touch activeDispatches map (live-di
     'cleanup must not kill any child process');
   assert.ok(/activeDispatches\.has\(/.test(handler),
     'cleanup should guard live rows via activeDispatches.has()');
+});
+
+test('Project artifact UI: detail view fetches, renders, and opens indexed artifacts', () => {
+  // Structural assertion that the client wires the project artifact index into
+  // the project detail view and routes clicks through the run-open endpoint.
+  const app = readFileSync(join(repoRoot, 'public', 'app.js'), 'utf8');
+  assert.ok(app.includes("'/projects/' + selectedProject + '/artifacts'"),
+    'project detail must fetch the artifact index');
+  assert.ok(app.includes('renderProjectArtifacts(bundle.artifacts)'),
+    'project detail must render the artifact index');
+  assert.ok(app.includes('data-action="open-artifact"'),
+    'artifact rows must be clickable');
+  assert.ok(app.includes("'/runs/' + artifactFile.getAttribute('data-run-id') + '/open'"),
+    'artifact clicks must use the run-open endpoint');
+  assert.ok(app.includes("Artifact missing on disk"),
+    'missing artifacts must not be opened');
 });

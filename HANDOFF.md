@@ -46,6 +46,7 @@ visionary/
 │   ├── deep-research.js   # Decompose → investigate → synthesize pipeline
 │   ├── scheduler.js       # 5-field cron parser + tick()
 │   ├── cleanup.js         # Prune agent_messages, health_log, activity, runs
+│   ├── project-artifacts.js # Project-level artifact index (present/missing verification)
 │   └── mcp.js             # STUB — needs @modelcontextprotocol/sdk decision
 ├── personalities/
 │   ├── org-chart.json     # CEO → 4 directors → 11 ICs (source of truth)
@@ -125,6 +126,10 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
   task panel renders it as `Prompt context`.
 - Do not add another append call to `server.js` — add the module to `NUDGE_MODULES`
   and export `classify*` + `*PromptBlock`. See `docs/DISPATCH-PROMPT-BUDGET.md`.
+
+### Project artifact index (`src/project-artifacts.js`)
+- `buildProjectArtifactIndex(runs, opts)` aggregates artifact lists from stored run rows into per-task groups, dedupes repeated files, and verifies existence on disk. Route: `GET /api/projects/:id/artifacts`.
+- Paths are resolved against the recorded workdir and must stay inside it; symlinks are reported but not followed. Missing files and missing workdirs are reported as such — a recorded path is evidence, not truth. Index is capped (newest 400) with a truncation warning.
 
 ### Deep research (`src/deep-research.js`)
 - `runResearch({ dispatch }, { question, maxQueries })` → decompose → per-sub-query independent failover → synthesize.

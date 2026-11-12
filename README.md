@@ -30,6 +30,10 @@ Seven adapters are registered: `openclaw`, `claude` / `claude-code`, `hermes`, `
 
 Every dispatch runs inside its own working directory: `~/Visionary/<project>/task-<id>`. The run record stores the workdir path and a JSON file list of every file produced. The task detail panel shows a Runs & Artifacts section with live output, the file list, an Open Folder button, and click-to-open for individual files. Symlink escapes and executable bundles are rejected at the API layer.
 
+### Project artifact index
+
+Project detail now includes an artifact index across every run recorded for that project's tasks: what was produced, which run/task/agent owns each file, how many times it recurred, and whether the file still exists on disk. `GET /api/projects/:id/artifacts` builds the index from stored run rows; files are shown as present, missing, or unverifiable (missing workdir), and artifact paths that escape their workdir are rejected rather than followed. The index is capped (newest 400 files) with an explicit truncation warning, so a busy project cannot make the project page unbounded. Applies Jake Van Clief's workbench lesson (`ai-workbench-components`): a workbench needs a canonical manifest and a review surface over its artifacts, not just a generation step; and `position-addressed-memory`: keep paths relative to the workdir so location itself stays meaningful. Missing files are reported as missing — a recorded path is evidence, not truth.
+
 ### Auto-review with evidence
 
 After a run completes, the reviewer agent runs through its own harness chain with the artifact list as evidence and read-only tools. Reviews parse a structured `APPROVE:` / `REJECT:` first line — no keyword-anywhere false verdicts. Inconclusive results stay in Review for the operator. Rejections redispatch through the normal path (new workdir, full failover). Tasks that hit the retry ceiling stay in Review rather than bouncing back to todo.

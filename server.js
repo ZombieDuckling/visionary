@@ -19,6 +19,7 @@ const promptPipeline = require('./src/prompt-pipeline');
 const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
+const { buildProjectArtifactIndex } = require('./src/project-artifacts');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -2590,6 +2591,27 @@ const server = http.createServer(async (req, res) => {
           });
         });
         res.json({ projects: result });
+        return;
+      }
+
+      // GET /api/projects/:id/artifacts — project-level artifact index.
+      // Aggregates the artifact lists every run recorded for this project's
+      // tasks, verifies which files still exist on disk, and reports missing
+      // files/workdirs instead of assuming a recorded path is still valid.
+      if (method === 'GET' && /^\/api\/projects\/(\d+)\/artifacts$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)\/artifacts$/)[1], 10);
+        const project = stmts.getProjectById.get(projectId);
+        if (!project) { res.json({ error: 'Project not found' }, 404); return; }
+        let runs = [];
+        try { runs = stmts.getArtifactRunsByProject.all(projectId); }
+        catch (err) {
+          res.json({ error: 'Artifact index unavailable: ' + ((err && err.message) || err) }, 500);
+          return;
+        }
+        res.json({
+          project: { id: project.id, name: project.name, slug: project.slug },
+          artifacts: buildProjectArtifactIndex(runs, { artifact_root: ARTIFACT_ROOT })
+        });
         return;
       }
 

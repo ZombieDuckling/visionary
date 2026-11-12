@@ -2429,6 +2429,72 @@
   }
 
   // --- INTEL-03: Projects Tab ---
+  function formatArtifactBytes(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  // Project artifact index: what this project's agents actually produced, and
+  // whether those files still exist. Recorded paths are evidence, not truth —
+  // missing files are shown as missing instead of being silently listed.
+  function renderProjectArtifacts(index) {
+    if (!index) {
+      return '<div class="project-detail-section"><h3>Artifacts</h3>'
+        + '<div class="empty-state" style="padding: var(--space-md)">Artifact index unavailable.</div></div>';
+    }
+    var totals = index.totals || {};
+    var groups = index.tasks || [];
+    var html = '<div class="project-detail-section"><h3>Artifacts ('
+      + esc(String(totals.files_present || 0)) + ' present / '
+      + esc(String(totals.files_unique || 0)) + ' recorded)</h3>';
+    if (!totals.files_unique) {
+      html += '<div class="empty-state" style="padding: var(--space-md)">No agent artifacts recorded yet. Dispatch a task to produce files.</div></div>';
+      return html;
+    }
+    html += '<div class="project-artifact-summary">'
+      + esc(String(totals.files_present || 0)) + ' present · '
+      + esc(String(totals.files_missing || 0)) + ' missing · '
+      + esc(formatArtifactBytes(totals.bytes_present)) + ' · '
+      + esc(String(totals.runs_with_artifacts || 0)) + ' run(s) · '
+      + esc((totals.agents || []).join(', ') || 'no agents')
+      + '</div>';
+    if (index.truncated) {
+      html += '<div class="project-artifact-note">Showing the newest ' + esc(String(totals.files_indexed || 0))
+        + ' of ' + esc(String(totals.files_unique || 0)) + ' recorded files.</div>';
+    }
+    groups.forEach(function (group) {
+      var firstRun = group.files[0] ? group.files[0].run_id : null;
+      html += '<div class="project-artifact-group">'
+        + '<div class="project-artifact-group-head">'
+        + '<span class="project-artifact-group-title">Task #' + esc(String(group.task_id || '?'))
+        + (group.task_title ? ' · ' + esc(group.task_title) : '') + '</span>'
+        + (firstRun ? '<button type="button" class="btn btn-small" data-action="open-artifact-folder" data-run-id="' + esc(String(firstRun)) + '">Open folder</button>' : '')
+        + '</div>';
+      group.files.slice(0, 12).forEach(function (f) {
+        var missing = f.exists === false;
+        html += '<div class="run-file project-artifact-file" data-action="open-artifact" data-run-id="' + esc(String(f.run_id))
+          + '" data-path="' + esc(f.path) + '" data-missing="' + (missing ? '1' : '0') + '" title="'
+          + esc(missing ? ('Missing: ' + (f.reason || 'not on disk')) : 'Open file') + '">'
+          + '<span class="run-file-name">' + esc(f.path) + '</span>'
+          + (missing
+            ? '<span class="badge badge-red">missing</span>'
+            : '<span class="run-file-size">' + esc(formatArtifactBytes(f.size)) + '</span>')
+          + '</div>';
+      });
+      if (group.files.length > 12) {
+        html += '<div class="project-artifact-note">+' + esc(String(group.files.length - 12)) + ' more file(s) in this task</div>';
+      }
+      html += '</div>';
+    });
+    if (index.warnings && index.warnings.length) {
+      html += '<div class="project-artifact-note">' + esc(index.warnings.join(' ')) + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderProjects(container) {
     var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
     container._viewRequestId = requestId;
@@ -2438,7 +2504,14 @@
       container.innerHTML = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
         + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
       api('/projects/' + selectedProject).then(function (data) {
+        return api('/projects/' + selectedProject + '/artifacts').then(function (artifactData) {
+          return { project: data, artifacts: artifactData && artifactData.artifacts ? artifactData.artifacts : null };
+        }).catch(function () {
+          return { project: data, artifacts: null };
+        });
+      }).then(function (bundle) {
         if (container._viewRequestId !== requestId || state.activeTab !== 'projects') return;
+        var data = bundle.project;
         var p = data.project;
         var html = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
           + '<h2 style="font-size: var(--font-size-lg); margin-bottom: var(--space-sm);">'
@@ -2494,6 +2567,8 @@
           html += '<div class="empty-state" style="padding: var(--space-md)">No documents found</div>';
         }
         html += '</div>';
+
+        html += renderProjectArtifacts(bundle.artifacts);
 
         container.innerHTML = html;
       }).catch(function () {
@@ -2554,6 +2629,26 @@
       var viewTask = e.target.closest('[data-action="view-task"]');
       if (viewTask) {
         showTaskDetail(viewTask.getAttribute('data-task-id'));
+        return;
+      }
+
+      var artifactFile = e.target.closest('[data-action="open-artifact"]');
+      if (artifactFile) {
+        if (artifactFile.getAttribute('data-missing') === '1') {
+          showToast('Artifact missing on disk');
+          return;
+        }
+        api('/runs/' + artifactFile.getAttribute('data-run-id') + '/open', {
+          method: 'POST',
+          body: { path: artifactFile.getAttribute('data-path') }
+        }).catch(function (err) { showToast((err.data && err.data.error) || 'Open failed'); });
+        return;
+      }
+
+      var artifactFolder = e.target.closest('[data-action="open-artifact-folder"]');
+      if (artifactFolder) {
+        api('/runs/' + artifactFolder.getAttribute('data-run-id') + '/open', { method: 'POST', body: {} })
+          .catch(function (err) { showToast((err.data && err.data.error) || 'Open failed'); });
         return;
       }
 

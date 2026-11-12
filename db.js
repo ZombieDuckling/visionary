@@ -478,6 +478,15 @@ const stmts = {
     SELECT ar.* FROM agent_runs ar JOIN tasks t ON ar.task_id = t.id
     WHERE t.project_id = ? ORDER BY ar.created_at DESC LIMIT 20
   `),
+  // Artifact history for a project: every run that recorded an artifact list,
+  // newest first. The route builds a present/missing index from these rows.
+  getArtifactRunsByProject: db.prepare(`
+    SELECT ar.id AS run_id, ar.task_id, ar.agent_id, ar.workdir, ar.artifacts_json,
+           ar.status, ar.created_at, t.title AS task_title
+    FROM agent_runs ar JOIN tasks t ON ar.task_id = t.id
+    WHERE t.project_id = ? AND ar.artifacts_json IS NOT NULL
+    ORDER BY ar.created_at DESC, ar.id DESC LIMIT 200
+  `),
 
   // Artifact statements
   setRunWorkdir: db.prepare(`UPDATE agent_runs SET workdir = @workdir WHERE id = @id`),

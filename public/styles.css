@@ -1669,6 +1669,15 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 .run-file:hover { background: rgba(120, 120, 128, 0.1); }
 .run-file-size { color: var(--text-muted); white-space: nowrap; }
 
+/* ── Project artifact index ────────────────────────────────────────── */
+.project-artifact-summary { font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; color: var(--text-secondary); margin-bottom: var(--space-sm); font-variant-numeric: tabular-nums; }
+.project-artifact-group { border: 1px solid var(--separator); border-radius: 8px; padding: var(--space-sm); margin-bottom: var(--space-sm); }
+.project-artifact-group-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-xs); }
+.project-artifact-group-title { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-primary); }
+.project-artifact-note { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-xs) 0; }
+.project-artifact-file[data-missing="1"] { color: var(--text-muted); }
+.project-artifact-file[data-missing="1"] .run-file-name { text-decoration: line-through; }
+
 /* ── Cost / token data in run meta lines and drawer ─────────────────── */
 .run-cost {
   font-family: var(--font-mono);
