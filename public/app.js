@@ -2495,6 +2495,74 @@
     return html;
   }
 
+  // Project decision ledger: the dated "why" behind the project. Accepted
+  // decisions are injected into every dispatch for this project's tasks, so the
+  // page shows what agents are being told is settled — and which records are
+  // stale, undated, or superseded without a replacement.
+  function renderProjectDecisions(ledger, projectId) {
+    var html = '<div class="project-detail-section"><h3>Decisions';
+    if (ledger && ledger.totals) {
+      html += ' (' + esc(String(ledger.totals.accepted || 0)) + ' accepted / '
+        + esc(String(ledger.totals.total || 0)) + ' recorded)';
+    }
+    html += '</h3>';
+    html += '<div class="project-decision-head">'
+      + '<button type="button" class="btn btn-small btn-primary" data-action="new-decision" data-pid="' + esc(String(projectId)) + '">+ Record decision</button>'
+      + '</div>';
+    if (!ledger) {
+      html += '<div class="empty-state" style="padding: var(--space-md)">Decision ledger unavailable.</div></div>';
+      return html;
+    }
+    if (ledger.warnings && ledger.warnings.length) {
+      ledger.warnings.forEach(function (w) {
+        html += '<div class="project-decision-warning">' + esc(w) + '</div>';
+      });
+    }
+    if (!ledger.decisions || !ledger.decisions.length) {
+      html += '<div class="empty-state" style="padding: var(--space-md)">No decisions recorded. Record the why before the next non-trivial change.</div></div>';
+      return html;
+    }
+    ledger.decisions.forEach(function (d) {
+      var statusCls = d.status === 'accepted' ? 'badge-green'
+        : d.status === 'rejected' ? 'badge-red'
+        : d.status === 'proposed' ? 'badge-blue' : 'badge-orange';
+      html += '<div class="decision-card" data-status="' + esc(d.status) + '">'
+        + '<div class="decision-head">'
+        + '<span class="badge ' + statusCls + '">' + esc(d.status) + '</span>'
+        + '<span class="decision-title">' + esc(d.title) + '</span>'
+        + '<span class="decision-date">' + esc(d.decided_at || 'undated')
+        + (d.decided_by ? ' · ' + esc(d.decided_by) : '') + '</span>'
+        + '</div>'
+        + '<div class="decision-body">' + esc(d.decision) + '</div>'
+        + '<div class="decision-why"><span class="decision-label">Why</span>' + esc(d.rationale) + '</div>';
+      if (d.alternatives_rejected) {
+        html += '<div class="decision-why"><span class="decision-label">Rejected</span>' + esc(d.alternatives_rejected) + '</div>';
+      }
+      if (d.constraints) {
+        html += '<div class="decision-why"><span class="decision-label">Constraints</span>' + esc(d.constraints) + '</div>';
+      }
+      if (d.flags && d.flags.length) {
+        html += '<div class="decision-flags">' + d.flags.map(function (f) {
+          return '<span class="badge badge-orange">' + esc(f.replace(/_/g, ' ')) + '</span>';
+        }).join(' ') + '</div>';
+      }
+      html += '<div class="decision-actions">';
+      if (d.status === 'proposed' || d.status === 'rejected') {
+        html += '<button type="button" class="btn btn-small" data-action="decision-status" data-did="' + esc(String(d.id)) + '" data-status="accepted">Accept</button>';
+      }
+      if (d.status === 'proposed' || d.status === 'accepted') {
+        html += '<button type="button" class="btn btn-small" data-action="decision-status" data-did="' + esc(String(d.id)) + '" data-status="rejected">Reject</button>';
+      }
+      if (d.status === 'accepted' || d.status === 'proposed') {
+        html += '<button type="button" class="btn btn-small" data-action="supersede-decision" data-did="' + esc(String(d.id)) + '" data-pid="' + esc(String(projectId)) + '" data-title="' + esc(d.title) + '">Supersede</button>';
+      }
+      html += '<button type="button" class="btn btn-small btn-danger" data-action="delete-decision" data-did="' + esc(String(d.id)) + '">Delete</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   function renderProjects(container) {
     var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
     container._viewRequestId = requestId;
@@ -2504,10 +2572,15 @@
       container.innerHTML = '<button class="btn btn-back" data-action="projects-back">\u2190 Back</button>'
         + '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
       api('/projects/' + selectedProject).then(function (data) {
-        return api('/projects/' + selectedProject + '/artifacts').then(function (artifactData) {
-          return { project: data, artifacts: artifactData && artifactData.artifacts ? artifactData.artifacts : null };
-        }).catch(function () {
-          return { project: data, artifacts: null };
+        return Promise.all([
+          api('/projects/' + selectedProject + '/artifacts').catch(function () { return null; }),
+          api('/projects/' + selectedProject + '/decisions').catch(function () { return null; })
+        ]).then(function (extra) {
+          return {
+            project: data,
+            artifacts: extra[0] && extra[0].artifacts ? extra[0].artifacts : null,
+            decisions: extra[1] && extra[1].ledger ? extra[1].ledger : null
+          };
         });
       }).then(function (bundle) {
         if (container._viewRequestId !== requestId || state.activeTab !== 'projects') return;
@@ -2519,6 +2592,9 @@
           + ' <span class="badge badge-green">' + esc(p.status) + '</span></h2>'
           + '<p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-lg);">' + esc(p.description || '') + '</p>'
           + '<button class="btn" data-action="edit-project" data-pid="' + esc(p.id) + '" style="margin-bottom: var(--space-lg);">Edit Project</button>';
+
+        // Decisions section — before tasks: the "why" frames the work.
+        html += renderProjectDecisions(bundle.decisions, p.id);
 
         // Tasks section
         html += '<div class="project-detail-section"><h3>Tasks (' + (data.tasks ? data.tasks.length : 0) + ')</h3>';
@@ -2664,6 +2740,46 @@
         return;
       }
 
+      var newDecision = e.target.closest('[data-action="new-decision"]');
+      if (newDecision) {
+        showDecisionForm(newDecision.getAttribute('data-pid'), null, null);
+        return;
+      }
+
+      var decisionStatus = e.target.closest('[data-action="decision-status"]');
+      if (decisionStatus) {
+        decisionStatus.disabled = true;
+        api('/decisions/' + decisionStatus.getAttribute('data-did'), {
+          method: 'PATCH',
+          body: { status: decisionStatus.getAttribute('data-status') }
+        }).then(function () {
+          var main = document.getElementById('main-content');
+          if (main && state.activeTab === 'projects') { main.innerHTML = ''; renderProjects(main); }
+        }).catch(function (err) {
+          decisionStatus.disabled = false;
+          showToast((err.data && err.data.error) || 'Decision update failed');
+        });
+        return;
+      }
+
+      var supersede = e.target.closest('[data-action="supersede-decision"]');
+      if (supersede) {
+        showDecisionForm(supersede.getAttribute('data-pid'), supersede.getAttribute('data-did'), supersede.getAttribute('data-title'));
+        return;
+      }
+
+      var deleteDecision = e.target.closest('[data-action="delete-decision"]');
+      if (deleteDecision) {
+        if (!confirm('Delete this decision record? The rationale is lost unless it was superseded.')) return;
+        api('/decisions/' + deleteDecision.getAttribute('data-did'), { method: 'DELETE' })
+          .then(function () {
+            var main = document.getElementById('main-content');
+            if (main && state.activeTab === 'projects') { main.innerHTML = ''; renderProjects(main); }
+          })
+          .catch(function (err) { showToast((err.data && err.data.error) || 'Delete failed'); });
+        return;
+      }
+
       var card = e.target.closest('[data-action="view-project"]');
       if (card) {
         container._selectedProject = card.getAttribute('data-pid');
@@ -2789,6 +2905,75 @@
         }
       });
     });
+  }
+
+  // --- Project Decision Form ---
+  // A decision needs a rationale — that is the whole point of the ledger.
+  // Superseding prefills the record and links supersedes_id; the server marks
+  // the old decision superseded, so two "truths" cannot both stay accepted.
+  function showDecisionForm(projectId, supersedeId, supersedeTitle) {
+    var existing = document.querySelector('.overlay');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    var statusOpts = ['accepted', 'proposed'].map(function (s) {
+      return '<option value="' + s + '"' + (s === 'accepted' ? ' selected' : '') + '>' + s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+    }).join('');
+
+    overlay.innerHTML = '<div class="overlay-content">'
+      + '<h2>' + (supersedeId ? 'Supersede Decision' : 'Record Decision') + '</h2>'
+      + '<p class="form-hint">A dated, rationale-backed record. Accepted decisions are injected into agent dispatch prompts for this project, so write the "why" an agent needs to stay consistent.</p>'
+      + (supersedeId ? '<p class="form-hint">Supersedes #' + esc(supersedeId) + ' — ' + esc(supersedeTitle || '') + '</p>' : '')
+      + '<form id="decision-form">'
+      + (supersedeId ? '<input type="hidden" name="supersedes_id" value="' + esc(supersedeId) + '" />' : '')
+      + '<div class="form-group"><label>Title</label><input class="input" type="text" name="title" required placeholder="Short name for the decision..." value="' + esc(supersedeId ? (supersedeTitle || '') : '') + '" /></div>'
+      + '<div class="form-group"><label>Decision</label><textarea class="input" name="decision" rows="2" required placeholder="What was decided..."></textarea></div>'
+      + '<div class="form-group"><label>Why (rationale)</label><textarea class="input" name="rationale" rows="3" required placeholder="Why this choice, and what it protects..."></textarea></div>'
+      + '<div class="form-group"><label>Alternatives rejected</label><textarea class="input" name="alternatives_rejected" rows="2" placeholder="Options considered and why they lost..."></textarea></div>'
+      + '<div class="form-group"><label>Constraints</label><textarea class="input" name="constraints" rows="2" placeholder="Limits the decision imposes on future work..."></textarea></div>'
+      + '<div class="form-group"><label>Status</label><select name="status">' + statusOpts + '</select></div>'
+      + '<div class="form-group"><label>Decided by</label><input class="input" type="text" name="decided_by" placeholder="Who decided (blank = operator)" /></div>'
+      + '<div id="form-error" class="form-error hidden"></div>'
+      + '<div class="form-actions"><button type="button" class="btn" id="cancel-decision">Cancel</button><button type="submit" class="btn btn-primary">Save Decision</button></div>'
+      + '</form></div>';
+
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#cancel-decision').addEventListener('click', function () { overlay.remove(); });
+
+    overlay.querySelector('#decision-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var form = e.target;
+      var errorEl = overlay.querySelector('#form-error');
+      errorEl.classList.add('hidden');
+      var body = {
+        title: form.querySelector('[name="title"]').value.trim(),
+        decision: form.querySelector('[name="decision"]').value.trim(),
+        rationale: form.querySelector('[name="rationale"]').value.trim(),
+        alternatives_rejected: form.querySelector('[name="alternatives_rejected"]').value.trim(),
+        constraints: form.querySelector('[name="constraints"]').value.trim(),
+        status: form.querySelector('[name="status"]').value,
+        decided_by: form.querySelector('[name="decided_by"]').value.trim()
+      };
+      if (supersedeId) body.supersedes_id = Number(supersedeId);
+      if (!body.title || !body.decision || !body.rationale) {
+        errorEl.textContent = 'Title, decision, and rationale are required';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      try {
+        await api('/projects/' + projectId + '/decisions', { method: 'POST', body: body });
+        overlay.remove();
+        var main = document.getElementById('main-content');
+        if (main && state.activeTab === 'projects') { main.innerHTML = ''; renderProjects(main); }
+      } catch (err) {
+        errorEl.textContent = (err.data && err.data.error) ? err.data.error : 'Failed to save decision';
+        errorEl.classList.remove('hidden');
+      }
+    });
+
+    overlay.querySelector('input[name="title"]').focus();
   }
 
   // --- INTEL-04: Load Projects ---

@@ -265,6 +265,32 @@ const migrations = [
   // cost stays visible per run instead of being an invisible tax.
   `
   ALTER TABLE agent_runs ADD COLUMN prompt_meta_json TEXT;
+  `,
+
+  // Migration 11 -> 12: Project decision ledger. Code is a stack of decisions;
+  // this table keeps the dated "why" beside the project so agents read the
+  // standing constraints before editing and humans can see rejected
+  // alternatives. Append-only like every migration.
+  `
+  CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    task_id INTEGER REFERENCES tasks(id),
+    title TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    alternatives_rejected TEXT,
+    constraints TEXT,
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','accepted','rejected','superseded')),
+    decided_by TEXT,
+    decided_at TEXT,
+    supersedes_id INTEGER REFERENCES decisions(id) ON DELETE SET NULL,
+    source TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX idx_decisions_project ON decisions(project_id, status);
+  CREATE INDEX idx_decisions_task ON decisions(task_id);
   `
 ];
 
@@ -492,6 +518,35 @@ const stmts = {
   setRunWorkdir: db.prepare(`UPDATE agent_runs SET workdir = @workdir WHERE id = @id`),
   setRunPromptMeta: db.prepare(`UPDATE agent_runs SET prompt_meta_json = @meta WHERE id = @id`),
   setRunArtifacts: db.prepare(`UPDATE agent_runs SET artifacts_json = @artifacts_json WHERE id = @id`),
+
+  // Decision ledger statements. The ledger is read newest-first; accepted
+  // decisions are read separately for dispatch injection so the prompt block
+  // never has to filter proposed/rejected/superseded records at render time.
+  getDecisionsByProject: db.prepare(`
+    SELECT * FROM decisions WHERE project_id = ?
+    ORDER BY COALESCE(decided_at, substr(created_at, 1, 10)) DESC, id DESC LIMIT ?
+  `),
+  getAcceptedDecisionsByProject: db.prepare(`
+    SELECT * FROM decisions WHERE project_id = ? AND status = 'accepted'
+    ORDER BY COALESCE(decided_at, substr(created_at, 1, 10)) DESC, id DESC LIMIT ?
+  `),
+  getDecisionById: db.prepare(`SELECT * FROM decisions WHERE id = ?`),
+  insertDecision: db.prepare(`
+    INSERT INTO decisions (project_id, task_id, title, decision, rationale,
+      alternatives_rejected, constraints, status, decided_by, decided_at,
+      supersedes_id, source)
+    VALUES (@project_id, @task_id, @title, @decision, @rationale,
+      @alternatives_rejected, @constraints, @status, @decided_by, @decided_at,
+      @supersedes_id, @source)
+  `),
+  updateDecision: db.prepare(`
+    UPDATE decisions SET title = @title, decision = @decision, rationale = @rationale,
+      alternatives_rejected = @alternatives_rejected, constraints = @constraints,
+      status = @status, decided_by = @decided_by, decided_at = @decided_at,
+      supersedes_id = @supersedes_id, source = @source, updated_at = datetime('now')
+    WHERE id = @id
+  `),
+  deleteDecision: db.prepare(`DELETE FROM decisions WHERE id = ?`),
 
   // Token/cost statements
   updateRunTokens: db.prepare(`

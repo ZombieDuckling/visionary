@@ -47,6 +47,7 @@ visionary/
 │   ├── scheduler.js       # 5-field cron parser + tick()
 │   ├── cleanup.js         # Prune agent_messages, health_log, activity, runs
 │   ├── project-artifacts.js # Project-level artifact index (present/missing verification)
+│   ├── decision-ledger.js # Project decision records: validation, lifecycle flags, bounded dispatch injection
 │   └── mcp.js             # STUB — needs @modelcontextprotocol/sdk decision
 ├── personalities/
 │   ├── org-chart.json     # CEO → 4 directors → 11 ICs (source of truth)

@@ -248,6 +248,88 @@ test('GET /api/projects/:id/governance returns deterministic readiness analysis'
   assert.ok(json.governance.triggers.some((t) => t.id === 'affected-users'));
 });
 
+test('Project decision ledger: rationale required, supersede is atomic, lifecycle is enforced', async () => {
+  const created = await http('POST', '/api/projects', { name: 'Decision Smoke Project' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+
+  const empty = await http('GET', '/api/projects/' + projectId + '/decisions');
+  assert.equal(empty.status, 200);
+  assert.equal(empty.json.ledger.totals.total, 0);
+  assert.deepEqual(empty.json.ledger.warnings, []);
+
+  // A decision without a rationale is noise, not a record.
+  const noWhy = await http('POST', '/api/projects/' + projectId + '/decisions', {
+    title: 'No why', decision: 'Do the thing'
+  });
+  assert.equal(noWhy.status, 400);
+  assert.ok(/rationale/.test(noWhy.json.error));
+
+  const first = await http('POST', '/api/projects/' + projectId + '/decisions', {
+    title: 'Local-only storage',
+    decision: 'Store project state in a single SQLite file.',
+    rationale: 'No network dependency and one file to back up.',
+    status: 'accepted',
+    decided_by: 'smoke'
+  });
+  assert.equal(first.status, 201);
+  assert.equal(first.json.decision.status, 'accepted');
+  assert.match(first.json.decision.decided_at, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(first.json.ledger.totals.accepted, 1);
+
+  // Recording a replacement supersedes the target in the same write, so two
+  // accepted "truths" cannot coexist.
+  const second = await http('POST', '/api/projects/' + projectId + '/decisions', {
+    title: 'Local-only storage with WAL',
+    decision: 'Store project state in SQLite with WAL enabled.',
+    rationale: 'WAL gives concurrent readers without a second process.',
+    status: 'accepted',
+    supersedes_id: first.json.decision.id
+  });
+  assert.equal(second.status, 201);
+  assert.equal(second.json.ledger.totals.superseded, 1);
+  const superseded = second.json.ledger.decisions.find((d) => d.id === first.json.decision.id);
+  assert.equal(superseded.status, 'superseded');
+  assert.equal(superseded.superseded_by, second.json.decision.id);
+
+  const proposed = await http('POST', '/api/projects/' + projectId + '/decisions', {
+    title: 'Redis for queues',
+    decision: 'Add Redis for job queues.',
+    rationale: 'Faster fan-out if queues grow.'
+  });
+  assert.equal(proposed.status, 201);
+  assert.equal(proposed.json.decision.status, 'proposed');
+  assert.equal(proposed.json.decision.decided_at, null);
+
+  const accepted = await http('PATCH', '/api/decisions/' + proposed.json.decision.id, { status: 'accepted' });
+  assert.equal(accepted.status, 200);
+  assert.equal(accepted.json.decision.status, 'accepted');
+  assert.match(accepted.json.decision.decided_at, /^\d{4}-\d{2}-\d{2}$/);
+
+  const badStatus = await http('PATCH', '/api/decisions/' + proposed.json.decision.id, { status: 'maybe' });
+  assert.equal(badStatus.status, 400);
+
+  // A supersede link that arrives via PATCH must retire its target too — the
+  // invariant is "one accepted record per decision", not "one per POST".
+  const viaPatch = await http('PATCH', '/api/decisions/' + proposed.json.decision.id, {
+    supersedes_id: second.json.decision.id
+  });
+  assert.equal(viaPatch.status, 200);
+  const ledgerAfterPatch = await http('GET', '/api/projects/' + projectId + '/decisions');
+  assert.equal(ledgerAfterPatch.json.ledger.totals.superseded, 2);
+  const retired = ledgerAfterPatch.json.ledger.decisions.find((d) => d.id === second.json.decision.id);
+  assert.equal(retired.status, 'superseded');
+  assert.equal(retired.superseded_by, proposed.json.decision.id);
+
+  const missing = await http('GET', '/api/projects/999999/decisions');
+  assert.equal(missing.status, 404);
+
+  const removed = await http('DELETE', '/api/decisions/' + proposed.json.decision.id);
+  assert.equal(removed.status, 200);
+  const afterDelete = await http('GET', '/api/projects/' + projectId + '/decisions');
+  assert.equal(afterDelete.json.ledger.totals.total, 2);
+});
+
 test('GET /api/activity returns array', async () => {
   const { status, json } = await http('GET', '/api/activity');
   assert.equal(status, 200);
@@ -285,6 +367,50 @@ test('dispatch records deterministic prompt-context telemetry on the run', async
   assert.ok(Array.isArray(meta.errors));
   assert.deepEqual(meta.applied.map((a) => a.id), ['failure-study-loop']);
   assert.ok(meta.prompt_chars < 2000, 'short request no longer inflates the prompt');
+});
+
+test('dispatch injects accepted project decisions and records what was injected', async () => {
+  const created = await http('POST', '/api/projects', { name: 'Decision Injection Project' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+  const decision = await http('POST', '/api/projects/' + projectId + '/decisions', {
+    title: 'Local DB only',
+    decision: 'Migrations run against the local SQLite file only.',
+    rationale: 'The live database is the operator\'s source of truth; never migrate it from a test run.',
+    status: 'accepted'
+  });
+  assert.equal(decision.status, 201);
+
+  // A proposed decision must not be injected: only accepted records are
+  // standing constraints for an agent.
+  await http('POST', '/api/projects/' + projectId + '/decisions', {
+    title: 'Maybe add Redis',
+    decision: 'Add Redis for queues.',
+    rationale: 'Not needed yet, kept as an option.'
+  });
+
+  const task = await http('POST', '/api/tasks', {
+    project_id: projectId, title: 'Add decisions index', status: 'todo'
+  });
+  assert.equal(task.status, 201);
+  const dispatch = await http('POST', '/api/dispatch', {
+    agent_id: 'argus',
+    task_id: task.json.task.id,
+    message: 'Add an index to the decisions table'
+  });
+  assert.ok(dispatch.status === 201 || dispatch.status === 202, 'dispatch accepted: got ' + dispatch.status);
+  await http('POST', '/api/dispatch/' + dispatch.json.run_id + '/kill');
+
+  const runs = await http('GET', '/api/runs?task_id=' + task.json.task.id);
+  const run = (runs.json.runs || []).find((r) => r.id === dispatch.json.run_id);
+  assert.ok(run, 'run row exists');
+  const meta = JSON.parse(run.prompt_meta_json || 'null');
+  assert.ok(meta && meta.project_decisions, 'project decision telemetry recorded');
+  assert.equal(meta.project_decisions.project_id, projectId);
+  assert.equal(meta.project_decisions.injected, 1);
+  assert.deepEqual(meta.project_decisions.ids, [decision.json.decision.id]);
+  assert.ok(meta.project_decisions.chars > 0);
+  assert.equal(meta.project_decisions.dropped, 0);
 });
 
 test('POST /api/dispatch rejects unknown agent_id (allowlist)', async () => {
@@ -584,6 +710,27 @@ test('Overview cleanup: source code does not touch activeDispatches map (live-di
     'cleanup must not kill any child process');
   assert.ok(/activeDispatches\.has\(/.test(handler),
     'cleanup should guard live rows via activeDispatches.has()');
+});
+
+test('Project decision UI: detail view fetches, renders, records, and supersedes', () => {
+  // Structural assertion that the client wires the decision ledger into the
+  // project detail view, and that mutations go through the decision endpoints
+  // rather than editing the DOM optimistically.
+  const app = readFileSync(join(repoRoot, 'public', 'app.js'), 'utf8');
+  assert.ok(app.includes("'/projects/' + selectedProject + '/decisions'"),
+    'project detail must fetch the decision ledger');
+  assert.ok(app.includes('renderProjectDecisions(bundle.decisions, p.id)'),
+    'project detail must render the ledger');
+  assert.ok(app.includes('data-action="new-decision"'),
+    'ledger must expose a record-decision action');
+  assert.ok(app.includes("'/projects/' + projectId + '/decisions', { method: 'POST'"),
+    'the decision form must POST to the project ledger');
+  assert.ok(app.includes("'/decisions/' + decisionStatus.getAttribute('data-did')"),
+    'accept/reject must PATCH the decision record');
+  assert.ok(app.includes("data-action=\"supersede-decision\""),
+    'accepted decisions must be supersedable');
+  assert.ok(app.includes("body.supersedes_id = Number(supersedeId)"),
+    'supersede must carry the supersedes_id link');
 });
 
 test('Project artifact UI: detail view fetches, renders, and opens indexed artifacts', () => {

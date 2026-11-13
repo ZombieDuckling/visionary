@@ -20,6 +20,7 @@ const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
 const { buildProjectArtifactIndex } = require('./src/project-artifacts');
+const { validateDecisionInput, buildDecisionLedger, renderDecisionsPromptBlock } = require('./src/decision-ledger');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -217,10 +218,22 @@ async function triggerReview(taskId, runId, originalAgent, resultText) {
     }
   } catch { /* keep default */ }
 
+  // Review against the project's accepted decisions, not only against the task
+  // text: a deliverable can satisfy the ticket and still contradict the "why".
+  let reviewDecisions = null;
+  if (task.project_id) {
+    try {
+      reviewDecisions = renderDecisionsPromptBlock(
+        stmts.getAcceptedDecisionsByProject.all(task.project_id, 20)
+      );
+    } catch { reviewDecisions = null; }
+  }
+
   const reviewPrompt = 'You are reviewing the output of agent "' + originalAgent + '" on task #' + taskId + ': "' + (task.title || '') + '".\n\n'
     + 'Task description: ' + (task.description || 'None') + '\n\n'
     + artifactBlock + '\n\n'
     + 'Agent report (first 2000 chars):\n' + (resultText || 'No output captured').substring(0, 2000) + '\n\n'
+    + (reviewDecisions ? 'Check the deliverable against the project decision record: a deliverable that contradicts an accepted decision is a concrete defect.\n\n' : '')
     + 'You may read the produced files to verify them.\n'
     + 'APPROVE when the deliverable does what the task asked, even if imperfect. '
     + 'REJECT only for concrete, fixable defects — name each one specifically.\n'
@@ -250,7 +263,7 @@ async function triggerReview(taskId, runId, originalAgent, resultText) {
       { getRuntime: runtimes.getRuntime, stmts, db },
       resolveAgentRow('reviewer'),
       // Read-only tools: the reviewer verifies, it does not fix.
-      { message: buildAgentPrompt('reviewer', reviewPrompt), agentId: 'reviewer', allowedTools: ['Read', 'Glob', 'Grep'] },
+      { message: buildAgentPrompt('reviewer', reviewPrompt, null, null, reviewDecisions), agentId: 'reviewer', allowedTools: ['Read', 'Glob', 'Grep'] },
       { timeout: 180000, env, cwd: workdir || __dirname }
     );
   } catch (err) {
@@ -426,6 +439,16 @@ function extractResultText(raw) {
 
 function cap(s) { return String(s).charAt(0).toUpperCase() + String(s).slice(1); }
 
+// Local calendar date (YYYY-MM-DD). Decisions are dated records; using the
+// operator's local date avoids a decision recorded late at night being stamped
+// with tomorrow's UTC date.
+function localDateString() {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + m + '-' + day;
+}
+
 // Agent personality / charter injection. Each dispatch is prefixed with the
 // agent's charter so it behaves per its role instead of as a blank assistant.
 const PERSONALITY_DIR = path.join(__dirname, 'personalities', 'agents');
@@ -448,20 +471,23 @@ function loadPersonality(agentId) {
 // Dispatch prompt assembly. Nudges are classified against the operator's
 // original message only and capped by a deterministic budget (see
 // src/prompt-pipeline.js). Callers that need the telemetry can pass a
-// precomputed plan; otherwise one is built here.
-function buildAgentPrompt(agentId, message, workdir, plan) {
+// precomputed plan; otherwise one is built here. `projectDecisions` is the
+// bounded accepted-decision block for the task's project — standing evidence
+// from the human side of the work, not another classifier nudge.
+function buildAgentPrompt(agentId, message, workdir, plan, projectDecisions) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
   const resolvedPlan = plan || promptPipeline.planNudges(message);
   const agentMessage = resolvedPlan.text;
+  const decisionNote = projectDecisions && projectDecisions.text ? '\n\n' + projectDecisions.text : '';
   const workdirNote = workdir
     ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
     : '';
-  if (!persona) return agentMessage + workdirNote;
+  if (!persona) return agentMessage + decisionNote + workdirNote;
   const name = (cfg && cfg.name) || agentId;
   const role = (cfg && cfg.role) || '';
   return '[SYSTEM — you are ' + name + (role ? ', ' + role : '') + '. Operate per your charter below.]\n'
-    + persona.trim() + workdirNote + '\n\n[TASK]\n' + agentMessage;
+    + persona.trim() + decisionNote + workdirNote + '\n\n[TASK]\n' + agentMessage;
 }
 
 // Task artifact workspace: every dispatch runs inside ~/Visionary/<project>/task-<id>
@@ -559,6 +585,29 @@ function dispatchAgent(taskId, agentId, message) {
 
   const { runId, updatedTask } = doTransaction();
 
+  // Project decision record: inject the project's accepted decisions as bounded
+  // standing context so the agent works inside the recorded "why" instead of
+  // relitigating settled choices. Record exactly what was injected so prompt
+  // cost and a mis-scoped decision stay visible per run.
+  let decisionBlock = null;
+  const dispatchTask = stmts.getTaskById.get(taskId);
+  if (dispatchTask && dispatchTask.project_id) {
+    try {
+      decisionBlock = renderDecisionsPromptBlock(
+        stmts.getAcceptedDecisionsByProject.all(dispatchTask.project_id, 20)
+      );
+    } catch { decisionBlock = null; }
+    promptPlan.meta.project_decisions = {
+      project_id: dispatchTask.project_id,
+      injected: decisionBlock ? decisionBlock.count : 0,
+      chars: decisionBlock ? decisionBlock.chars : 0,
+      ids: decisionBlock ? decisionBlock.ids : [],
+      dropped: decisionBlock ? decisionBlock.dropped : 0
+    };
+    try { stmts.setRunPromptMeta.run({ id: runId, meta: JSON.stringify(promptPlan.meta) }); }
+    catch { /* prompt telemetry must never fail a dispatch */ }
+  }
+
   // Emit SSE events after transaction
   bus.emit('agent:started', { run_id: runId, agent_id: agentId, task_id: taskId });
   if (updatedTask) bus.emit('task:updated', updatedTask);
@@ -570,7 +619,7 @@ function dispatchAgent(taskId, agentId, message) {
   const workdir = prepareWorkdir(taskId);
   if (workdir) stmts.setRunWorkdir.run({ id: runId, workdir });
   const ctx = {
-    message: buildAgentPrompt(agentId, message, workdir, promptPlan),
+    message: buildAgentPrompt(agentId, message, workdir, promptPlan, decisionBlock),
     agentId: cfg ? cfg.id : agentId,
     model: cfg && cfg.model,
     agent: cfg,
@@ -2612,6 +2661,207 @@ const server = http.createServer(async (req, res) => {
           project: { id: project.id, name: project.name, slug: project.slug },
           artifacts: buildProjectArtifactIndex(runs, { artifact_root: ARTIFACT_ROOT })
         });
+        return;
+      }
+
+      // GET /api/projects/:id/decisions — dated decision ledger for a project.
+      // The ledger is the shared "why" surface: what was chosen, what was
+      // rejected, who decided, and which records are stale or dangling.
+      if (method === 'GET' && /^\/api\/projects\/(\d+)\/decisions$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)\/decisions$/)[1], 10);
+        const project = stmts.getProjectById.get(projectId);
+        if (!project) { res.json({ error: 'Project not found' }, 404); return; }
+        let rows = [];
+        try { rows = stmts.getDecisionsByProject.all(projectId, 500); }
+        catch (err) {
+          res.json({ error: 'Decision ledger unavailable: ' + ((err && err.message) || err) }, 500);
+          return;
+        }
+        res.json({
+          project: { id: project.id, name: project.name, slug: project.slug },
+          ledger: buildDecisionLedger(rows)
+        });
+        return;
+      }
+
+      // POST /api/projects/:id/decisions — record a decision.
+      // A decision without a rationale is rejected: the point of the ledger is
+      // the why, not a second task list. Recording a superseding decision marks
+      // the target superseded so the ledger cannot show two live "truths".
+      if (method === 'POST' && /^\/api\/projects\/(\d+)\/decisions$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)\/decisions$/)[1], 10);
+        const project = stmts.getProjectById.get(projectId);
+        if (!project) { res.json({ error: 'Project not found' }, 404); return; }
+        const body = await readBody(req);
+        const validation = validateDecisionInput(body);
+        if (!validation.ok) {
+          res.json({ error: validation.errors.join('; '), errors: validation.errors }, 400);
+          return;
+        }
+        const value = validation.value;
+        if (value.task_id) {
+          const task = stmts.getTaskById.get(value.task_id);
+          if (!task || task.project_id !== projectId) {
+            res.json({ error: 'task_id does not belong to this project' }, 400);
+            return;
+          }
+        }
+        let supersededTarget = null;
+        if (value.supersedes_id) {
+          supersededTarget = stmts.getDecisionById.get(value.supersedes_id);
+          if (!supersededTarget || supersededTarget.project_id !== projectId) {
+            res.json({ error: 'supersedes_id does not belong to this project' }, 400);
+            return;
+          }
+        }
+        if (value.status === 'accepted' && !value.decided_at) value.decided_at = localDateString();
+
+        const result = stmts.insertDecision.run(Object.assign({ project_id: projectId }, value));
+        const decisionId = Number(result.lastInsertRowid);
+
+        if (supersededTarget && supersededTarget.status !== 'superseded') {
+          stmts.updateDecision.run({
+            id: supersededTarget.id,
+            title: supersededTarget.title,
+            decision: supersededTarget.decision,
+            rationale: supersededTarget.rationale,
+            alternatives_rejected: supersededTarget.alternatives_rejected,
+            constraints: supersededTarget.constraints,
+            status: 'superseded',
+            decided_by: supersededTarget.decided_by,
+            decided_at: supersededTarget.decided_at,
+            supersedes_id: supersededTarget.supersedes_id,
+            source: supersededTarget.source
+          });
+        }
+
+        const decision = stmts.getDecisionById.get(decisionId);
+        stmts.insertActivity.run({
+          event_type: 'decision.created', agent_id: null, task_id: value.task_id,
+          project_id: projectId,
+          summary: 'Decision recorded for ' + project.name + ': ' + decision.title,
+          detail_json: JSON.stringify({ decision_id: decisionId, status: decision.status, supersedes_id: decision.supersedes_id })
+        });
+        bus.emit('activity:new', { event_type: 'decision.created', project_id: projectId, summary: 'Decision recorded: ' + decision.title });
+        bus.emit('decision:created', { project_id: projectId, decision_id: decisionId, status: decision.status });
+        res.json({
+          decision,
+          ledger: buildDecisionLedger(stmts.getDecisionsByProject.all(projectId, 500))
+        }, 201);
+        return;
+      }
+
+      // PATCH /api/decisions/:id — update a decision (status, text, owner).
+      // Accepting an undated decision stamps today's date; the ledger treats an
+      // accepted decision with no date as a warning.
+      if (method === 'PATCH' && /^\/api\/decisions\/(\d+)$/.test(pathname)) {
+        const decisionId = parseInt(pathname.match(/^\/api\/decisions\/(\d+)$/)[1], 10);
+        const existing = stmts.getDecisionById.get(decisionId);
+        if (!existing) { res.json({ error: 'Decision not found' }, 404); return; }
+        const body = await readBody(req);
+        if (!body) { res.json({ error: 'Request body required' }, 400); return; }
+
+        const merged = {
+          title: body.title !== undefined ? body.title : existing.title,
+          decision: body.decision !== undefined ? body.decision : existing.decision,
+          rationale: body.rationale !== undefined ? body.rationale : existing.rationale,
+          alternatives_rejected: body.alternatives_rejected !== undefined ? body.alternatives_rejected : existing.alternatives_rejected,
+          constraints: body.constraints !== undefined ? body.constraints : existing.constraints,
+          status: body.status !== undefined ? body.status : existing.status,
+          decided_by: body.decided_by !== undefined ? body.decided_by : existing.decided_by,
+          decided_at: body.decided_at !== undefined ? body.decided_at : existing.decided_at,
+          supersedes_id: body.supersedes_id !== undefined ? body.supersedes_id : existing.supersedes_id,
+          source: body.source !== undefined ? body.source : existing.source
+        };
+        const validation = validateDecisionInput(merged);
+        if (!validation.ok) {
+          res.json({ error: validation.errors.join('; '), errors: validation.errors }, 400);
+          return;
+        }
+        const value = validation.value;
+        if (value.supersedes_id) {
+          if (value.supersedes_id === decisionId) {
+            res.json({ error: 'A decision cannot supersede itself' }, 400);
+            return;
+          }
+          const target = stmts.getDecisionById.get(value.supersedes_id);
+          if (!target || target.project_id !== existing.project_id) {
+            res.json({ error: 'supersedes_id does not belong to this project' }, 400);
+            return;
+          }
+        }
+        if (value.status === 'accepted' && !value.decided_at) value.decided_at = localDateString();
+
+        stmts.updateDecision.run({
+          id: decisionId,
+          title: value.title,
+          decision: value.decision,
+          rationale: value.rationale,
+          alternatives_rejected: value.alternatives_rejected,
+          constraints: value.constraints,
+          status: value.status,
+          decided_by: value.decided_by,
+          decided_at: value.decided_at,
+          supersedes_id: value.supersedes_id,
+          source: value.source
+        });
+        // An accepted replacement retires its target in the same write, even
+        // when the link arrives via PATCH rather than creation, so the ledger
+        // never holds two simultaneously accepted records for one decision.
+        if (value.status === 'accepted' && value.supersedes_id) {
+          const target = stmts.getDecisionById.get(value.supersedes_id);
+          if (target && target.status !== 'superseded') {
+            stmts.updateDecision.run({
+              id: target.id,
+              title: target.title,
+              decision: target.decision,
+              rationale: target.rationale,
+              alternatives_rejected: target.alternatives_rejected,
+              constraints: target.constraints,
+              status: 'superseded',
+              decided_by: target.decided_by,
+              decided_at: target.decided_at,
+              supersedes_id: target.supersedes_id,
+              source: target.source
+            });
+            stmts.insertActivity.run({
+              event_type: 'decision.superseded', agent_id: null, task_id: target.task_id,
+              project_id: target.project_id,
+              summary: 'Decision superseded: ' + target.title + ' → ' + value.title,
+              detail_json: JSON.stringify({ decision_id: target.id, superseded_by: decisionId })
+            });
+          }
+        }
+        const decision = stmts.getDecisionById.get(decisionId);
+        stmts.insertActivity.run({
+          event_type: 'decision.updated', agent_id: null, task_id: decision.task_id,
+          project_id: decision.project_id,
+          summary: 'Decision updated: ' + decision.title + ' (' + decision.status + ')',
+          detail_json: JSON.stringify({ decision_id: decisionId, status: decision.status })
+        });
+        bus.emit('activity:new', { event_type: 'decision.updated', project_id: decision.project_id, summary: 'Decision updated: ' + decision.title });
+        bus.emit('decision:updated', { project_id: decision.project_id, decision_id: decisionId, status: decision.status });
+        res.json({ decision });
+        return;
+      }
+
+      // DELETE /api/decisions/:id — remove a record. Any decision that
+      // superseded it has supersedes_id cleared by the FK (ON DELETE SET NULL),
+      // so the chain reports a gap instead of pointing at a ghost row.
+      if (method === 'DELETE' && /^\/api\/decisions\/(\d+)$/.test(pathname)) {
+        const decisionId = parseInt(pathname.match(/^\/api\/decisions\/(\d+)$/)[1], 10);
+        const existing = stmts.getDecisionById.get(decisionId);
+        if (!existing) { res.json({ error: 'Decision not found' }, 404); return; }
+        stmts.deleteDecision.run(decisionId);
+        stmts.insertActivity.run({
+          event_type: 'decision.deleted', agent_id: null, task_id: existing.task_id,
+          project_id: existing.project_id,
+          summary: 'Decision deleted: ' + existing.title,
+          detail_json: JSON.stringify({ decision_id: decisionId })
+        });
+        bus.emit('activity:new', { event_type: 'decision.deleted', project_id: existing.project_id, summary: 'Decision deleted: ' + existing.title });
+        bus.emit('decision:deleted', { project_id: existing.project_id, decision_id: decisionId });
+        res.json({ deleted: true });
         return;
       }
 

@@ -1445,6 +1445,43 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 .project-stats { display: flex; gap: var(--space-md); margin-top: var(--space-md); font-size: var(--font-size-xs); color: var(--text-muted); }
 .project-detail-section { margin-top: var(--space-xl); }
 
+/* Project decision ledger: dated records with rationale, rendered as solid
+   blocks so the "why" reads as evidence, not as another card grid. */
+.project-decision-head { display: flex; justify-content: flex-end; margin-bottom: var(--space-sm); }
+.project-decision-warning {
+  font-size: var(--font-size-sm);
+  color: var(--accent-orange);
+  border-left: 3px solid var(--accent-orange);
+  padding: var(--space-xs) var(--space-sm);
+  margin-bottom: var(--space-sm);
+  background: var(--bg-elevated);
+}
+.decision-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.decision-card[data-status="superseded"] { opacity: 0.72; }
+.decision-head { display: flex; align-items: baseline; gap: var(--space-sm); flex-wrap: wrap; margin-bottom: var(--space-xs); }
+.decision-title { font-weight: 600; font-size: var(--font-size-md); }
+.decision-date { margin-left: auto; font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-muted); }
+.decision-body { font-size: var(--font-size-sm); line-height: 1.5; margin-bottom: var(--space-xs); }
+.decision-why { font-size: var(--font-size-sm); line-height: 1.5; color: var(--text-secondary); margin-top: var(--space-xs); }
+.decision-label {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-right: var(--space-xs);
+}
+.decision-flags { margin-top: var(--space-xs); display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+.decision-actions { display: flex; gap: var(--space-xs); margin-top: var(--space-sm); }
+.form-hint { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.5; margin-bottom: var(--space-md); }
+
 /* ---------- Settings ---------- */
 .settings-form { max-width: 480px; }
 .settings-panel {
