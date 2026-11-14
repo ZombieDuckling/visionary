@@ -906,6 +906,37 @@
     streamEl.insertBefore(bubble, streamEl.firstChild);
   }
 
+  // Render the read-only charter panel: the instruction set this agent is given.
+  // Status and warnings come from GET /api/agents/:id/charter — the server reads
+  // the same file the dispatcher loads, so this is what will actually be injected.
+  function renderCharterPanel(el, payload) {
+    if (!el || !el.isConnected) return;
+    var c = (payload && payload.charter) || {};
+    var statusLabel = { ok: 'verified', mismatch: 'mismatch', empty: 'empty', missing: 'missing', unreadable: 'unreadable' };
+    var statusCls = c.status === 'ok' ? 'badge-green'
+      : (c.status === 'mismatch' || c.status === 'empty') ? 'badge-orange' : 'badge-red';
+    var html = '<div class="charter-row">'
+      + '<span class="badge ' + statusCls + '">' + esc(statusLabel[c.status] || c.status || 'unknown') + '</span>'
+      + '<span class="charter-path">' + esc(c.dispatch_path || '(no file)') + '</span>'
+      + '</div>';
+    var roleLine = [payload && payload.org_title, payload && payload.role].filter(Boolean).join(' \u00B7 ');
+    if (roleLine) html += '<div class="charter-role">' + esc(roleLine) + '</div>';
+    html += '<div class="charter-note">' + (c.injected_in_dispatch
+      ? 'Injected into every dispatch for this agent \u2014 ' + esc(String(c.char_count || 0)) + ' chars'
+      : 'Not injected \u2014 no usable charter file for this agent') + '</div>';
+    if (c.warnings && c.warnings.length) {
+      html += '<ul class="charter-warnings">';
+      c.warnings.forEach(function (w) { html += '<li>' + esc((w && w.message) || (w && w.code) || '') + '</li>'; });
+      html += '</ul>';
+    }
+    if (c.body) {
+      html += '<details class="charter-details"><summary>Read charter ('
+        + esc(String((c.sections || []).length)) + ' sections)</summary>'
+        + '<div class="charter-body">' + renderMarkdown(c.body) + '</div></details>';
+    }
+    el.innerHTML = html;
+  }
+
   // Open the drawer for a given agent node.
   function openAgentDrawer(agentId, nodeData) {
     // Close any existing drawer first (handles switching agents)
@@ -965,6 +996,8 @@
       +     '<span class="drawer-meta-key">Watchdog</span>' + watchdogInfo
       +   '</div>'
       + '</div>'
+      + '<div class="drawer-section-label">ROLE &amp; CHARTER</div>'
+      + '<div class="drawer-charter" id="drawer-charter"><div class="overview-loading">Loading\u2026</div></div>'
       + '<div class="drawer-section-label">DISPATCH</div>'
       + '<div class="drawer-dispatch-area">'
       +   '<textarea class="drawer-dispatch-input" id="drawer-dispatch-input" rows="3" placeholder="Message ' + esc(agentName) + '\u2026"></textarea>'
@@ -998,6 +1031,14 @@
     document.addEventListener('keydown', onKeydown);
     // Store cleanup ref for keydown
     _drawer.listeners.push({ eventType: '_keydown_cleanup', fn: function () { document.removeEventListener('keydown', onKeydown); } });
+
+    // --- Load role/charter (read-only, what dispatch will inject) ---
+    var charterEl = drawer.querySelector('#drawer-charter');
+    api('/agents/' + encodeURIComponent(agentId) + '/charter').then(function (data) {
+      renderCharterPanel(charterEl, data);
+    }).catch(function () {
+      if (charterEl.isConnected) charterEl.innerHTML = '<div class="drawer-stream-empty">Charter unavailable.</div>';
+    });
 
     // --- Load recent messages ---
     var messagesEl = drawer.querySelector('#drawer-messages');

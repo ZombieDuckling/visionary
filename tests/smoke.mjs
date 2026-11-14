@@ -111,6 +111,23 @@ test('GET /api/agents returns the agent allowlist', async () => {
   }
 });
 
+test('GET /api/agents/:id/charter exposes the instruction set dispatch injects', async () => {
+  const { status, json } = await http('GET', '/api/agents/forge/charter');
+  assert.equal(status, 200);
+  assert.equal(json.agent_id, 'forge');
+  assert.equal(json.charter.status, 'ok');
+  assert.equal(json.charter.injected_in_dispatch, true);
+  assert.equal(json.charter.dispatch_path, 'personalities/agents/forge.md');
+  assert.match(json.charter.body, /You are \*\*Forge\*\*/);
+  assert.ok(Array.isArray(json.charter.sections) && json.charter.sections.includes('Lane'));
+  assert.ok(Array.isArray(json.charter.warnings));
+  assert.ok(!json.charter.warnings.some((w) => w.code === 'agent_id_mismatch'));
+
+  const unknown = await http('GET', '/api/agents/ghost/charter');
+  assert.equal(unknown.status, 404);
+  assert.ok(unknown.json && unknown.json.error);
+});
+
 test('GET /api/overview returns expected shape', async () => {
   const { status, json } = await http('GET', '/api/overview');
   assert.equal(status, 200);

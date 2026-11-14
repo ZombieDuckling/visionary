@@ -26,6 +26,14 @@ When you dispatch a task the failover engine (`src/runtimes/failover.js`) walks 
 
 Seven adapters are registered: `openclaw`, `claude` / `claude-code`, `hermes`, `cursor`, `codex`, `gemini`, `ollama`. Each implements `{ buildCommand, dispatch, kill, healthcheck }`.
 
+### Agent charter inspection
+
+An agent's personality charter is the instruction set every dispatch prepends, so the operator should be able to read it before putting the agent to work. `GET /api/agents/:id/charter` returns the exact file the dispatcher loads (`personalities/agents/<agent_id>.md`, including the `jarvis`/`main` → `argus` alias), its frontmatter, section outline, character count, and whether it is actually injected. The agent drawer now shows this as a **Role & charter** panel: a verified/mismatch/missing/empty status, the charter path, the org-chart title and role, the injected character count, any drift warnings, and an expandable read-only view of the charter body.
+
+The panel reports drift rather than smoothing it over: a charter whose `agent_id` does not match the file it lives in, a `reports_to`/title/name that disagrees with the org chart, an org-chart `personality_path` that points somewhere dispatch never reads, a missing charter file, an empty body, a charter truncated at the dispatch cap, or a body still naming the retired `jarvis` identity. Missing files are reported as missing — a configured path is evidence, not truth. Applies Jake Van Clief's instruction-provenance and prompt-and-memory-hierarchy lessons (`S3fXSc5z2n4`, `5B6W2OGfxq0`): instructions are the durable asset and must stay inspectable separately from the work they produce, and a multi-agent org needs each position's instruction set to agree with its declared role or the drift is invisible. `src/agent-charter.js` holds the deterministic reader/validator; `tests/agent-charter.test.mjs` covers present/missing/mismatch/empty/truncation/config-drift/retired-identity cases, and the smoke suite exercises the route.
+
+Auditing all 16 charters with this surface surfaced real staleness in the injected prompts — five IC charters carried an older title than the org chart, and every IC charter still told the agent to report to the retired `Jarvis` identity. Both were corrected in the same change; `node scripts/validate-org-chart.mjs` and a full charter audit now report zero warnings across all 16 positions.
+
 ### Task artifacts
 
 Every dispatch runs inside its own working directory: `~/Visionary/<project>/task-<id>`. The run record stores the workdir path and a JSON file list of every file produced. The task detail panel shows a Runs & Artifacts section with live output, the file list, an Open Folder button, and click-to-open for individual files. Symlink escapes and executable bundles are rejected at the API layer.

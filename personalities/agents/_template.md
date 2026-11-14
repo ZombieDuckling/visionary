@@ -21,7 +21,7 @@ How this agent communicates, what tone, what artifacts it produces.
 
 ## Escalation
 
-When to bounce work up to the director, when to ping Jarvis directly.
+When to bounce work up to the director, when to ping Argus directly.
 
 ## Failover note
 

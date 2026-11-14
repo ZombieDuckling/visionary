@@ -1134,6 +1134,44 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 .drawer-health-unknown { color: var(--text-muted); }
 .drawer-harness-chain { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 
+.drawer-charter {
+  padding: 0 var(--space-lg) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+}
+.charter-row { display: flex; gap: var(--space-sm); align-items: baseline; flex-wrap: wrap; }
+.charter-path {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.charter-role { color: var(--text-primary); font-size: var(--font-size-sm); }
+.charter-note { color: var(--text-secondary); font-size: var(--font-size-xs); }
+.charter-warnings {
+  margin: var(--space-xs) 0 0;
+  padding-left: var(--space-lg);
+  color: var(--accent-orange);
+  font-size: var(--font-size-xs);
+}
+.charter-details { margin-top: var(--space-xs); }
+.charter-details summary {
+  cursor: pointer;
+  color: var(--accent-blue);
+  font-size: var(--font-size-xs);
+  padding: var(--space-xs) 0;
+}
+.charter-body {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--separator);
+  background: var(--bg-inset);
+}
+
 .drawer-section-label {
   font-size: var(--font-size-xs);
   font-weight: 600;

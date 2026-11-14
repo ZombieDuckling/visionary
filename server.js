@@ -21,6 +21,7 @@ const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
 const { buildProjectArtifactIndex } = require('./src/project-artifacts');
 const { validateDecisionInput, buildDecisionLedger, renderDecisionsPromptBlock } = require('./src/decision-ledger');
+const { readAgentCharter } = require('./src/agent-charter');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -1834,6 +1835,37 @@ const server = http.createServer(async (req, res) => {
           last_health_check: agent.last_health_check,
           last_activity_at: agent.last_activity_at,
           current_harness: agent.current_harness
+        });
+        return;
+      }
+
+      // GET /api/agents/:id/charter — the instruction set this agent is given.
+      // Read-only: reports the file dispatch loads, its frontmatter, section
+      // outline, and any drift against the org chart. No writes, no guesses.
+      if (method === 'GET' && /^\/api\/agents\/[\w-]+\/charter$/.test(pathname)) {
+        const id = pathname.match(/^\/api\/agents\/([\w-]+)\/charter$/)[1];
+        const agent = stmts.getAgentById.get(id);
+        if (!agent) { res.json({ error: 'Agent not found' }, 404); return; }
+        const charter = readAgentCharter({
+          agentId: agent.id,
+          personalityDir: PERSONALITY_DIR,
+          repoRoot: __dirname,
+          configuredPath: agent.personality_path || null,
+          orgNode: {
+            id: agent.id,
+            name: agent.name,
+            title: agent.title,
+            role: agent.role,
+            reports_to: agent.reports_to
+          },
+          maxChars: PERSONALITY_MAX_CHARS
+        });
+        res.json({
+          agent_id: agent.id,
+          role: agent.role || null,
+          org_title: agent.title || null,
+          reports_to: agent.reports_to || null,
+          charter
         });
         return;
       }

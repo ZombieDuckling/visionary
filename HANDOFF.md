@@ -132,6 +132,11 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - `buildProjectArtifactIndex(runs, opts)` aggregates artifact lists from stored run rows into per-task groups, dedupes repeated files, and verifies existence on disk. Route: `GET /api/projects/:id/artifacts`.
 - Paths are resolved against the recorded workdir and must stay inside it; symlinks are reported but not followed. Missing files and missing workdirs are reported as such — a recorded path is evidence, not truth. Index is capped (newest 400) with a truncation warning.
 
+### Agent charter inspection (`src/agent-charter.js`)
+- `readAgentCharter(opts)` is read-only: resolves the exact file `loadPersonality()` reads (`personalities/agents/<file_id>.md`, with `jarvis`/`main` → `argus`), parses frontmatter, lists `##` sections, and reports `status` (`ok`/`mismatch`/`empty`/`missing`/`unreadable`), `injected_in_dispatch`, `char_count`, and `warnings[]`. Route: `GET /api/agents/:id/charter` (404 for unknown ids); the agent drawer renders it as **Role & charter**.
+- Warnings cover `agent_id_mismatch`, `reports_to_mismatch`, `title_mismatch`, `name_mismatch`, `config_path_drift`/`config_path_missing` (org-chart `personality_path` vs the file dispatch actually loads), `charter_missing`/`unreadable`/`empty_body`, `charter_truncated` at `PERSONALITY_MAX_CHARS`, and `retired_identity` for bodies still naming `jarvis`. Director names compare after dropping the `Director [of]` prefix so pod labels are not false positives. A configured path is evidence, not truth.
+- Do not make this route write or cache: it must always show the file dispatch would inject right now.
+
 ### Deep research (`src/deep-research.js`)
 - `runResearch({ dispatch }, { question, maxQueries })` → decompose → per-sub-query independent failover → synthesize.
 - Route: `POST /api/research { agent_id, question, max_queries }`.
@@ -140,11 +145,11 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - `discover(name)` per-harness model list (static + runtime probes for ollama + openclaw).
 - Route: `GET /api/cookbook`.
 
-## DB schema (currently at version 11)
+## DB schema (currently at version 12)
 
-`projects`, `tasks`, `agent_runs` (with `workdir`, `artifacts_json`, `prompt_meta_json`), `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`, `chat_sessions`, `chat_messages`.
+`projects`, `tasks`, `agent_runs` (with `workdir`, `artifacts_json`, `prompt_meta_json`), `decisions`, `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`, `chat_sessions`, `chat_messages`.
 
-`schema_version.version = 11`. Migrations are append-only — never reorder existing entries.
+`schema_version.version = 12`. Migrations are append-only — never reorder existing entries.
 
 ## Frontend tab map
 
