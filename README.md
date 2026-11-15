@@ -298,6 +298,14 @@ Post-build, post-training, client-workshop, onboarding, pilot, and deployment fo
 
 Repeated bounded judgment requests — labels, yes/no checks, scores, routing, triage, readiness, approval, or rejection — now get a deterministic classifier-gate block before dispatch. The agent must define gate scope, allowed outputs, confidence thresholds, deterministic exclusions, result persistence, and an override/eval loop before using open-ended LLM output. This applies Jake Van Clief's decision-file lesson: use code for exact checks, bounded gates for fuzzy labels/routes/scores, full LLMs for synthesis, and humans for low-confidence or high-stakes cases.
 
+### Restart and shutdown reconciliation
+
+A crash, `SIGKILL`, or a lost terminal left `agent_runs` rows stuck at `pending`/`running` forever — the Overview then showed agents as active long after their harness child was gone, and the watchdog's stale-run check could only warn about it. The server now reconciles those rows itself:
+
+- **On boot**, after the port binds (so an instance that loses the port race never touches another instance's runs), every row still at `pending` or `running` is moved to `timeout`, with `completed_at`, a `duration_ms` derived from `started_at`, and an `error` that names the restart time and points at the surviving workdir/artifacts. The guarded update only matches live statuses, so a completion racing with reconciliation is never overwritten and repeat passes are no-ops.
+- **On shutdown**, `SIGINT`/`SIGTERM` first reconciles the run ids this process actually owned (its `activeDispatches`), so a clean stop no longer leaves runs looking active.
+- Each reconciliation writes a `run.reconciled` activity row per run plus one operator notification, and task status is deliberately left alone — the task may still be correct, and guessing would hide work that needs a human decision.
+
 ### Cron scheduler
 
 `src/scheduler.js` parses standard five-field cron expressions. The tick runs every 60 seconds inside `server.js` and routes each firing through `executeWithFailover`, so scheduled runs get the same harness chain and failover behavior as manual dispatches. Manage schedules from the Crons tab or via `GET|POST|DELETE /api/schedules`.

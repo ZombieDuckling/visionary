@@ -51,7 +51,7 @@ async function waitForReady(timeoutMs = 8000) {
   throw new Error(`Server never became ready on ${BASE}. Stderr:\n${serverStderr}`);
 }
 
-before(async () => {
+async function startServer() {
   serverProc = spawn(process.execPath, ['server.js'], {
     cwd: repoRoot,
     env: {
@@ -71,17 +71,24 @@ before(async () => {
     }
   });
   await waitForReady();
+}
+
+async function stopServer() {
+  if (!serverProc || serverProc.exitCode !== null) return;
+  serverProc.kill('SIGTERM');
+  await Promise.race([
+    once(serverProc, 'exit'),
+    new Promise(r => setTimeout(r, 3000)),
+  ]);
+  if (serverProc.exitCode === null) serverProc.kill('SIGKILL');
+}
+
+before(async () => {
+  await startServer();
 });
 
 after(async () => {
-  if (serverProc && serverProc.exitCode === null) {
-    serverProc.kill('SIGTERM');
-    await Promise.race([
-      once(serverProc, 'exit'),
-      new Promise(r => setTimeout(r, 3000)),
-    ]);
-    if (serverProc.exitCode === null) serverProc.kill('SIGKILL');
-  }
+  await stopServer();
   // Best-effort cleanup of WAL + SHM + the DB file via the temp dir.
   try { rmSync(tmpRoot, { recursive: true, force: true }); } catch { /* ignore */ }
 });
@@ -764,4 +771,75 @@ test('Project artifact UI: detail view fetches, renders, and opens indexed artif
     'artifact clicks must use the run-open endpoint');
   assert.ok(app.includes("Artifact missing on disk"),
     'missing artifacts must not be opened');
+});
+
+test('Boot reconciliation marks runs orphaned by a restart as timeout', async () => {
+  // Seed rows that claim to be live while the running server owns no dispatch
+  // for them — exactly the state a crash, SIGKILL, or `vision restart` leaves.
+  const Database = require('better-sqlite3');
+  const db = new Database(TEST_DB);
+  let pendingId;
+  let runningId;
+  try {
+    db.pragma('journal_mode = WAL');
+    db.prepare(`
+      INSERT INTO agent_runs (agent_id, message, status, started_at)
+      VALUES ('argus', 'smoke-orphan-pending', 'pending', datetime('now', '-5 minutes'))
+    `).run();
+    db.prepare(`
+      INSERT INTO agent_runs (agent_id, message, status, started_at)
+      VALUES ('forge', 'smoke-orphan-running', 'running', datetime('now', '-3 hours'))
+    `).run();
+    pendingId = db.prepare("SELECT id FROM agent_runs WHERE message = 'smoke-orphan-pending'").get().id;
+    runningId = db.prepare("SELECT id FROM agent_runs WHERE message = 'smoke-orphan-running'").get().id;
+  } finally {
+    db.close();
+  }
+
+  // A clean SIGTERM stop, then a fresh boot: the seeded rows were never in the
+  // old process's activeDispatches, so only boot reconciliation can reach them.
+  await stopServer();
+  await startServer();
+
+  const db2 = new Database(TEST_DB);
+  try {
+    const rows = db2.prepare(
+      'SELECT id, status, error, completed_at, duration_ms FROM agent_runs WHERE id IN (?, ?)'
+    ).all(pendingId, runningId);
+    assert.equal(rows.length, 2, 'both seeded rows still exist');
+    for (const row of rows) {
+      assert.equal(row.status, 'timeout', 'orphaned run is reconciled to timeout');
+      assert.ok(row.completed_at, 'completed_at is recorded');
+      assert.match(row.error, /^Interrupted: Visionary started at /,
+        'error says the restart interrupted the run');
+      assert.ok(row.error.includes('workdir'), 'error points at surviving files');
+    }
+    const runningRow = rows.find((r) => r.id === runningId);
+    assert.ok(runningRow.duration_ms >= 2 * 60 * 60 * 1000,
+      'duration_ms is derived from started_at, not guessed');
+
+    const reconciled = db2.prepare(
+      "SELECT agent_id, task_id, detail_json FROM activity_log WHERE event_type = 'run.reconciled'"
+    ).all();
+    const reconciledIds = reconciled
+      .map((a) => { try { return JSON.parse(a.detail_json).run_id; } catch { return null; } })
+      .filter((id) => id !== null);
+    assert.ok(reconciledIds.includes(pendingId) && reconciledIds.includes(runningId),
+      'boot reconciliation writes an activity row per reconciled run');
+  } finally {
+    db2.close();
+  }
+
+  const notifications = await http('GET', '/api/notifications');
+  const warning = (notifications.json.notifications || []).find(
+    (n) => /interrupted run\(s\) reconciled at startup/.test(n.title)
+  );
+  assert.ok(warning, 'a startup warning notification reports the reconciled runs');
+  assert.ok(warning.body.includes('task status was left unchanged'),
+    'the notification states that task status was not guessed at');
+
+  const health = await http('GET', '/api/health');
+  const staleCheck = (health.json.checks || []).find((c) => c.id === 'runs.stale');
+  assert.ok(staleCheck, 'health report includes the run-hygiene check');
+  assert.equal(staleCheck.status, 'pass', 'no stale running rows remain after boot reconciliation');
 });

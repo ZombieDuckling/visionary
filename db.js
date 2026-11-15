@@ -428,6 +428,22 @@ const stmts = {
   getRunById: db.prepare(`
     SELECT * FROM agent_runs WHERE id = ?
   `),
+  // Restart reconciliation: every run row that still claims to be live. A row in
+  // this set after boot has no owning dispatch and is reconciled to `timeout`.
+  getOrphanedRuns: db.prepare(`
+    SELECT id, task_id, agent_id, status, started_at, created_at, message
+    FROM agent_runs WHERE status IN ('pending','running') ORDER BY id
+  `),
+  // Guarded by the live statuses so a concurrent completion can never be
+  // overwritten and a repeated reconciliation pass is a no-op. duration_ms is
+  // derived from started_at rather than guessed.
+  markRunInterrupted: db.prepare(`
+    UPDATE agent_runs SET
+      status = 'timeout', error = @error, completed_at = datetime('now'),
+      duration_ms = CASE WHEN started_at IS NULL THEN NULL
+        ELSE CAST((julianday('now') - julianday(started_at)) * 86400000 AS INTEGER) END
+    WHERE id = @id AND status IN ('pending','running')
+  `),
   getRecentRuns: db.prepare(`
     SELECT * FROM agent_runs ORDER BY created_at DESC LIMIT ?
   `),

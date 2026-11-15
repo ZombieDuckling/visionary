@@ -137,6 +137,12 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - Warnings cover `agent_id_mismatch`, `reports_to_mismatch`, `title_mismatch`, `name_mismatch`, `config_path_drift`/`config_path_missing` (org-chart `personality_path` vs the file dispatch actually loads), `charter_missing`/`unreadable`/`empty_body`, `charter_truncated` at `PERSONALITY_MAX_CHARS`, and `retired_identity` for bodies still naming `jarvis`. Director names compare after dropping the `Director [of]` prefix so pod labels are not false positives. A configured path is evidence, not truth.
 - Do not make this route write or cache: it must always show the file dispatch would inject right now.
 
+### Run reconciliation on boot/shutdown (`src/run-reconciliation.js`)
+- `reconcileOrphanedRuns({ stmts, source, runIds, signal, now })` moves rows still at `pending`/`running` to `timeout`, sets `completed_at`, derives `duration_ms` from `started_at`, and writes an `error` that names the source/time plus the surviving workdir/artifacts. `source: 'boot'` reconciles every live row; `source: 'shutdown'` only reconciles the ids the dying process owned (its `activeDispatches` keys) and reports terminal ones as `skipped`.
+- Boot runs only after `server.listen` succeeds, so an instance that loses the port race never edits another instance's runs. `markRunInterrupted` is guarded on `status IN ('pending','running')`, so a completion racing reconciliation is never overwritten and repeat passes are no-ops.
+- `server.js` records one `run.reconciled` activity row per reconciled run (transaction) and one startup notification; task status is deliberately not changed — the task may still be right, and guessing would hide work needing a human decision.
+- Do not reconcile on the cleanup tick: a legitimately long run is still live, and the watchdog's `runs.stale` check is the place that warns about it.
+
 ### Deep research (`src/deep-research.js`)
 - `runResearch({ dispatch }, { question, maxQueries })` → decompose → per-sub-query independent failover → synthesize.
 - Route: `POST /api/research { agent_id, question, max_queries }`.

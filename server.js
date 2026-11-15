@@ -22,6 +22,7 @@ const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/gover
 const { buildProjectArtifactIndex } = require('./src/project-artifacts');
 const { validateDecisionInput, buildDecisionLedger, renderDecisionsPromptBlock } = require('./src/decision-ledger');
 const { readAgentCharter } = require('./src/agent-charter');
+const { reconcileOrphanedRuns } = require('./src/run-reconciliation');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -3094,8 +3095,57 @@ setInterval(bootAndDailyCleanup, 24 * 60 * 60 * 1000);
 
 const PORT = parseInt(process.env.VISIONARY_PORT, 10) || 3333;
 const HOST = process.env.VISIONARY_HOST || '127.0.0.1';
+
+// Record reconciled run rows in the activity log. Shared by the boot and
+// shutdown paths so both leave the same audit trail.
+function recordReconciledActivity(result) {
+  const write = db.transaction(function (rows) {
+    for (const run of rows) {
+      stmts.insertActivity.run({
+        event_type: 'run.reconciled', agent_id: run.agent_id, task_id: run.task_id,
+        project_id: null,
+        summary: run.agent_id + ' run #' + run.id + ' marked timeout (' + result.source
+          + '): no live dispatch owned it',
+        detail_json: JSON.stringify({
+          run_id: run.id, prior_status: run.prior_status, started_at: run.started_at,
+          source: result.source, at: result.at
+        })
+      });
+    }
+  });
+  write(result.reconciled);
+}
+
+// A run row that says `running` while no dispatch in this process owns it is
+// evidence of a dead owner, not of live work. Reconcile at boot — after the port
+// bind, so a second instance that loses the port race never touches rows the
+// first instance owns.
+function reconcileOnBoot() {
+  try {
+    const result = reconcileOrphanedRuns({ stmts, source: 'boot' });
+    if (!result.count) {
+      console.log('[boot] run rows: no orphans to reconcile');
+      return;
+    }
+    recordReconciledActivity(result);
+    const detail = result.reconciled.map(function (r) {
+      return '#' + r.id + ' ' + r.agent_id + (r.task_id != null ? ' (task #' + r.task_id + ')' : '');
+    }).join(', ');
+    stmts.insertNotification.run({
+      agent_run_id: null, type: 'warning',
+      title: result.count + ' interrupted run(s) reconciled at startup',
+      body: detail + ' — no live dispatch owned them, so they were marked timeout. Files written before the interruption are still in their workdirs; task status was left unchanged.',
+      action_type: null, action_data: null
+    });
+    console.log('[boot] reconciled ' + result.count + ' orphaned run row(s): ' + detail);
+  } catch (err) {
+    console.error('[boot] run reconciliation failed:', err.message);
+  }
+}
+
 server.listen(PORT, HOST, () => {
   console.log('Visionary Mission Control running at http://' + HOST + ':' + PORT);
+  reconcileOnBoot();
   const settings = getAppSettings();
   console.log('[boot] workspace: ' + settings.workspace_path);
   // Probe each harness once at boot so the operator sees what is actually wired.
@@ -3125,22 +3175,28 @@ function shutdownBridge() {
   }
 }
 
-process.on('SIGINT', () => {
+// Graceful shutdown -- terminate the children this process owns, then reconcile
+// their run rows before the DB closes. Without this, every clean stop left the
+// runs `running` and the next Overview load showed agents that were not live.
+function shutdown(signal) {
   for (const [, info] of activeDispatches) {
     try { info.process.kill('SIGTERM'); } catch {}
+  }
+  try {
+    const runIds = Array.from(activeDispatches.keys());
+    const result = reconcileOrphanedRuns({ stmts, runIds, source: 'shutdown', signal });
+    if (result.count) {
+      recordReconciledActivity(result);
+      console.log('[shutdown] reconciled ' + result.count + ' live run row(s) as timeout');
+    }
+  } catch (err) {
+    console.error('[shutdown] run reconciliation failed:', err.message);
   }
   shutdownBridge();
   db.close();
   server.close();
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', () => {
-  for (const [, info] of activeDispatches) {
-    try { info.process.kill('SIGTERM'); } catch {}
-  }
-  shutdownBridge();
-  db.close();
-  server.close();
-  process.exit(0);
-});
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
