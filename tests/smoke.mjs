@@ -248,6 +248,70 @@ test('GET /api/projects/:id/artifacts indexes present and missing files', async 
   assert.equal(unknown.status, 404);
 });
 
+test('GET /api/projects/:id/usage reports cost per completed outcome with provenance', async () => {
+  const created = await http('POST', '/api/projects', { name: 'Usage Smoke Project' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+  const doneTask = await http('POST', '/api/tasks', {
+    project_id: projectId,
+    title: 'Usage smoke done task',
+    status: 'done'
+  });
+  const openTask = await http('POST', '/api/tasks', {
+    project_id: projectId,
+    title: 'Usage smoke open task',
+    status: 'todo'
+  });
+  assert.equal(doneTask.status, 201);
+  assert.equal(openTask.status, 201);
+
+  const Database = require('better-sqlite3');
+  const db = new Database(TEST_DB);
+  try {
+    db.pragma('journal_mode = WAL');
+    const insert = db.prepare(`
+      INSERT INTO agent_runs (task_id, agent_id, message, status, input_tokens, output_tokens,
+        estimated_cost_usd, usage_source, usage_estimated, created_at)
+      VALUES (?, 'forge', 'usage smoke run', ?, ?, ?, ?, ?, ?, datetime('now'))
+    `);
+    // One harness-reported completed run, one estimated failed run. Spend must
+    // include the failed attempt and the basis must be disclosed as mixed.
+    insert.run(doneTask.json.task.id, 'completed', 1000, 500, 0.4, 'reported', 0);
+    insert.run(doneTask.json.task.id, 'failed', 200, 100, 0.1, 'estimated', 1);
+    // A legacy row with usage but no recorded provenance.
+    db.prepare(`
+      INSERT INTO agent_runs (task_id, agent_id, message, status, input_tokens, output_tokens,
+        estimated_cost_usd, created_at)
+      VALUES (?, 'forge', 'legacy usage run', 'completed', 100, 50, 0.05, datetime('now'))
+    `).run(openTask.json.task.id);
+  } finally {
+    db.close();
+  }
+
+  const { status, json } = await http('GET', '/api/projects/' + projectId + '/usage');
+  assert.equal(status, 200);
+  assert.equal(json.project.id, projectId);
+  const usage = json.usage;
+  assert.equal(usage.runs.total, 3);
+  assert.equal(usage.runs.completed, 2);
+  assert.equal(usage.runs.failed, 1);
+  assert.equal(usage.runs.with_usage, 3);
+  assert.equal(usage.cost.total_usd, 0.55);
+  assert.equal(usage.cost.reported_usd, 0.4);
+  assert.equal(usage.cost.estimated_usd, 0.1);
+  assert.equal(usage.cost.unknown_usd, 0.05);
+  assert.equal(usage.tasks.done, 1);
+  assert.equal(usage.per_outcome.outcomes, 1);
+  assert.equal(usage.per_outcome.cost_usd, 0.55);
+  assert.equal(usage.per_outcome.basis, 'mixed');
+  assert.equal(usage.usage.total_tokens, 1950);
+  assert.ok(usage.warnings.some((w) => w.code === 'unlabeled_basis'));
+  assert.match(usage.disclosure, /reported/);
+
+  const unknown = await http('GET', '/api/projects/999999/usage');
+  assert.equal(unknown.status, 404);
+});
+
 test('GET /api/projects/:id/governance returns deterministic readiness analysis', async () => {
   const created = await http('POST', '/api/projects', {
     name: 'Governance Smoke School AI',
@@ -771,6 +835,23 @@ test('Project artifact UI: detail view fetches, renders, and opens indexed artif
     'artifact clicks must use the run-open endpoint');
   assert.ok(app.includes("Artifact missing on disk"),
     'missing artifacts must not be opened');
+});
+
+test('Project cost UI: detail view fetches usage and discloses estimate basis', () => {
+  // Structural assertion that cost per completed outcome is wired into the
+  // project detail view and that estimates are labeled rather than rendered as
+  // observed spend.
+  const app = readFileSync(join(repoRoot, 'public', 'app.js'), 'utf8');
+  assert.ok(app.includes("'/projects/' + selectedProject + '/usage'"),
+    'project detail must fetch the usage summary');
+  assert.ok(app.includes('renderProjectUsage(bundle.usage)'),
+    'project detail must render the usage summary');
+  assert.ok(app.includes('Cost per completed outcome'),
+    'usage panel must lead with cost per completed outcome');
+  assert.ok(app.includes('unavailable — no completed task'),
+    'cost per outcome must be withheld when nothing is done');
+  assert.ok(app.includes("Number(r.usage_estimated) === 1 ? ' est.'"),
+    'estimated run costs must be marked est.');
 });
 
 test('Boot reconciliation marks runs orphaned by a restart as timeout', async () => {

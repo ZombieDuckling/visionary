@@ -2130,7 +2130,8 @@
         }).join('');
         var costStr = '';
         if (r.estimated_cost_usd != null) {
-          costStr = ' · <span class="run-cost">$' + Number(r.estimated_cost_usd).toFixed(4) + '</span>';
+          costStr = ' · <span class="run-cost">$' + Number(r.estimated_cost_usd).toFixed(4)
+            + (Number(r.usage_estimated) === 1 ? ' <span class="run-cost-basis">est.</span>' : '') + '</span>';
         }
         var tokStr = '';
         if (r.input_tokens != null || r.output_tokens != null) {
@@ -2604,6 +2605,85 @@
     return html;
   }
 
+  // Project cost & usage summary. Spend is only useful as cost per completed
+  // outcome, and the basis of every figure is disclosed: harness-reported,
+  // deterministic estimate, or unlabeled legacy rows. Estimates are marked
+  // "est." — never presented as observed spend.
+  function fmtUsd(value) {
+    if (value == null || !Number.isFinite(Number(value))) return '—';
+    return '$' + Number(value).toFixed(4);
+  }
+
+  function fmtTokens(value) {
+    if (value == null || !Number.isFinite(Number(value))) return '—';
+    return Number(value).toLocaleString('en-US');
+  }
+
+  function renderProjectUsage(summary) {
+    if (!summary) {
+      return '<div class="project-detail-section"><h3>Cost &amp; Usage</h3>'
+        + '<div class="empty-state" style="padding: var(--space-md)">Usage summary unavailable.</div></div>';
+    }
+    var cost = summary.cost || {};
+    var runs = summary.runs || {};
+    var usage = summary.usage || {};
+    var perOutcome = summary.per_outcome || {};
+    var html = '<div class="project-detail-section"><h3>Cost &amp; Usage</h3>';
+
+    if (!runs.total) {
+      html += '<div class="empty-state" style="padding: var(--space-md)">No agent runs recorded yet. Dispatch a task to start collecting usage.</div></div>';
+      return html;
+    }
+
+    var outcomeStr = perOutcome.cost_usd == null
+      ? '<span class="text-muted">unavailable — no completed task</span>'
+      : fmtUsd(perOutcome.cost_usd) + (perOutcome.basis === 'estimated' ? ' <span class="badge badge-orange">est.</span>'
+        : perOutcome.basis === 'mixed' ? ' <span class="badge badge-orange">mixed basis</span>'
+        : perOutcome.basis === 'unknown' ? ' <span class="badge badge-orange">unknown basis</span>'
+        : perOutcome.basis === 'reported' ? ' <span class="badge badge-green">reported</span>' : '');
+
+    html += '<div class="project-usage-grid">'
+      + '<div class="project-usage-cell"><div class="project-usage-label">Cost per completed outcome</div>'
+      + '<div class="project-usage-value">' + outcomeStr + '</div>'
+      + '<div class="project-usage-note">' + esc(String(perOutcome.outcomes || 0)) + ' task(s) done · spend includes failed runs</div></div>'
+      + '<div class="project-usage-cell"><div class="project-usage-label">Total recorded spend</div>'
+      + '<div class="project-usage-value">' + fmtUsd(cost.total_usd) + '</div>'
+      + '<div class="project-usage-note">' + esc(String(runs.total)) + ' run(s) · '
+      + esc(String(runs.failed || 0)) + ' failed</div></div>'
+      + '<div class="project-usage-cell"><div class="project-usage-label">Tokens</div>'
+      + '<div class="project-usage-value">' + fmtTokens(usage.total_tokens) + '</div>'
+      + '<div class="project-usage-note">' + fmtTokens(usage.input_tokens) + ' in / '
+      + fmtTokens(usage.output_tokens) + ' out</div></div>'
+      + '<div class="project-usage-cell"><div class="project-usage-label">Usage recorded</div>'
+      + '<div class="project-usage-value">' + esc(String(runs.with_usage || 0)) + ' / ' + esc(String(runs.total)) + '</div>'
+      + '<div class="project-usage-note">' + esc(String(runs.without_usage || 0)) + ' run(s) with no telemetry</div></div>'
+      + '</div>';
+
+    html += '<div class="project-usage-basis">Basis: '
+      + esc(String(cost.reported_runs || 0)) + ' reported · '
+      + esc(String(cost.estimated_runs || 0)) + ' estimated · '
+      + esc(String(cost.unknown_runs || 0)) + ' unlabeled'
+      + ' — reported ' + fmtUsd(cost.reported_usd)
+      + ', estimated ' + fmtUsd(cost.estimated_usd)
+      + ', unlabeled ' + fmtUsd(cost.unknown_usd)
+      + '</div>';
+
+    if (summary.window && (summary.window.first_run_at || summary.window.last_run_at)) {
+      html += '<div class="project-usage-note">Runs from '
+        + esc(String(summary.window.first_run_at || '?')) + ' to '
+        + esc(String(summary.window.last_run_at || '?')) + '.</div>';
+    }
+
+    (summary.warnings || []).forEach(function (w) {
+      html += '<div class="project-usage-warning">' + esc(w.message || w.code || '') + '</div>';
+    });
+    if (summary.disclosure) {
+      html += '<div class="project-usage-note">' + esc(summary.disclosure) + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderProjects(container) {
     var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
     container._viewRequestId = requestId;
@@ -2615,12 +2695,14 @@
       api('/projects/' + selectedProject).then(function (data) {
         return Promise.all([
           api('/projects/' + selectedProject + '/artifacts').catch(function () { return null; }),
-          api('/projects/' + selectedProject + '/decisions').catch(function () { return null; })
+          api('/projects/' + selectedProject + '/decisions').catch(function () { return null; }),
+          api('/projects/' + selectedProject + '/usage').catch(function () { return null; })
         ]).then(function (extra) {
           return {
             project: data,
             artifacts: extra[0] && extra[0].artifacts ? extra[0].artifacts : null,
-            decisions: extra[1] && extra[1].ledger ? extra[1].ledger : null
+            decisions: extra[1] && extra[1].ledger ? extra[1].ledger : null,
+            usage: extra[2] && extra[2].usage ? extra[2].usage : null
           };
         });
       }).then(function (bundle) {
@@ -2663,7 +2745,7 @@
               + '<span class="badge ' + statusCls + '">' + esc(r.status) + '</span>'
               + '<span>' + esc(r.agent_id) + ' - Task #' + esc(r.task_id) + '</span>'
               + '<span class="text-muted">' + timeAgo(r.created_at) + '</span>'
-              + (Number.isFinite(Number(r.estimated_cost_usd)) && Number(r.estimated_cost_usd) > 0 ? '<span class="agent-cost">$' + Number(r.estimated_cost_usd).toFixed(4) + '</span>' : '')
+              + (Number.isFinite(Number(r.estimated_cost_usd)) && Number(r.estimated_cost_usd) > 0 ? '<span class="agent-cost">$' + Number(r.estimated_cost_usd).toFixed(4) + (Number(r.usage_estimated) === 1 ? ' est.' : '') + '</span>' : '')
               + '</div>';
           });
           html += '</div>';
@@ -2671,6 +2753,10 @@
           html += '<div class="empty-state" style="padding: var(--space-md)">No runs yet</div>';
         }
         html += '</div>';
+
+        // Cost & usage: spend is reported as cost per completed outcome, with
+        // the basis of every figure disclosed (reported / estimated / unlabeled).
+        html += renderProjectUsage(bundle.usage);
 
         // Docs section
         html += '<div class="project-detail-section"><h3>Documents (' + (data.docs ? data.docs.length : 0) + ')</h3>';

@@ -47,6 +47,7 @@ visionary/
 │   ├── scheduler.js       # 5-field cron parser + tick()
 │   ├── cleanup.js         # Prune agent_messages, health_log, activity, runs
 │   ├── project-artifacts.js # Project-level artifact index (present/missing verification)
+│   ├── project-cost-summary.js # Cost per completed outcome + usage-provenance disclosure
 │   ├── decision-ledger.js # Project decision records: validation, lifecycle flags, bounded dispatch injection
 │   └── mcp.js             # STUB — needs @modelcontextprotocol/sdk decision
 ├── personalities/
@@ -132,6 +133,11 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - `buildProjectArtifactIndex(runs, opts)` aggregates artifact lists from stored run rows into per-task groups, dedupes repeated files, and verifies existence on disk. Route: `GET /api/projects/:id/artifacts`.
 - Paths are resolved against the recorded workdir and must stay inside it; symlinks are reported but not followed. Missing files and missing workdirs are reported as such — a recorded path is evidence, not truth. Index is capped (newest 400) with a truncation warning.
 
+### Project cost & usage summary (`src/project-cost-summary.js`)
+- `summarizeProjectCost({ runs, tasks })` returns cost per completed outcome, spend/token totals, a provenance split (`reported`/`estimated`/`unknown`), and `warnings[]`. Route: `GET /api/projects/:id/usage`; the project page renders it as **Cost & Usage**.
+- Spend totals every recorded run, failed attempts included, then divides by tasks marked `done`; `per_outcome` is `null` (with `no_completed_outcome`) when nothing is done — never `$0.00`. `usage_source`/`usage_estimated` (migration 13) record whether a figure came from a harness usage report or a character-count estimate; legacy NULL rows are reported as unknown, never retroactively guessed. Run views mark estimates `est.`.
+- Do not silently coerce `null` to `0` when parsing usage — a missing number is unknown, not zero spend.
+
 ### Agent charter inspection (`src/agent-charter.js`)
 - `readAgentCharter(opts)` is read-only: resolves the exact file `loadPersonality()` reads (`personalities/agents/<file_id>.md`, with `jarvis`/`main` → `argus`), parses frontmatter, lists `##` sections, and reports `status` (`ok`/`mismatch`/`empty`/`missing`/`unreadable`), `injected_in_dispatch`, `char_count`, and `warnings[]`. Route: `GET /api/agents/:id/charter` (404 for unknown ids); the agent drawer renders it as **Role & charter**.
 - Warnings cover `agent_id_mismatch`, `reports_to_mismatch`, `title_mismatch`, `name_mismatch`, `config_path_drift`/`config_path_missing` (org-chart `personality_path` vs the file dispatch actually loads), `charter_missing`/`unreadable`/`empty_body`, `charter_truncated` at `PERSONALITY_MAX_CHARS`, and `retired_identity` for bodies still naming `jarvis`. Director names compare after dropping the `Director [of]` prefix so pod labels are not false positives. A configured path is evidence, not truth.
@@ -151,11 +157,11 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - `discover(name)` per-harness model list (static + runtime probes for ollama + openclaw).
 - Route: `GET /api/cookbook`.
 
-## DB schema (currently at version 12)
+## DB schema (currently at version 13)
 
-`projects`, `tasks`, `agent_runs` (with `workdir`, `artifacts_json`, `prompt_meta_json`), `decisions`, `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`, `chat_sessions`, `chat_messages`.
+`projects`, `tasks`, `agent_runs` (with `workdir`, `artifacts_json`, `prompt_meta_json`, `usage_source`, `usage_estimated`), `decisions`, `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`, `chat_sessions`, `chat_messages`.
 
-`schema_version.version = 12`. Migrations are append-only — never reorder existing entries.
+`schema_version.version = 13`. Migrations are append-only — never reorder existing entries.
 
 ## Frontend tab map
 
@@ -196,7 +202,7 @@ The dispatch→harness→stream critical path is now real end-to-end. See
 
 - **Document ingestion** — accept PDF/docx, convert to text for agent inputs. Pattern from odysseus's `markitdown_runtime`.
 - **MCP server integration** — biggest remaining lift. Stub at `src/mcp.js`. Needs `@modelcontextprotocol/sdk` (would be the second runtime dep — go/no-go decision).
-- **Token/cost capture** — `agent_runs.input_tokens/output_tokens/estimated_cost_usd` columns exist but stay NULL; the dispatch path only fills them when a harness emits usage JSON (most don't).
+- **Token/cost capture** — `agent_runs.input_tokens/output_tokens/estimated_cost_usd` now record their basis (`usage_source`/`usage_estimated`, migration 13) and project cost-per-outcome is disclosed, but most harnesses still do not emit usage JSON, so most figures remain deterministic estimates. Real per-run cost needs harness-level usage parsing (Claude/Codex report it; openclaw does not).
 - **Reviewer loop** — the auto-Reviewer historically rejected ~98% of work (bounded by `MAX_REVIEW_RETRIES`); the permission/personality fixes should help, but the prompt/gate logic still deserves a hard look.
 - **Registry unification** — the flat `agentConfigs` (server.js) and the org-chart `agents` table are still two registries; directors aren't dispatchable via `/api/dispatch` (use `/api/agents/:id/dispatch`).
 - **Python backend** — frozen at phase 2 on port 3344. Decision: ship Node. Resume the migration (phases 1c/3/4) only if consolidating to one language becomes worth it.

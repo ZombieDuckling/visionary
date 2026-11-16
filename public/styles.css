@@ -1753,6 +1753,52 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 .project-artifact-file[data-missing="1"] { color: var(--text-muted); }
 .project-artifact-file[data-missing="1"] .run-file-name { text-decoration: line-through; }
 
+/* ── Project cost & usage summary ───────────────────────────────────── */
+.project-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.project-usage-cell {
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  background: var(--bg-inset);
+}
+.project-usage-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+.project-usage-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-md);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.project-usage-note {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+.project-usage-basis {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  margin: var(--space-xs) 0;
+}
+.project-usage-warning {
+  font-size: var(--font-size-xs);
+  color: var(--accent-orange);
+  margin: var(--space-xs) 0;
+}
+.run-cost-basis {
+  font-size: 10px;
+  color: var(--accent-orange);
+}
+
 /* ── Cost / token data in run meta lines and drawer ─────────────────── */
 .run-cost {
   font-family: var(--font-mono);

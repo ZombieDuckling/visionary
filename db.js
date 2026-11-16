@@ -291,6 +291,16 @@ const migrations = [
   );
   CREATE INDEX idx_decisions_project ON decisions(project_id, status);
   CREATE INDEX idx_decisions_task ON decisions(task_id);
+  `,
+
+  // Migration 12 -> 13: Usage provenance. Token/cost figures were stored without
+  // saying whether they came from a harness usage report or a deterministic
+  // character-count estimate, so the UI rendered both identically. Record the
+  // basis beside the number; legacy rows stay NULL (basis unknown) rather than
+  // being retroactively guessed.
+  `
+  ALTER TABLE agent_runs ADD COLUMN usage_source TEXT;
+  ALTER TABLE agent_runs ADD COLUMN usage_estimated INTEGER;
   `
 ];
 
@@ -529,6 +539,16 @@ const stmts = {
     WHERE t.project_id = ? AND ar.artifacts_json IS NOT NULL
     ORDER BY ar.created_at DESC, ar.id DESC LIMIT 200
   `),
+  // Usage history for a project: the run telemetry plus its recorded basis, so
+  // the cost-per-outcome summary can separate observed spend from estimates.
+  getUsageRunsByProject: db.prepare(`
+    SELECT ar.id AS run_id, ar.task_id, ar.agent_id, ar.status, ar.input_tokens,
+           ar.output_tokens, ar.estimated_cost_usd, ar.usage_source, ar.usage_estimated,
+           ar.created_at
+    FROM agent_runs ar JOIN tasks t ON ar.task_id = t.id
+    WHERE t.project_id = ?
+    ORDER BY ar.created_at DESC, ar.id DESC LIMIT 1000
+  `),
 
   // Artifact statements
   setRunWorkdir: db.prepare(`UPDATE agent_runs SET workdir = @workdir WHERE id = @id`),
@@ -564,10 +584,13 @@ const stmts = {
   `),
   deleteDecision: db.prepare(`DELETE FROM decisions WHERE id = ?`),
 
-  // Token/cost statements
+  // Token/cost statements. usage_source/usage_estimated record the basis of the
+  // figure (harness-reported vs deterministic estimate) so the UI can mark
+  // estimates instead of presenting every number as observed spend.
   updateRunTokens: db.prepare(`
     UPDATE agent_runs SET input_tokens = @input_tokens, output_tokens = @output_tokens,
-    estimated_cost_usd = @estimated_cost_usd WHERE id = @id
+    estimated_cost_usd = @estimated_cost_usd, usage_source = @usage_source,
+    usage_estimated = @usage_estimated WHERE id = @id
   `),
   getLastRunCost: db.prepare(`
     SELECT estimated_cost_usd FROM agent_runs WHERE agent_id = ? AND estimated_cost_usd IS NOT NULL ORDER BY id DESC LIMIT 1

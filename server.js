@@ -20,6 +20,7 @@ const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
 const { buildProjectArtifactIndex } = require('./src/project-artifacts');
+const { summarizeProjectCost } = require('./src/project-cost-summary');
 const { validateDecisionInput, buildDecisionLedger, renderDecisionsPromptBlock } = require('./src/decision-ledger');
 const { readAgentCharter } = require('./src/agent-charter');
 const { reconcileOrphanedRuns } = require('./src/run-reconciliation');
@@ -735,7 +736,9 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
         id: runId,
         input_tokens: telemetry.input_tokens,
         output_tokens: telemetry.output_tokens,
-        estimated_cost_usd: telemetry.estimated_cost_usd
+        estimated_cost_usd: telemetry.estimated_cost_usd,
+        usage_source: telemetry.estimated ? 'estimated' : 'reported',
+        usage_estimated: telemetry.estimated ? 1 : 0
       });
     } catch (_tokenErr) { /* usage telemetry must never fail the run */ }
 
@@ -2693,6 +2696,30 @@ const server = http.createServer(async (req, res) => {
         res.json({
           project: { id: project.id, name: project.name, slug: project.slug },
           artifacts: buildProjectArtifactIndex(runs, { artifact_root: ARTIFACT_ROOT })
+        });
+        return;
+      }
+
+      // GET /api/projects/:id/usage — cost per completed outcome, with the basis
+      // of every dollar figure disclosed. Totals include failed runs (real spend)
+      // and divide by tasks marked done; estimates are never rendered as observed
+      // spend, and cost-per-outcome is withheld when nothing is done.
+      if (method === 'GET' && /^\/api\/projects\/(\d+)\/usage$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)\/usage$/)[1], 10);
+        const project = stmts.getProjectById.get(projectId);
+        if (!project) { res.json({ error: 'Project not found' }, 404); return; }
+        let runs = [];
+        let tasks = [];
+        try {
+          runs = stmts.getUsageRunsByProject.all(projectId);
+          tasks = stmts.getTasksByProject.all(projectId);
+        } catch (err) {
+          res.json({ error: 'Usage summary unavailable: ' + ((err && err.message) || err) }, 500);
+          return;
+        }
+        res.json({
+          project: { id: project.id, name: project.name, slug: project.slug },
+          usage: summarizeProjectCost({ runs: runs, tasks: tasks })
         });
         return;
       }
