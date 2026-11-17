@@ -312,6 +312,81 @@ test('GET /api/projects/:id/usage reports cost per completed outcome with proven
   assert.equal(unknown.status, 404);
 });
 
+test('GET /api/projects/:id/handoff returns a read-only resume brief from recorded state', async () => {
+  const created = await http('POST', '/api/projects', {
+    name: 'Handoff Smoke Project',
+    description: 'Resume from recorded evidence'
+  });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+  const reviewTask = await http('POST', '/api/tasks', {
+    project_id: projectId,
+    title: 'Review pricing copy',
+    status: 'review'
+  });
+  const todoTask = await http('POST', '/api/tasks', {
+    project_id: projectId,
+    title: 'Build export',
+    status: 'todo',
+    priority: 'high'
+  });
+  assert.equal(reviewTask.status, 201);
+  assert.equal(todoTask.status, 201);
+
+  const decision = await http('POST', '/api/projects/' + projectId + '/decisions', {
+    title: 'Use SQLite only',
+    decision: 'No second database',
+    rationale: 'Local-first and one-file backup',
+    status: 'accepted',
+    decided_by: 'smoke',
+    decided_at: '2026-01-01'
+  });
+  assert.equal(decision.status, 201);
+
+  const workdir = join(TEST_ARTIFACT_ROOT, 'handoff-smoke', 'task-' + reviewTask.json.task.id);
+  mkdirSync(workdir, { recursive: true });
+  writeFileSync(join(workdir, 'report.md'), '# report\n');
+
+  const Database = require('better-sqlite3');
+  const db = new Database(TEST_DB);
+  try {
+    db.prepare(`
+      INSERT INTO agent_runs (task_id, agent_id, message, status, error, workdir, artifacts_json, created_at, completed_at)
+      VALUES (?, 'coder', 'handoff smoke run', 'failed', 'quota exceeded on claude', ?, ?, datetime('now'), datetime('now'))
+    `).run(reviewTask.json.task.id, workdir, JSON.stringify([
+      { path: 'report.md' },
+      { path: 'gone.md' }
+    ]));
+  } finally {
+    db.close();
+  }
+
+  const { status, json } = await http('GET', '/api/projects/' + projectId + '/handoff');
+  assert.equal(status, 200);
+  assert.equal(json.project.id, projectId);
+  const brief = json.handoff;
+  assert.equal(brief.ok, true);
+  assert.equal(brief.start_here.kind, 'review');
+  assert.match(brief.start_here.title, /Review pricing copy/);
+  assert.ok(brief.blockers.some((b) => b.kind === 'failed_run'));
+  assert.ok(brief.blockers.some((b) => b.kind === 'missing_artifact'));
+  assert.match(brief.markdown, /# Resume brief — Handoff Smoke Project/);
+  assert.match(brief.markdown, /Use SQLite only/);
+  assert.match(brief.markdown, /gone\.md/);
+  assert.match(brief.markdown, /Build export/);
+  assert.match(brief.markdown, /quota exceeded on claude/);
+
+  // Read-only: a second read returns the same recorded state and actions.
+  const again = await http('GET', '/api/projects/' + projectId + '/handoff');
+  assert.equal(again.status, 200);
+  assert.deepEqual(again.json.handoff.next_actions, brief.next_actions);
+  assert.deepEqual(again.json.handoff.blockers, brief.blockers);
+  assert.equal(again.json.handoff.snapshot.tasks.total, brief.snapshot.tasks.total);
+
+  const unknown = await http('GET', '/api/projects/999999/handoff');
+  assert.equal(unknown.status, 404);
+});
+
 test('GET /api/projects/:id/governance returns deterministic readiness analysis', async () => {
   const created = await http('POST', '/api/projects', {
     name: 'Governance Smoke School AI',
@@ -852,6 +927,25 @@ test('Project cost UI: detail view fetches usage and discloses estimate basis', 
     'cost per outcome must be withheld when nothing is done');
   assert.ok(app.includes("Number(r.usage_estimated) === 1 ? ' est.'"),
     'estimated run costs must be marked est.');
+});
+
+test('Project resume brief UI: detail view fetches, renders, and copies the brief', () => {
+  // Structural assertion that the resume brief is wired into the project detail
+  // view, that the preview is escaped text, and that copying goes through the
+  // clipboard helper with a fallback rather than a raw navigator call.
+  const app = readFileSync(join(repoRoot, 'public', 'app.js'), 'utf8');
+  assert.ok(app.includes("'/projects/' + selectedProject + '/handoff'"),
+    'project detail must fetch the resume brief');
+  assert.ok(app.includes('renderProjectHandoff(bundle.handoff)'),
+    'project detail must render the resume brief');
+  assert.ok(app.includes('data-action="copy-handoff"'),
+    'resume brief must have a copy control');
+  assert.ok(app.includes("esc(brief.markdown || '')"),
+    'brief preview must be escaped, not injected as HTML');
+  assert.ok(app.includes('function copyText('),
+    'copying must go through the clipboard helper');
+  assert.ok(app.includes('copyTextFallback'),
+    'clipboard must have a non-secure-context fallback');
 });
 
 test('Boot reconciliation marks runs orphaned by a restart as timeout', async () => {

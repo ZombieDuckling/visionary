@@ -20,6 +20,33 @@
       .replace(/"/g, '&quot;');
   }
 
+  // --- Clipboard Helper ---
+  // navigator.clipboard needs a secure context (localhost qualifies); fall back
+  // to a hidden textarea so the resume brief still copies if it is unavailable.
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () { return copyTextFallback(text); });
+    }
+    return copyTextFallback(text);
+  }
+
+  function copyTextFallback(text) {
+    return new Promise(function (resolve, reject) {
+      var area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.top = '-1000px';
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(area);
+      if (ok) resolve();
+      else reject(new Error('copy failed'));
+    });
+  }
+
   // --- Time Ago Helper ---
   function timeAgo(dateStr) {
     if (!dateStr) return '';
@@ -2684,6 +2711,34 @@
     return html;
   }
 
+  // Resume brief: one copyable snapshot of where the project stands, assembled
+  // server-side from the same recorded state the other panels read. The preview
+  // is escaped text; "Copy brief" copies the raw markdown for a fresh session.
+  function renderProjectHandoff(brief) {
+    if (!brief) {
+      return '<div class="project-detail-section"><h3>Resume brief</h3>'
+        + '<div class="empty-state" style="padding: var(--space-md)">Resume brief unavailable.</div></div>';
+    }
+    var start = brief.start_here;
+    var html = '<div class="project-detail-section"><h3>Resume brief</h3>'
+      + '<div class="project-handoff-head">'
+      + '<div class="project-handoff-start">'
+      + (start ? esc(start.title) : 'Nothing waiting on you in the recorded state.')
+      + '</div>'
+      + '<button type="button" class="btn btn-small" data-action="copy-handoff">Copy brief</button>'
+      + '</div>';
+    if (brief.blockers && brief.blockers.length) {
+      html += '<div class="project-handoff-note">' + esc(String(brief.blockers.length))
+        + ' blocker(s) recorded — the brief names each one.</div>';
+    }
+    html += '<pre class="project-handoff-preview" id="project-handoff-markdown">'
+      + esc(brief.markdown || '') + '</pre>'
+      + '<div class="project-handoff-note">Snapshot ' + esc(brief.generated_at || '')
+      + ' · read-only · verify artifacts before treating a task as done.</div>'
+      + '</div>';
+    return html;
+  }
+
   function renderProjects(container) {
     var requestId = Date.now() + ':' + Math.random().toString(36).slice(2);
     container._viewRequestId = requestId;
@@ -2696,13 +2751,15 @@
         return Promise.all([
           api('/projects/' + selectedProject + '/artifacts').catch(function () { return null; }),
           api('/projects/' + selectedProject + '/decisions').catch(function () { return null; }),
-          api('/projects/' + selectedProject + '/usage').catch(function () { return null; })
+          api('/projects/' + selectedProject + '/usage').catch(function () { return null; }),
+          api('/projects/' + selectedProject + '/handoff').catch(function () { return null; })
         ]).then(function (extra) {
           return {
             project: data,
             artifacts: extra[0] && extra[0].artifacts ? extra[0].artifacts : null,
             decisions: extra[1] && extra[1].ledger ? extra[1].ledger : null,
-            usage: extra[2] && extra[2].usage ? extra[2].usage : null
+            usage: extra[2] && extra[2].usage ? extra[2].usage : null,
+            handoff: extra[3] && extra[3].handoff ? extra[3].handoff : null
           };
         });
       }).then(function (bundle) {
@@ -2715,6 +2772,10 @@
           + ' <span class="badge badge-green">' + esc(p.status) + '</span></h2>'
           + '<p style="font-size: var(--font-size-sm); color: var(--text-secondary); margin-bottom: var(--space-lg);">' + esc(p.description || '') + '</p>'
           + '<button class="btn" data-action="edit-project" data-pid="' + esc(p.id) + '" style="margin-bottom: var(--space-lg);">Edit Project</button>';
+
+        // Resume brief first: it is the front door to the recorded state, and
+        // it aggregates the panels below rather than replacing them.
+        html += renderProjectHandoff(bundle.handoff);
 
         // Decisions section — before tasks: the "why" frames the work.
         html += renderProjectDecisions(bundle.decisions, p.id);
@@ -2852,6 +2913,18 @@
       if (artifactFolder) {
         api('/runs/' + artifactFolder.getAttribute('data-run-id') + '/open', { method: 'POST', body: {} })
           .catch(function (err) { showToast((err.data && err.data.error) || 'Open failed'); });
+        return;
+      }
+
+      var copyHandoff = e.target.closest('[data-action="copy-handoff"]');
+      if (copyHandoff) {
+        var briefEl = document.getElementById('project-handoff-markdown');
+        if (!briefEl) return;
+        copyText(briefEl.textContent || '').then(function () {
+          showToast('Resume brief copied');
+        }).catch(function () {
+          showToast('Copy failed — select the brief text');
+        });
         return;
       }
 

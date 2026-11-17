@@ -20,6 +20,7 @@ const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
 const { buildProjectArtifactIndex } = require('./src/project-artifacts');
+const { buildProjectHandoff } = require('./src/project-handoff');
 const { summarizeProjectCost } = require('./src/project-cost-summary');
 const { validateDecisionInput, buildDecisionLedger, renderDecisionsPromptBlock } = require('./src/decision-ledger');
 const { readAgentCharter } = require('./src/agent-charter');
@@ -2696,6 +2697,49 @@ const server = http.createServer(async (req, res) => {
         res.json({
           project: { id: project.id, name: project.name, slug: project.slug },
           artifacts: buildProjectArtifactIndex(runs, { artifact_root: ARTIFACT_ROOT })
+        });
+        return;
+      }
+
+      // GET /api/projects/:id/handoff — read-only resume brief.
+      // Assembles the recorded state (tasks, newest runs, decision ledger,
+      // artifact index) into one deterministic, copyable snapshot so a fresh
+      // session can resume without re-reading four panels. Every action cites
+      // its source; unavailable inputs are reported as unavailable, never as
+      // empty, and nothing is written.
+      if (method === 'GET' && /^\/api\/projects\/(\d+)\/handoff$/.test(pathname)) {
+        const projectId = parseInt(pathname.match(/^\/api\/projects\/(\d+)\/handoff$/)[1], 10);
+        const project = stmts.getProjectById.get(projectId);
+        if (!project) { res.json({ error: 'Project not found' }, 404); return; }
+        let tasks = [];
+        let runs = [];
+        let ledger = null;
+        try {
+          tasks = stmts.getTasksByProject.all(projectId);
+          runs = stmts.getRunsByProject.all(projectId);
+          ledger = buildDecisionLedger(stmts.getDecisionsByProject.all(projectId, 500));
+        } catch (err) {
+          res.json({ error: 'Resume brief unavailable: ' + ((err && err.message) || err) }, 500);
+          return;
+        }
+        // A filesystem hiccup should degrade the brief (artifacts unavailable),
+        // not fail the whole route.
+        let artifacts = null;
+        try {
+          artifacts = buildProjectArtifactIndex(stmts.getArtifactRunsByProject.all(projectId), { artifact_root: ARTIFACT_ROOT });
+        } catch (err) {
+          artifacts = null;
+        }
+        res.json({
+          project: { id: project.id, name: project.name, slug: project.slug, status: project.status },
+          handoff: buildProjectHandoff({
+            project: project,
+            tasks: tasks,
+            runs: runs,
+            ledger: ledger,
+            artifacts: artifacts,
+            now: new Date().toISOString()
+          })
         });
         return;
       }

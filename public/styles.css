@@ -1794,6 +1794,40 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
   color: var(--accent-orange);
   margin: var(--space-xs) 0;
 }
+
+/* ── Project resume brief ───────────────────────────────────────────── */
+.project-handoff-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+.project-handoff-start {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.project-handoff-preview {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-inset);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  margin: var(--space-xs) 0;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.project-handoff-note {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
 .run-cost-basis {
   font-size: 10px;
   color: var(--accent-orange);
