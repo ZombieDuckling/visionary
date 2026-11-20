@@ -576,6 +576,56 @@ test('dispatch injects accepted project decisions and records what was injected'
   assert.equal(meta.project_decisions.dropped, 0);
 });
 
+test('dispatch injects verified project workspace context and records what was injected', async () => {
+  const created = await http('POST', '/api/projects', { name: 'Workspace Context Project' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+  const task = await http('POST', '/api/tasks', {
+    project_id: projectId, title: 'Continue the brief', status: 'todo'
+  });
+  assert.equal(task.status, 201);
+  const taskId = task.json.task.id;
+
+  // Seed a prior completed run for this project with a real artifact on disk.
+  // The dispatch should see it, verify it, and inject its path; the new task's
+  // own run is still pending with no artifacts, so it is not part of the list.
+  const priorWorkdir = join(TEST_ARTIFACT_ROOT, 'workspace-context-project', 'task-prior');
+  mkdirSync(priorWorkdir, { recursive: true });
+  writeFileSync(join(priorWorkdir, 'brief.md'), '# brief\n');
+
+  const Database = require('better-sqlite3');
+  const db = new Database(TEST_DB);
+  try {
+    db.pragma('journal_mode = WAL');
+    db.prepare(`
+      INSERT INTO agent_runs (task_id, agent_id, message, status, started_at, completed_at, workdir, artifacts_json)
+      VALUES (?, 'coder', 'seeded prior run', 'completed', datetime('now', '-2 hours'), datetime('now', '-1 hour'), ?, ?)
+    `).run(taskId, priorWorkdir, JSON.stringify([{ path: 'brief.md' }, { path: 'gone.md' }]));
+  } finally {
+    db.close();
+  }
+
+  const dispatch = await http('POST', '/api/dispatch', {
+    agent_id: 'argus',
+    task_id: taskId,
+    message: 'Continue the launch brief from the existing draft'
+  });
+  assert.ok(dispatch.status === 201 || dispatch.status === 202, 'dispatch accepted: got ' + dispatch.status);
+  await http('POST', '/api/dispatch/' + dispatch.json.run_id + '/kill');
+
+  const runs = await http('GET', '/api/runs?task_id=' + taskId);
+  const run = (runs.json.runs || []).find((r) => r.id === dispatch.json.run_id);
+  assert.ok(run, 'run row exists');
+  const meta = JSON.parse(run.prompt_meta_json || 'null');
+  assert.ok(meta && meta.project_workspace, 'project workspace telemetry recorded');
+  assert.equal(meta.project_workspace.project_id, projectId);
+  assert.equal(meta.project_workspace.tasks, 1);
+  assert.equal(meta.project_workspace.files, 1);
+  assert.equal(meta.project_workspace.missing_files, 1);
+  assert.ok(meta.project_workspace.chars > 0);
+  assert.equal(meta.project_workspace.workspace_root, join(TEST_ARTIFACT_ROOT, 'workspace-context-project'));
+});
+
 test('POST /api/dispatch rejects unknown agent_id (allowlist)', async () => {
   const { status, json } = await http('POST', '/api/dispatch', {
     agent_id: 'totally-fake-agent',

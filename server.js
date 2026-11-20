@@ -20,6 +20,7 @@ const { summarizeCostBaseline } = require('./src/cost-baseline');
 const { buildHealthReport } = require('./src/health-check');
 const { analyzeGovernanceNeed, buildGovernanceWatchlist } = require('./src/governance');
 const { buildProjectArtifactIndex } = require('./src/project-artifacts');
+const { buildProjectWorkspaceContext, renderProjectWorkspacePromptBlock } = require('./src/project-workspace-context');
 const { buildProjectHandoff } = require('./src/project-handoff');
 const { summarizeProjectCost } = require('./src/project-cost-summary');
 const { validateDecisionInput, buildDecisionLedger, renderDecisionsPromptBlock } = require('./src/decision-ledger');
@@ -478,20 +479,23 @@ function loadPersonality(agentId) {
 // precomputed plan; otherwise one is built here. `projectDecisions` is the
 // bounded accepted-decision block for the task's project — standing evidence
 // from the human side of the work, not another classifier nudge.
-function buildAgentPrompt(agentId, message, workdir, plan, projectDecisions) {
+// `projectWorkspace` is the bounded, disk-verified list of what prior tasks in
+// this project already produced, so a fresh agent continues instead of redoing.
+function buildAgentPrompt(agentId, message, workdir, plan, projectDecisions, projectWorkspace) {
   const cfg = resolveAgentConfig(agentId);
   const persona = loadPersonality(agentId);
   const resolvedPlan = plan || promptPipeline.planNudges(message);
   const agentMessage = resolvedPlan.text;
   const decisionNote = projectDecisions && projectDecisions.text ? '\n\n' + projectDecisions.text : '';
+  const workspaceContextNote = projectWorkspace && projectWorkspace.text ? '\n\n' + projectWorkspace.text : '';
   const workdirNote = workdir
     ? '\n\n[WORKSPACE]\nYour working directory is ' + workdir + ' (you start inside it). Save every deliverable — files, reports, code — inside this directory using absolute paths. End your reply with a short list of the files you produced.'
     : '';
-  if (!persona) return agentMessage + decisionNote + workdirNote;
+  if (!persona) return agentMessage + decisionNote + workspaceContextNote + workdirNote;
   const name = (cfg && cfg.name) || agentId;
   const role = (cfg && cfg.role) || '';
   return '[SYSTEM — you are ' + name + (role ? ', ' + role : '') + '. Operate per your charter below.]\n'
-    + persona.trim() + decisionNote + workdirNote + '\n\n[TASK]\n' + agentMessage;
+    + persona.trim() + decisionNote + workspaceContextNote + workdirNote + '\n\n[TASK]\n' + agentMessage;
 }
 
 // Task artifact workspace: every dispatch runs inside ~/Visionary/<project>/task-<id>
@@ -612,6 +616,32 @@ function dispatchAgent(taskId, agentId, message) {
     catch { /* prompt telemetry must never fail a dispatch */ }
   }
 
+  // Project workspace context: name the prior outputs that still exist on disk
+  // so a fresh task builds on them instead of recreating them. Only verified
+  // files are listed; recorded-but-gone paths are counted, never asserted.
+  let workspaceBlock = null;
+  if (dispatchTask && dispatchTask.project_id) {
+    try {
+      const project = stmts.getProjectById.get(dispatchTask.project_id);
+      const workspaceContext = buildProjectWorkspaceContext({
+        project: project,
+        runs: stmts.getArtifactRunsByProject.all(dispatchTask.project_id)
+      });
+      workspaceBlock = renderProjectWorkspacePromptBlock(workspaceContext);
+      promptPlan.meta.project_workspace = {
+        project_id: dispatchTask.project_id,
+        tasks: workspaceBlock ? workspaceBlock.count : 0,
+        files: workspaceBlock ? workspaceBlock.files_listed : 0,
+        chars: workspaceBlock ? workspaceBlock.chars : 0,
+        dropped: workspaceBlock ? workspaceBlock.dropped : 0,
+        missing_files: workspaceContext.totals.files_missing,
+        workspace_root: workspaceContext.workspace_root
+      };
+    } catch { workspaceBlock = null; }
+    try { stmts.setRunPromptMeta.run({ id: runId, meta: JSON.stringify(promptPlan.meta) }); }
+    catch { /* prompt telemetry must never fail a dispatch */ }
+  }
+
   // Emit SSE events after transaction
   bus.emit('agent:started', { run_id: runId, agent_id: agentId, task_id: taskId });
   if (updatedTask) bus.emit('task:updated', updatedTask);
@@ -623,7 +653,7 @@ function dispatchAgent(taskId, agentId, message) {
   const workdir = prepareWorkdir(taskId);
   if (workdir) stmts.setRunWorkdir.run({ id: runId, workdir });
   const ctx = {
-    message: buildAgentPrompt(agentId, message, workdir, promptPlan, decisionBlock),
+    message: buildAgentPrompt(agentId, message, workdir, promptPlan, decisionBlock, workspaceBlock),
     agentId: cfg ? cfg.id : agentId,
     model: cfg && cfg.model,
     agent: cfg,

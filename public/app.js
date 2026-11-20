@@ -2169,11 +2169,18 @@
           var pm = JSON.parse(r.prompt_meta_json || 'null');
           if (pm) {
             var appliedIds = (pm.applied || []).map(function (a) { return a.id; });
+            var wsStr = '';
+            if (pm.project_workspace && pm.project_workspace.files) {
+              wsStr = ' · workspace ' + esc(String(pm.project_workspace.files)) + ' file'
+                + (pm.project_workspace.files === 1 ? '' : 's')
+                + (pm.project_workspace.missing_files ? ' · ' + esc(String(pm.project_workspace.missing_files)) + ' missing' : '');
+            }
             promptStr = '<div class="run-prompt" title="' + esc(appliedIds.join(', ') || 'none') + '">'
               + 'Prompt context · ' + (appliedIds.length || 0) + ' nudge' + (appliedIds.length === 1 ? '' : 's')
               + ' · ' + esc(String(pm.nudge_chars || 0)) + ' chars'
               + (pm.budget_chars ? ' / ' + esc(String(pm.budget_chars)) + ' budget' : '')
               + ((pm.dropped && pm.dropped.length) ? ' · ' + pm.dropped.length + ' dropped' : '')
+              + wsStr
               + '</div>';
           }
         } catch (e) { promptStr = ''; }

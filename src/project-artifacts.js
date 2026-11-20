@@ -259,4 +259,4 @@ function buildProjectArtifactIndex(runs, options) {
   };
 }
 
-module.exports = { buildProjectArtifactIndex, inspectArtifact, REASON };
+module.exports = { buildProjectArtifactIndex, parseArtifactList, inspectArtifact, REASON };

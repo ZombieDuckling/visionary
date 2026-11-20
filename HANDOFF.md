@@ -47,6 +47,7 @@ visionary/
 │   ├── scheduler.js       # 5-field cron parser + tick()
 │   ├── cleanup.js         # Prune agent_messages, health_log, activity, runs
 │   ├── project-artifacts.js # Project-level artifact index (present/missing verification)
+│   ├── project-workspace-context.js # Verified prior-output block injected into dispatch
 │   ├── project-cost-summary.js # Cost per completed outcome + usage-provenance disclosure
 │   ├── decision-ledger.js # Project decision records: validation, lifecycle flags, bounded dispatch injection
 │   └── mcp.js             # STUB — needs @modelcontextprotocol/sdk decision
@@ -132,6 +133,11 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 ### Project artifact index (`src/project-artifacts.js`)
 - `buildProjectArtifactIndex(runs, opts)` aggregates artifact lists from stored run rows into per-task groups, dedupes repeated files, and verifies existence on disk. Route: `GET /api/projects/:id/artifacts`.
 - Paths are resolved against the recorded workdir and must stay inside it; symlinks are reported but not followed. Missing files and missing workdirs are reported as such — a recorded path is evidence, not truth. Index is capped (newest 400) with a truncation warning.
+
+### Project workspace context (`src/project-workspace-context.js`)
+- `buildProjectWorkspaceContext({ project, runs })` groups artifact-bearing runs by task, derives the workspace root from the recorded workdirs (the parent of `task-<id>` — never from the project slug, which can differ from the name-based workdir), and verifies every artifact with the same containment check as the project artifact index. `renderProjectWorkspacePromptBlock(context)` emits the bounded `[PROJECT WORKSPACE]` block.
+- `dispatchAgent` injects the block after the accepted-decision record and before the `[WORKSPACE]` note, then records `prompt_meta_json.project_workspace` (tasks, files, chars, dropped, missing files, root). Only verified files are listed; missing files are counted, failed-run files are flagged as partial, and no verified file means no block.
+- Caps: 20 runs / 50 artifacts per run inspected, 5 task lines, 6 files per task, 1,800 chars; over-budget tasks are dropped whole and counted. Do not add DB writes here — the block must reflect the workspace as it is right now.
 
 ### Project cost & usage summary (`src/project-cost-summary.js`)
 - `summarizeProjectCost({ runs, tasks })` returns cost per completed outcome, spend/token totals, a provenance split (`reported`/`estimated`/`unknown`), and `warnings[]`. Route: `GET /api/projects/:id/usage`; the project page renders it as **Cost & Usage**.
