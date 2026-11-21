@@ -2184,6 +2184,28 @@
               + '</div>';
           }
         } catch (e) { promptStr = ''; }
+        // Credential boundary: a run records what the secret scan found in the
+        // files it produced. An unscanned run offers an on-demand re-scan rather
+        // than rendering as clean — absence of a scan is not evidence of safety.
+        var secretStr = '';
+        var secretScan = null;
+        try { secretScan = JSON.parse(r.secret_scan_json || 'null'); } catch (e) { secretScan = null; }
+        if (secretScan && secretScan.findings && secretScan.findings.length) {
+          var shownFindings = secretScan.findings.slice(0, 4).map(function (f) {
+            return esc(f.path) + ' · ' + esc(f.rule);
+          }).join('; ');
+          secretStr = '<div class="run-secret-warning">Secret scan · ' + secretScan.findings.length + ' finding'
+            + (secretScan.findings.length === 1 ? '' : 's') + ' · ' + shownFindings
+            + (secretScan.findings.length > 4 ? ' · +' + (secretScan.findings.length - 4) + ' more' : '')
+            + '</div>';
+        } else if (secretScan) {
+          var scannedFiles = (secretScan.counts && secretScan.counts.files) || 0;
+          secretStr = '<div class="run-secret-clean">Secret scan · ' + esc(String(scannedFiles))
+            + ' file' + (scannedFiles === 1 ? '' : 's') + ' scanned · no credential patterns found</div>';
+        }
+        var scanBtn = (!secretScan && r.workdir)
+          ? '<button type="button" class="btn btn-small run-scan-btn" data-run-id="' + r.id + '">Scan for secrets</button>'
+          : '';
         return '<div class="run-item">'
           + '<div class="run-head">'
           + '<span class="run-badge run-badge-' + statusClass + '">' + esc(r.status) + '</span>'
@@ -2196,9 +2218,11 @@
           + (r.workdir ? '<button type="button" class="btn btn-small run-open-btn" data-run-id="' + r.id + '">Open Folder</button>' : '')
           + '</div>'
           + promptStr
+          + secretStr
           + (r.result_text ? '<div class="run-result">' + esc(String(r.result_text).substring(0, 400)) + '</div>' : '')
           + (r.error ? '<div class="run-error">' + esc(String(r.error).substring(0, 300)) + '</div>' : '')
           + (r.workdir ? '<div class="run-workdir">' + esc(r.workdir) + '</div>' : '')
+          + scanBtn
           + fileRows
           + '</div>';
       }).join('');
@@ -2207,6 +2231,22 @@
         btn.addEventListener('click', function () {
           api('/runs/' + btn.getAttribute('data-run-id') + '/open', { method: 'POST', body: {} })
             .catch(function (err) { showToast((err.data && err.data.error) || 'Open failed'); });
+        });
+      });
+      container.querySelectorAll('.run-scan-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          btn.disabled = true;
+          api('/runs/' + btn.getAttribute('data-run-id') + '/secret-scan', { method: 'POST', body: {} })
+            .then(function (data) {
+              var s = data && data.scan;
+              var n = (s && s.findings) ? s.findings.length : 0;
+              showToast(n ? ('Secret scan: ' + n + ' finding' + (n === 1 ? '' : 's')) : 'Secret scan: no credential patterns found');
+              loadTaskRuns(container, taskId);
+            })
+            .catch(function (err) {
+              btn.disabled = false;
+              showToast((err.data && err.data.error) || 'Secret scan failed');
+            });
         });
       });
       container.querySelectorAll('.run-file').forEach(function (row) {

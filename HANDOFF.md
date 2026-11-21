@@ -47,6 +47,7 @@ visionary/
 │   ├── scheduler.js       # 5-field cron parser + tick()
 │   ├── cleanup.js         # Prune agent_messages, health_log, activity, runs
 │   ├── project-artifacts.js # Project-level artifact index (present/missing verification)
+│   ├── artifact-secret-scan.js # Deterministic credential scan over a run's artifacts
 │   ├── project-workspace-context.js # Verified prior-output block injected into dispatch
 │   ├── project-cost-summary.js # Cost per completed outcome + usage-provenance disclosure
 │   ├── decision-ledger.js # Project decision records: validation, lifecycle flags, bounded dispatch injection
@@ -149,6 +150,12 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - Every action and blocker cites the task id, run id, decision id, or artifact path it came from. Review work ranks first (oldest wait first), then stale live runs (`running` is a claim, not proof), failed-run retries (with error/workdir), stalled in-progress tasks, missing artifacts, unverified `done` tasks, and the dispatch queue. A `done` task with no recorded artifact is flagged for outcome confirmation, never silently re-opened.
 - Unavailable inputs (`ledger: null`, `artifacts: null`) are reported as unavailable — never treated as empty. Lists are capped with explicit `+N more`, and `warnings[]` discloses run-history/ledger truncation and what the brief cannot know (live process state, file contents, work outside SQLite). Do not add writes here; the brief must always reflect the recorded state.
 
+### Artifact secret scan (`src/artifact-secret-scan.js`)
+- `scanArtifacts({ workdir, artifacts, opts })` is deterministic and read-only: it scans the text artifacts a run recorded for high-confidence credential shapes and returns `{ scanned, skipped[], findings[], counts, warnings[], limits }`. Findings carry `path`, `rule`, `severity`, `line`, `occurrences`, and a short prefix `preview` — never the matched value.
+- Rules are provider-specific (AWS, GitHub, Slack, Stripe, Google, OpenAI), PEM private-key blocks, bearer headers, URL-embedded database passwords, JWTs, and one `low` generic assignment rule. Binary extensions and a NUL-byte probe skip non-text files; files over `maxFileBytes` (256KB) and artifacts beyond `maxFiles` (60) are reported as skipped; findings cap at 100. Paths resolving outside the workdir and symlinks are refused, not followed. `stdout_not_scanned` is always disclosed.
+- `finishDispatch` stores the scan on completed runs (`agent_runs.secret_scan_json`, migration 14). `POST /api/runs/:id/secret-scan` re-scans live artifacts and stores the refreshed record; `GET /api/runs/:id` returns `secret_scan`. A missing workdir is a 404, and a scan error never fails the run — an unscanned run stays NULL and the UI offers a re-scan rather than rendering it clean.
+- Do not widen the generic rule without a severity label; a false "clean" is worse than an honest low-confidence finding.
+
 ### Agent charter inspection (`src/agent-charter.js`)
 - `readAgentCharter(opts)` is read-only: resolves the exact file `loadPersonality()` reads (`personalities/agents/<file_id>.md`, with `jarvis`/`main` → `argus`), parses frontmatter, lists `##` sections, and reports `status` (`ok`/`mismatch`/`empty`/`missing`/`unreadable`), `injected_in_dispatch`, `char_count`, and `warnings[]`. Route: `GET /api/agents/:id/charter` (404 for unknown ids); the agent drawer renders it as **Role & charter**.
 - Warnings cover `agent_id_mismatch`, `reports_to_mismatch`, `title_mismatch`, `name_mismatch`, `config_path_drift`/`config_path_missing` (org-chart `personality_path` vs the file dispatch actually loads), `charter_missing`/`unreadable`/`empty_body`, `charter_truncated` at `PERSONALITY_MAX_CHARS`, and `retired_identity` for bodies still naming `jarvis`. Director names compare after dropping the `Director [of]` prefix so pod labels are not false positives. A configured path is evidence, not truth.
@@ -168,11 +175,11 @@ If `better_sqlite3.node` complains about NODE_MODULE_VERSION, run `npm run rebui
 - `discover(name)` per-harness model list (static + runtime probes for ollama + openclaw).
 - Route: `GET /api/cookbook`.
 
-## DB schema (currently at version 13)
+## DB schema (currently at version 14)
 
-`projects`, `tasks`, `agent_runs` (with `workdir`, `artifacts_json`, `prompt_meta_json`, `usage_source`, `usage_estimated`), `decisions`, `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`, `chat_sessions`, `chat_messages`.
+`projects`, `tasks`, `agent_runs` (with `workdir`, `artifacts_json`, `prompt_meta_json`, `usage_source`, `usage_estimated`, `secret_scan_json`), `decisions`, `notifications`, `activity_log`, `interview_sessions`, `agents` (extended with org chart fields), `settings`, `spaces`, `agent_messages`, `agent_health_log`, `schedules`, `chat_sessions`, `chat_messages`.
 
-`schema_version.version = 13`. Migrations are append-only — never reorder existing entries.
+`schema_version.version = 14`. Migrations are append-only — never reorder existing entries.
 
 ## Frontend tab map
 

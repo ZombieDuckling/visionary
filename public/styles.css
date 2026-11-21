@@ -1740,6 +1740,9 @@ label { font-size: var(--font-size-md); color: var(--text-primary); }
 .run-error { font-size: var(--font-size-xs); color: #ff453a; margin: var(--space-xs) 0 0; white-space: pre-wrap; }
 .run-workdir { font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; color: var(--text-muted); margin: var(--space-xs) 0 2px; }
 .run-prompt { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin: var(--space-xs) 0 2px; font-variant-numeric: tabular-nums; }
+.run-secret-warning { font-family: var(--font-mono); font-size: var(--font-size-xs); color: #ff453a; margin: var(--space-xs) 0 2px; }
+.run-secret-clean { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin: var(--space-xs) 0 2px; }
+.run-scan-btn { margin: var(--space-xs) 0 2px; }
 .run-file { display: flex; justify-content: space-between; gap: var(--space-md); padding: 3px 6px; border-radius: 6px; cursor: pointer; font-family: ui-monospace, "SF Mono", monospace; font-size: 11.5px; color: var(--text-primary); }
 .run-file:hover { background: rgba(120, 120, 128, 0.1); }
 .run-file-size { color: var(--text-muted); white-space: nowrap; }

@@ -301,6 +301,15 @@ const migrations = [
   `
   ALTER TABLE agent_runs ADD COLUMN usage_source TEXT;
   ALTER TABLE agent_runs ADD COLUMN usage_estimated INTEGER;
+  `,
+
+  // Migration 13 -> 14: Artifact secret scan. A completed run records the
+  // deterministic credential scan of the files it produced, so a leaked key in a
+  // deliverable is visible on the run instead of only being warned about in the
+  // dispatch prompt. Legacy rows stay NULL and are reported as unscanned rather
+  // than silently clean.
+  `
+  ALTER TABLE agent_runs ADD COLUMN secret_scan_json TEXT;
   `
 ];
 
@@ -554,6 +563,7 @@ const stmts = {
   setRunWorkdir: db.prepare(`UPDATE agent_runs SET workdir = @workdir WHERE id = @id`),
   setRunPromptMeta: db.prepare(`UPDATE agent_runs SET prompt_meta_json = @meta WHERE id = @id`),
   setRunArtifacts: db.prepare(`UPDATE agent_runs SET artifacts_json = @artifacts_json WHERE id = @id`),
+  setRunSecretScan: db.prepare(`UPDATE agent_runs SET secret_scan_json = @secret_scan_json WHERE id = @id`),
 
   // Decision ledger statements. The ledger is read newest-first; accepted
   // decisions are read separately for dispatch injection so the prompt block

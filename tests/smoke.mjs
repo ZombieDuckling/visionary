@@ -248,6 +248,75 @@ test('GET /api/projects/:id/artifacts indexes present and missing files', async 
   assert.equal(unknown.status, 404);
 });
 
+test('POST /api/runs/:id/secret-scan finds credentials, masks them, and stores the scan', async () => {
+  const created = await http('POST', '/api/projects', { name: 'Secret Scan Smoke Project' });
+  assert.equal(created.status, 201);
+  const projectId = created.json.project.id;
+  const task = await http('POST', '/api/tasks', {
+    project_id: projectId,
+    title: 'Secret scan smoke task',
+    status: 'done'
+  });
+  assert.equal(task.status, 201);
+  const taskId = task.json.task.id;
+
+  const workdir = join(TEST_ARTIFACT_ROOT, 'secret-scan-smoke-project', 'task-' + taskId);
+  mkdirSync(workdir, { recursive: true });
+  const fakeKey = 'AKIA' + 'SMOKETESTKEY1234';
+  writeFileSync(join(workdir, 'leak.md'), 'aws key ' + fakeKey + '\n');
+  writeFileSync(join(workdir, 'clean.md'), '# clean deliverable\n');
+
+  const Database = require('better-sqlite3');
+  const db = new Database(TEST_DB);
+  let runId;
+  try {
+    db.pragma('journal_mode = WAL');
+    const info = db.prepare(`
+      INSERT INTO agent_runs (task_id, agent_id, message, status, workdir, artifacts_json, created_at)
+      VALUES (?, 'forge', 'secret scan smoke run', 'completed', ?, ?, datetime('now'))
+    `).run(taskId, workdir, JSON.stringify([
+      { path: 'leak.md', size: 32 },
+      { path: 'clean.md', size: 22 }
+    ]));
+    runId = Number(info.lastInsertRowid);
+  } finally {
+    db.close();
+  }
+
+  const scanned = await http('POST', '/api/runs/' + runId + '/secret-scan', {});
+  assert.equal(scanned.status, 200);
+  assert.equal(scanned.json.run_id, runId);
+  assert.equal(scanned.json.scan.counts.files, 2);
+  const aws = scanned.json.scan.findings.find((f) => f.rule === 'aws_access_key_id');
+  assert.ok(aws, 'AWS key detected in the artifact');
+  assert.equal(aws.path, 'leak.md');
+  assert.ok(!scanned.text.includes(fakeKey), 'the scan response must not echo the credential');
+
+  const stored = await http('GET', '/api/runs/' + runId);
+  assert.equal(stored.status, 200);
+  assert.ok(stored.json.secret_scan, 'scan is stored on the run');
+  assert.equal(stored.json.secret_scan.counts.findings, scanned.json.scan.counts.findings);
+
+  const noWorkdir = await http('POST', '/api/runs/999999/secret-scan', {});
+  assert.equal(noWorkdir.status, 404);
+
+  const db2 = new Database(TEST_DB);
+  let bareRunId;
+  try {
+    db2.pragma('journal_mode = WAL');
+    const info = db2.prepare(`
+      INSERT INTO agent_runs (task_id, agent_id, message, status, created_at)
+      VALUES (?, 'forge', 'no workdir run', 'failed', datetime('now'))
+    `).run(taskId);
+    bareRunId = Number(info.lastInsertRowid);
+  } finally {
+    db2.close();
+  }
+  const noDir = await http('POST', '/api/runs/' + bareRunId + '/secret-scan', {});
+  assert.equal(noDir.status, 404);
+  assert.match(noDir.json.error, /no working directory/i);
+});
+
 test('GET /api/projects/:id/usage reports cost per completed outcome with provenance', async () => {
   const created = await http('POST', '/api/projects', { name: 'Usage Smoke Project' });
   assert.equal(created.status, 201);
@@ -960,6 +1029,23 @@ test('Project artifact UI: detail view fetches, renders, and opens indexed artif
     'artifact clicks must use the run-open endpoint');
   assert.ok(app.includes("Artifact missing on disk"),
     'missing artifacts must not be opened');
+});
+
+test('Run secret scan UI: findings render on the run and unscanned runs offer a re-scan', () => {
+  // Structural assertion that the stored scan is surfaced on the run card, and
+  // that an unscanned run is offered a re-scan rather than silently rendered
+  // as clean.
+  const app = readFileSync(join(repoRoot, 'public', 'app.js'), 'utf8');
+  assert.ok(app.includes('r.secret_scan_json'),
+    'run cards must read the stored scan');
+  assert.ok(app.includes('run-secret-warning'),
+    'findings must render as a visible warning');
+  assert.ok(app.includes('run-secret-clean'),
+    'a clean scan must be stated explicitly');
+  assert.ok(app.includes("'/runs/' + btn.getAttribute('data-run-id') + '/secret-scan'"),
+    'unscanned runs must use the on-demand scan endpoint');
+  assert.ok(app.includes('run-scan-btn'),
+    'unscanned runs must offer a scan button');
 });
 
 test('Project cost UI: detail view fetches usage and discloses estimate basis', () => {

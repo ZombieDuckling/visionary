@@ -26,6 +26,7 @@ const { summarizeProjectCost } = require('./src/project-cost-summary');
 const { validateDecisionInput, buildDecisionLedger, renderDecisionsPromptBlock } = require('./src/decision-ledger');
 const { readAgentCharter } = require('./src/agent-charter');
 const { reconcileOrphanedRuns } = require('./src/run-reconciliation');
+const artifactSecretScan = require('./src/artifact-secret-scan');
 
 // Wire DB statements into the rate limiter so config persists across restarts.
 rateLimiter.init(stmts);
@@ -748,6 +749,14 @@ function finishDispatch(runId, agentId, taskId, startTime, result) {
       if (runWorkdir) {
         artifacts = collectArtifacts(runWorkdir, startTime);
         stmts.setRunArtifacts.run({ id: runId, artifacts_json: JSON.stringify(artifacts) });
+        // Credential boundary check: the secret-isolation instruction told the
+        // agent to keep keys out of deliverables; this verifies the files it
+        // actually produced. Never fails the run — a scan error is recorded as
+        // an unscanned run, not as a successful clean one.
+        try {
+          const scan = artifactSecretScan.scanArtifacts({ workdir: runWorkdir, artifacts });
+          stmts.setRunSecretScan.run({ id: runId, secret_scan_json: JSON.stringify(scan) });
+        } catch { /* scan must never fail the run */ }
       }
     } catch { /* artifact scan must never fail the run */ }
 
@@ -2147,7 +2156,27 @@ const server = http.createServer(async (req, res) => {
         if (!run) { res.json({ error: 'Run not found' }, 404); return; }
         let artifacts = [];
         try { artifacts = JSON.parse(run.artifacts_json || '[]'); } catch { artifacts = []; }
-        res.json({ run, artifacts });
+        let secretScan = null;
+        try { secretScan = JSON.parse(run.secret_scan_json || 'null'); } catch { secretScan = null; }
+        res.json({ run, artifacts, secret_scan: secretScan });
+        return;
+      }
+
+      // POST /api/runs/:id/secret-scan -- re-run the deterministic credential
+      // scan against the run's artifacts as they exist on disk now, then store
+      // the result on the run. Useful for legacy runs recorded before the scan
+      // existed and for artifacts edited after completion. The artifacts
+      // themselves are never modified; the only write is the scan record.
+      if (method === 'POST' && /^\/api\/runs\/(\d+)\/secret-scan$/.test(pathname)) {
+        const runId = parseInt(pathname.match(/^\/api\/runs\/(\d+)\/secret-scan$/)[1], 10);
+        const run = stmts.getRunById.get(runId);
+        if (!run) { res.json({ error: 'Run not found' }, 404); return; }
+        if (!run.workdir) { res.json({ error: 'Run has no working directory recorded' }, 404); return; }
+        let artifacts = [];
+        try { artifacts = JSON.parse(run.artifacts_json || '[]'); } catch { artifacts = []; }
+        const scan = artifactSecretScan.scanArtifacts({ workdir: run.workdir, artifacts });
+        stmts.setRunSecretScan.run({ id: runId, secret_scan_json: JSON.stringify(scan) });
+        res.json({ run_id: runId, scan });
         return;
       }
 
