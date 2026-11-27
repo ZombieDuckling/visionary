@@ -91,3 +91,9 @@ Items acknowledged and carried forward from previous milestone close:
 Last session: 2026-06-10
 Stopped at: All 5 phases shipped; milestone closed and superseded by the v2.x working-core effort (Node backend, real streamed dispatch). Python/FastAPI backend migration exists but is frozen.
 Resume file: None
+
+## Quick Tasks Completed
+
+| ID | Date | Description | Evidence |
+|----|------|-------------|----------|
+| 261127-6mr | 2026-11-27 | Isolate SSE client write failures and release disconnected streams | [Summary](quick/261127-6mr-isolate-sse-client-write-failures-and-cl/SUMMARY.md); 19 SSE tests, 591 clean-tree unit tests, 41 API smoke tests, streaming checks passed |
